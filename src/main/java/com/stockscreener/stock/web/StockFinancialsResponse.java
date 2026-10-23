@@ -43,6 +43,8 @@ public record StockFinancialsResponse(
      *                     다른 통화로 낼 수 있고, 회사가 중간에 갈아타기도 한다(241560이 2023년에
      *                     KRW → USD). <b>MUST NOT: 화면이 이것을 종목의 시장 통화로 대신하지
      *                     않는다</b> — 달러 매출이 「조원」으로 그려지고 값이 나오므로 안 드러난다.
+     * @param discontinuedIncome 순이익 중 중단영업 손익(F2b · ADR-0184). 그 시장의 관문이 켜졌고 판정 규칙으로 읽은 행만 값이 있다 —
+     *                     PER · EPS가 계속영업 이익을 쓰므로, 순이익과 그 지표가 어긋나는 이유를 같은 화면에 보인다
      * @param revenueYoy   전년 <b>동기</b> 대비 증감률(%). 분기를 직전 분기와 비교하면
      *                     계절성 있는 업종에서 뜻이 없다. <b>통화가 갈린 쌍에서는 null이다</b> —
      *                     환산 없이 뺀 값은 증감률이 아니다
@@ -63,7 +65,8 @@ public record StockFinancialsResponse(
             BigDecimal totalEquity,
             BigDecimal revenueYoy,
             BigDecimal operatingIncomeYoy,
-            BigDecimal netIncomeYoy) {
+            BigDecimal netIncomeYoy,
+            BigDecimal discontinuedIncome) {
     }
 
     /**

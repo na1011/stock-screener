@@ -108,6 +108,9 @@ function label(row: FinancialPeriod): string {
               <td class="financials__num">
                 {{ formatAmount(row.netIncome, row.currencyCode) }}
                 <span class="financials__yoy">{{ formatSignedPercent(row.netIncomeYoy) }}</span>
+                <span v-if="row.discontinuedIncome" class="financials__yoy">
+                  중단영업 {{ formatAmount(row.discontinuedIncome, row.currencyCode) }}
+                </span>
               </td>
               <td v-if="showCashFlow" class="financials__num">
                 {{ formatAmount(row.operatingCashFlow, row.currencyCode) }}

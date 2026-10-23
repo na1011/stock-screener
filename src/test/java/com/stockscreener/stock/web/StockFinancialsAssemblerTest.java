@@ -37,7 +37,7 @@ class StockFinancialsAssemblerTest {
                                                 String revenue) {
         BigDecimal value = revenue == null ? null : new BigDecimal(revenue);
         return new StockReader.FinancialRow(year, period, LocalDate.of(year + 1, 3, 20), 0, "11011",
-                currency, value, value, value, value, value, value, value);
+                currency, value, value, value, value, value, value, value, null);
     }
 
     private static Map<String, StockFinancialsResponse.Period> byLabel(

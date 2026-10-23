@@ -42,12 +42,19 @@ public class StockReader {
     private final JdbcTemplate jdbcTemplate;
     private final CorporateActionLedger corporateActions;
     private final StockAliasIndex aliasIndex;
+    /** 시장마다 관문(F2b) — 그 종목 시장의 관문이 켜졌을 때만 재무 탭에 중단영업 칸을 읽는다(컬럼이 관문 마이그레이션과 함께 생긴다). */
+    private final boolean usGate;
+    private final boolean krGate;
 
     public StockReader(JdbcTemplate jdbcTemplate, CorporateActionLedger corporateActions,
-                       StockAliasIndex aliasIndex) {
+                       StockAliasIndex aliasIndex,
+                       @org.springframework.beans.factory.annotation.Value("${stockscreener.gate.us}") boolean usGate,
+                       @org.springframework.beans.factory.annotation.Value("${stockscreener.gate.kr}") boolean krGate) {
         this.jdbcTemplate = jdbcTemplate;
         this.corporateActions = corporateActions;
         this.aliasIndex = aliasIndex;
+        this.usGate = usGate;
+        this.krGate = krGate;
     }
 
     /**
@@ -165,16 +172,25 @@ public class StockReader {
      */
     @Transactional(readOnly = true)
     public List<FinancialRow> financialsOf(long stockId, int limit) {
+        boolean discontinued = false;
+        if (usGate || krGate) {
+            List<String> market = jdbcTemplate.queryForList(
+                    "SELECT market_code FROM stock WHERE id = ?", String.class, stockId);
+            discontinued = !market.isEmpty()
+                    && ("US".equals(market.get(0)) ? usGate : krGate);
+        }
+        boolean withDiscontinued = discontinued;
         return jdbcTemplate.query("""
                 SELECT fiscal_year, fiscal_period, published_at, revision_no, report_code,
                        currency_code,
                        revenue, operating_income, net_income, operating_cash_flow,
-                       total_assets, total_liabilities, total_equity
+                       total_assets, total_liabilities, total_equity%s
                 FROM financial_statement
                 WHERE stock_id = ? AND is_latest
                 ORDER BY period_end DESC, fiscal_period DESC
                 LIMIT ?
-                """, (rs, n) -> new FinancialRow(
+                """.formatted(withDiscontinued ? ", discontinued_income, discontinued_rule" : ""),
+                (rs, n) -> new FinancialRow(
                         rs.getInt("fiscal_year"),
                         rs.getString("fiscal_period"),
                         rs.getObject("published_at", LocalDate.class),
@@ -187,7 +203,10 @@ public class StockReader {
                         rs.getBigDecimal("operating_cash_flow"),
                         rs.getBigDecimal("total_assets"),
                         rs.getBigDecimal("total_liabilities"),
-                        rs.getBigDecimal("total_equity")),
+                        rs.getBigDecimal("total_equity"),
+                        // 판정 규칙으로 읽은 행만 — 안 읽은 행의 null을 「중단영업 없음」으로 그리지 않는다(F2b).
+                        withDiscontinued && rs.getObject("discontinued_rule") != null
+                                ? rs.getBigDecimal("discontinued_income") : null),
                 stockId, limit);
     }
 
@@ -456,7 +475,8 @@ public class StockReader {
                                int revisionNo, String reportCode, String currencyCode,
                                BigDecimal revenue, BigDecimal operatingIncome, BigDecimal netIncome,
                                BigDecimal operatingCashFlow, BigDecimal totalAssets,
-                               BigDecimal totalLiabilities, BigDecimal totalEquity) {
+                               BigDecimal totalLiabilities, BigDecimal totalEquity,
+                               BigDecimal discontinuedIncome) {
     }
 
     /** 업종 자체의 크기. 지표별 표본은 {@code _SECTOR_N}이 따로 답한다. */

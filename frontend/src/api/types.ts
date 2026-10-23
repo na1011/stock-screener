@@ -602,6 +602,8 @@ export interface FinancialPeriod {
   revenueYoy: number | null
   operatingIncomeYoy: number | null
   netIncomeYoy: number | null
+  /** 순이익 중 중단영업 손익(F2b · ADR-0184). 그 시장의 관문이 켜진 판정 행만 값이 있다. */
+  discontinuedIncome: number | null
 }
 
 /** 화면이 반드시 함께 그려야 하는 고지. 서버가 문구를 소유한다. */

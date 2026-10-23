@@ -33,6 +33,7 @@ const period = (over: Partial<FinancialPeriod>): FinancialPeriod => ({
   revenueYoy: null,
   operatingIncomeYoy: null,
   netIncomeYoy: null,
+  discontinuedIncome: null,
   ...over,
 })
 
