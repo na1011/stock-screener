@@ -563,6 +563,25 @@ enum SecEdgarColumn {
         return List.copyOf(all);
     }
 
+    /**
+     * 관문 설정에 따른 후보 순서. 관문 켬의 주식수만 다르다 — 가중평균 폴백에서 <b>기본이 희석보다 앞</b>이다(탐색
+     * {@code SHARES-TIE-PLAN-1023.md} v1.1): 축 없는 dei 표지가 있는 정기 공시 49,941에서 같은 공시의 가장 짧은 창 가중평균을
+     * 표지에 대면 기본이 가까운 것 35,000 · 희석 7,625 · 같음 7,316이고 상대차 중앙 0.48% 대 1.28%다(2026-10-23 · `.factcache`).
+     * 희석은 반희석 판정이 기간마다 바뀌어 Up-C에서 교환 단위를 넣고 뺀다(TKO 2026 Q2 3개월 75.9M · 누계 193.3M · 기본 74.8M).
+     */
+    List<String> candidates(boolean usGate) {
+        if (usGate && this == SHARES_OUTSTANDING) {
+            return GATED_SHARES_ORDER;
+        }
+        return candidates();
+    }
+
+    private static final List<String> GATED_SHARES_ORDER = List.of(
+            "dei:EntityCommonStockSharesOutstanding",
+            "CommonStockSharesOutstanding",
+            "WeightedAverageNumberOfSharesOutstandingBasic",
+            "WeightedAverageNumberOfDilutedSharesOutstanding");
+
     /** 가장 큰 값을 골라야 하는 컬럼인가. */
     boolean picksLargest() {
         return selection == Selection.LARGEST;

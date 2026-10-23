@@ -299,11 +299,58 @@ final class SecEdgarFacts {
             // MUST NOT: 이 판들을 회수에서 지키지(withheld) 않는다 — 지키면 앞서 저장된 USD 판이 남아 같은 우회가 그대로 선다.
             reports.clear();
         }
+        if (usGate) {
+            reports.replaceAll(r -> withSharesSuperseded(r, labelAnchors, byColumn));
+        }
         reports.sort(Comparator.comparing(RawFinancialReport::periodEnd)
                 .thenComparing(RawFinancialReport::fiscalPeriod)
                 .thenComparing(RawFinancialReport::publishedAt));
         return new Result(reports, dropped, withoutDerived(absencesOf(facts, byColumn), reports),
                 Collections.unmodifiableSet(withheld));
+    }
+
+    /**
+     * 관문 켬: 이 행의 주식수가 대신한 옛 추출 값을 단다({@link RawFinancialReport#sharesSuperseded}). 옛 규칙은 라벨 앵커 공시에서
+     * <b>옛 후보 순서</b>({@link SecEdgarColumn#candidates()} — 희석이 기본보다 앞)로 그 공시에 팩트가 있는 첫 태그를 골라
+     * {@code max(end)} 동점 중 {@code HashMap} 순서의 것을 냈다 — 그 동점 전부가 옛 추출이 낼 수 있던 값이다.
+     *
+     * <p>한 자리에서 단다 — 값은 {@code carryForward} · Q4 유도 · 중단영업 판정을 지나며 행을 새로 짓는데, 주식수는 어느 판이든 라벨
+     * 앵커에서 오므로 라벨만 알면 다시 셀 수 있다. 유도 Q4는 라벨 앵커가 없을 수 있어 같은 해 FY 라벨의 앵커를 쓴다(유도 Q4의
+     * 주식수가 FY 행의 것이다). 공시 자신의 표지로 채운 판(ADR-0182 갈래)은 라벨 앵커에 주식수 팩트가 없어 집합이 빈다 — 옛 추출이
+     * 그 행에 값을 안 냈다.
+     */
+    private static RawFinancialReport withSharesSuperseded(
+            RawFinancialReport report, Map<Label, Anchor> labelAnchors,
+            Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn) {
+        BigDecimal shares = report.sharesOutstanding();
+        if (shares == null) {
+            return report;
+        }
+        Anchor anchor = labelAnchors.get(new Label(report.fiscalYear(), report.fiscalPeriod()));
+        if (anchor == null) {
+            anchor = labelAnchors.get(new Label(report.fiscalYear(), "FY"));
+        }
+        if (anchor == null) {
+            return report;
+        }
+        Map<String, Map<Slot, Fact>> byTag = byColumn.get(SecEdgarColumn.SHARES_OUTSTANDING);
+        for (String tag : SecEdgarColumn.SHARES_OUTSTANDING.candidates()) {
+            Map<Slot, Fact> slots = byTag.get(tag);
+            if (slots == null) {
+                continue;
+            }
+            String accn = anchor.accn();
+            List<Fact> own = slots.values().stream().filter(f -> f.accn().equals(accn)).toList();
+            if (own.isEmpty()) {
+                continue;
+            }
+            LocalDate end = own.stream().map(Fact::end).max(Comparator.naturalOrder()).orElseThrow();
+            Set<BigDecimal> superseded = new LinkedHashSet<>();
+            own.stream().filter(f -> f.end().equals(end) && f.value() != null && f.value().compareTo(shares) != 0)
+                    .forEach(f -> superseded.add(f.value()));
+            return superseded.isEmpty() ? report : report.withSharesSuperseded(superseded);
+        }
+        return report;
     }
 
     // ---------- 1. 팩트를 컬럼별로 모은다 ----------
@@ -333,7 +380,7 @@ final class SecEdgarFacts {
                 byColumn.put(column, byTag);
                 continue;
             }
-            for (String candidate : column.candidates()) {
+            for (String candidate : column.candidates(usGate)) {
                 boolean dei = candidate.startsWith("dei:");
                 JsonNode tag = facts.path(dei ? "dei" : "us-gaap")
                         .path(dei ? candidate.substring(4) : candidate);
@@ -1200,6 +1247,18 @@ final class SecEdgarFacts {
     private static Fact factFor(Anchor anchor, SecEdgarColumn column, Window window,
                                 Map<SecEdgarColumn, String> tags,
                                 Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn) {
+        return factFor(anchor, column, window, tags, byColumn, false);
+    }
+
+    /**
+     * @param usGate 관문 켬이면 주식수의 동점(같은 공시 · 같은 기말의 가중평균 둘 — 3개월과 누계)을 <b>늦은 시작</b>(가장 짧은 창)으로 깬다.
+     *               꺼짐은 {@code HashMap} 순회에서 먼저 만난 것이다 — 같은 원장 사실이 경로(companyfacts · 공시 보충)마다 다른 값을 냈다
+     *               (탐색 {@code SHARES-TIE-PLAN-1023.md} · 관문 켬 1,335칸). 창 일치가 아니라 짧은 창인 까닭: 주식수는 시점 값이라 같은
+     *               10-K의 FY와 Q4가 같은 값을 가져야 한다(창 일치는 FY 60행을 12개월 평균으로 옮겨 FY ≠ Q4를 만든다 — 반증 안 1).
+     */
+    private static Fact factFor(Anchor anchor, SecEdgarColumn column, Window window,
+                                Map<SecEdgarColumn, String> tags,
+                                Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn, boolean usGate) {
         String tag = tags.get(column);
         if (tag == null) {
             return null;
@@ -1208,6 +1267,13 @@ final class SecEdgarFacts {
         if (column.anchoredInstant()) {
             // 표지 항목이라 종료일이 기말이 아니다. 같은 보고서에서 왔으면 받는다 —
             // 이것을 종료일로 거르면 미국 PER·PBR의 분모가 영영 빈다(ADR-0013).
+            if (usGate) {
+                return slots.values().stream()
+                        .filter(f -> f.accn().equals(anchor.accn()))
+                        .max(Comparator.comparing(Fact::end)
+                                .thenComparing(f -> f.start() == null ? LocalDate.MAX : f.start()))
+                        .orElse(null);
+            }
             return slots.values().stream()
                     .filter(f -> f.accn().equals(anchor.accn()))
                     .max(Comparator.comparing(Fact::end))
@@ -1312,14 +1378,14 @@ final class SecEdgarFacts {
             }
             Fact fact = factFor(
                     column.anchoredInstant() && labelAnchor != null ? labelAnchor : anchor,
-                    column, window, tags, byColumn);
+                    column, window, tags, byColumn, ownCover);
             if (fact == null && ownCover && column.anchoredInstant() && labelAnchor != null
                     && window.end().equals(anchor.end())) {
                 // 관문 켬(ADR-0182): 라벨을 먼저 낸 공시에 표지가 없으면 그 판 공시 자신의 표지를 쓴다. IFRS 발행사는 연간 실적을
                 // 6-K(표지 없음)로 먼저 내고 같은 값을 40-F·20-F(표지 있음)로 다시 싣는다 — 라벨 앵커가 6-K라 그 해 FY 행의 주식수가
                 // 영영 비었다(AEM FY2024 · FY2025). 그 값은 이 판의 공시일에 공개된 것이라 이 판에만 단다(앞 판으로 되돌려 안 채운다).
                 // MUST: 그 공시가 이 라벨을 자기 기간으로 낼 때만 — 비교열로 다시 실은 뒤 해 공시의 표지는 이 기간의 주식수가 아니다.
-                fact = factFor(anchor, column, window, tags, byColumn);
+                fact = factFor(anchor, column, window, tags, byColumn, ownCover);
             }
             values.put(column, fact == null ? null : fact.value());
         }

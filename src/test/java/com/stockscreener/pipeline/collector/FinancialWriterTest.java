@@ -263,6 +263,39 @@ class FinancialWriterTest {
         }
 
         @Test
+        @DisplayName("저장된 주식수가 그 행이 대신한 옛 추출 값이면 덮고 무효화한다 — 소수 자리와 무관하다(관문 켬 · TKO 2026 Q2)")
+        void overwritesSharesOutstandingOurOldExtractionChose() {
+            writer.write(stockId, List.of(withShares(2025, "Q2", "2025-08-06", "1000", "193323374.00")));
+
+            long changed = fillOnlyWriter.write(stockId,
+                    List.of(withShares(2025, "Q2", "2025-08-06", "1000", "74797769")
+                            .withSharesSuperseded(java.util.Set.of(new BigDecimal("193323374"), new BigDecimal("75870706")))),
+                    WriteMode.FILL_MISSING);
+
+            assertThat(changed).isEqualTo(1);
+            assertThat((BigDecimal) latestRow().get("shares_outstanding")).isEqualByComparingTo("74797769");
+            assertThat(invalidations.calls).hasSize(1);
+        }
+
+        @Test
+        @DisplayName("저장된 주식수가 대신한 값 밖이면(손 수리 · ADR-0126) 집합이 있어도 지킨다(TEM 2024 Q3)")
+        void keepsHandRepairedSharesOutsideTheSupersededSet() {
+            writer.write(stockId, List.of(withShares(2024, "Q3", "2024-11-04", "1000", "104164000")));
+
+            long changed = fillOnlyWriter.write(stockId,
+                    List.of(withShares(2024, "Q3", "2024-11-04", "1000", "165612")
+                            .withSharesSuperseded(java.util.Set.of(new BigDecimal("104164")))),
+                    WriteMode.FILL_MISSING);
+
+            assertThat(changed).isZero();
+            assertThat((BigDecimal) latestRow().get("shares_outstanding")).isEqualByComparingTo("104164000");
+            assertThat(invalidations.calls).isEmpty();
+            assertThat(warnings()).as("사람이 근거 둘로 다시 고칠 행으로 남긴다")
+                    .anySatisfy(w -> assertThat(w).contains("손 수리된 주식수").contains("104164000").contains("165612"));
+        }
+
+
+        @Test
         @DisplayName("값을 덮으면 무효화한다 — 그 값으로 계산된 지표가 이미 저장돼 있다")
         void invalidatesWhenItOverwrites() {
             writer.write(stockId, List.of(report(2025, "FY", "2026-03-15", "1000")));
@@ -792,6 +825,22 @@ class FinancialWriterTest {
 
             assertThat((BigDecimal) vintageRow("2026-03-15").get("shares_outstanding"))
                     .isEqualByComparingTo("15655000");
+        }
+
+        @Test
+        @DisplayName("이른 판은 같은 라벨의 저장값이 옛 추출 값이면 잇지 않고 소스 값을 쓴다")
+        void insertedEarlierVintageDoesNotInheritTheOldExtraction() {
+            writer.write(stockId, List.of(withShares(2025, "Q2", "2026-08-03", "950", "193323374")));
+
+            recordingWriter.writeDetailed(stockId,
+                    List.of(withShares(2025, "Q2", "2025-08-06", "1000", "74797769")
+                                    .withSharesSuperseded(java.util.Set.of(new BigDecimal("193323374"))),
+                            withShares(2025, "Q2", "2026-08-03", "950", "74797769")
+                                    .withSharesSuperseded(java.util.Set.of(new BigDecimal("193323374")))),
+                    WriteMode.FILL_MISSING, true, true);
+
+            assertThat((BigDecimal) vintageRow("2025-08-06").get("shares_outstanding")).isEqualByComparingTo("74797769");
+            assertThat((BigDecimal) vintageRow("2026-08-03").get("shares_outstanding")).isEqualByComparingTo("74797769");
         }
 
         private List<Integer> revisionNumbers() {

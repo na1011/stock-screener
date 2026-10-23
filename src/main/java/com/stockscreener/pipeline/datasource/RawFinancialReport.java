@@ -225,7 +225,16 @@ public record RawFinancialReport(
          * <b>이 행의 중단영업을 판정한 규칙의 판</b>(1 = F2b). {@code null}이면 위 두 칸도 「읽지 않았다」이고 저장은 세 칸을
          * 안 건드린다. 있는데 {@link #discontinuedIncome}이 {@code null}이면 원장이 그 판에서 정해 주지 않은 것이다.
          */
-        BigDecimal discontinuedRule
+        BigDecimal discontinuedRule,
+
+        /**
+         * <b>이 행의 주식수가 대신한 옛 추출 값</b> — 관문 켬 미국 어댑터만 싣는다(탐색 {@code SHARES-TIE-PLAN-1023.md} v1.1). 같은 라벨 앵커
+         * 공시에서 옛 규칙(희석이 기본보다 앞인 사다리 · 동점은 {@code HashMap} 순서)이 낼 수 있던 값 중 이 행의 값과 다른 것이다.
+         * {@code FinancialWriter}는 저장된 양수 주식수가 이 집합에 있을 때만 덮는다 — 그 값은 우리 옛 추출의 산물이라
+         * 「같은 보고서인데 값이 다르면 우리 추출이 바뀐 것」이 그 행에 선다. 손 수리(ADR-0126)는 이 집합 밖이라 지켜진다.
+         * {@code null}이면 빈 집합으로 정규화한다 — 비면 지금까지와 똑같이 동작한다.
+         */
+        Set<BigDecimal> sharesSuperseded
 ) {
 
     /** 중단영업 판정 규칙의 지금 판(F2b · ADR-0184). 규칙을 바꾸면 올린다 — 저장이 그 판으로 옛 판정을 고친다. */
@@ -268,7 +277,7 @@ public record RawFinancialReport(
                 cashAndEquivalents, capex, inventories, netIncomeControlling, interestAndDividendIncome,
                 noninterestIncome, interestExpense, noninterestExpense, benefitsLossesAndExpenses,
                 grossProfit, operatingExpenses, costsAndExpenses, incomeTaxExpense,
-                profitBeforeTax, derived, assertedAbsent, null, null, null);
+                profitBeforeTax, derived, assertedAbsent, null, null, null, null);
     }
 
     /** 같은 행에 중단영업 판정(두 금액 · 지금 규칙 판)을 단다 — 관문 켬 어댑터가 판을 다 지은 뒤 싣는다. */
@@ -281,7 +290,25 @@ public record RawFinancialReport(
                 cashAndEquivalents, capex, inventories, netIncomeControlling, interestAndDividendIncome,
                 noninterestIncome, interestExpense, noninterestExpense, benefitsLossesAndExpenses,
                 grossProfit, operatingExpenses, costsAndExpenses, incomeTaxExpense,
-                profitBeforeTax, derived, absent, consolidated, controlling, DISCONTINUED_RULE_VERSION);
+                profitBeforeTax, derived, absent, consolidated, controlling, DISCONTINUED_RULE_VERSION, sharesSuperseded);
+    }
+
+    /** 같은 행에 「이 주식수가 대신한 옛 추출 값」을 단다 — 관문 켬 미국 어댑터가 판을 다 지은 뒤 싣는다. */
+    public RawFinancialReport withSharesSuperseded(Set<BigDecimal> superseded) {
+        return new RawFinancialReport(fiscalYear, fiscalPeriod, periodStart, periodEnd, publishedAt, reportCode,
+                currencyCode, revenue, operatingIncome, netIncome, totalAssets, totalEquity,
+                totalEquityControlling, totalLiabilities, currentAssets, currentLiabilities,
+                retainedEarnings, operatingCashFlow, sharesOutstanding, eps, bps, costOfSales,
+                cashAndEquivalents, capex, inventories, netIncomeControlling, interestAndDividendIncome,
+                noninterestIncome, interestExpense, noninterestExpense, benefitsLossesAndExpenses,
+                grossProfit, operatingExpenses, costsAndExpenses, incomeTaxExpense,
+                profitBeforeTax, derived, assertedAbsent, discontinuedIncome, discontinuedIncomeControlling,
+                discontinuedRule, superseded);
+    }
+
+    /** 저장된 주식수가 이 행이 대신한 옛 추출 값인가 — 소수 자리와 무관하게({@code compareTo}) 본다. */
+    public boolean supersedesShares(BigDecimal stored) {
+        return stored != null && sharesSuperseded.stream().anyMatch(v -> v.compareTo(stored) == 0);
     }
 
     /**
@@ -395,5 +422,6 @@ public record RawFinancialReport(
         // 안 채운 어댑터는 지금까지와 똑같이 동작한다. 복사본을 두는 것은 호출부가 뒤에
         // 집합을 바꿔도 저장 판정이 안 흔들리게 하기 위해서다.
         assertedAbsent = assertedAbsent == null ? Set.of() : Set.copyOf(assertedAbsent);
+        sharesSuperseded = sharesSuperseded == null ? Set.of() : Set.copyOf(sharesSuperseded);
     }
 }

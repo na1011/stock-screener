@@ -312,11 +312,14 @@ public class FinancialWriter {
             // **이 줄은 평일 판당 부피 축이 아니다**(2026-09-13 실측 213 B/줄) — 일일 14:00
             // 사슬은 APPEND_ONLY라 가드에 걸려 안 찍히고, FILL_MISSING·FILL_WITHOUT_REVISION인
             // 주간 재적재(수·목)에서만 뜬다. 로그 소음을 줄일 때 여기를 후보로 세지 않는다.
+            // 주식수 교정(관문 켬 · 옛 추출 값을 덮은 행)은 따로 센다 — 교정=은 칸 수와 회수 행 수의 합이라 관문 날 대조에 못 쓴다.
+            // 0이면 안 붙인다(관문 꺼짐 로그가 그대로다).
             log.info("결손 보정. stockId={} 모드={} 신규={} 정정={} 채움={} 정정보류={} 교정={} 무변경={}"
-                            + " 이른판삽입={} 재번호라벨={}",
+                            + " 이른판삽입={} 재번호라벨={}{}",
                     stockId, mode, tally.inserted, tally.revised, tally.filled,
                     tally.deferredRevisions, tally.corrected, tally.untouched,
-                    tally.insertedEarlier, tally.renumberedLabels);
+                    tally.insertedEarlier, tally.renumberedLabels,
+                    tally.sharesCorrected == 0 ? "" : " 주식수교정=" + tally.sharesCorrected);
         }
         return new Outcome(tally.changed(), tally.inserted, tally.filled, tally.revised,
                 tally.deferredRevisions, tally.corrected, tally.insertedEarlier,
@@ -741,10 +744,21 @@ public class FinancialWriter {
             BigDecimal stored = existing.amounts().get(amount);
             if (stored == null) {
                 toFill.add(amount);
-            } else if (stored.compareTo(incoming) != 0 && amount.overwritable()) {
+            } else if (stored.compareTo(incoming) != 0
+                    && (amount.overwritable() || (amount == Amount.SHARES_OUTSTANDING && report.supersedesShares(stored)))) {
                 // scale이 달라도 같은 값이면 여기 오지 않는다(compareTo).
+                // 주식수는 저장값이 이 행이 대신한 옛 추출 값일 때만 덮는다(관문 켬 미국 · RawFinancialReport#sharesSuperseded) —
+                // 그 값은 우리 옛 규칙의 산물이라 위 덮기 전제가 선다. 손 수리(ADR-0126 · 탐색 SHARES-TIE-PLAN-1023 ★0c·0d 57행)는
+                // 그 집합 밖이라 overwritable()이 지키던 대로 남는다.
                 toCorrect.add(amount);
                 corrections.add("%s %s -> %s".formatted(amount.column, stored, incoming));
+            } else if (amount == Amount.SHARES_OUTSTANDING && stored.compareTo(incoming) != 0
+                    && (report.supersedesShares(stored.movePointRight(3)) || report.supersedesShares(stored.movePointLeft(3)))) {
+                // 손 수리(ADR-0126)가 옛 추출 값의 축척만 고친 행 — 새 규칙이 고른 값과 다른 칸을 원장에 물어야 하므로 덮지 않고
+                // 사람이 근거 둘로 다시 쓴다(관문 절차 · 탐색 SHARES-TIE-PLAN-1023 v1.1 결정 3 · 드라이런 21행 ECHO · RPAY · TBLA · TEM · VCTR).
+                log.warn("손 수리된 주식수가 옛 추출 값의 축척 수리다 — 새 규칙 값과 다르다. 근거 둘로 다시 고친다(ADR-0126). "
+                                + "stockId={} {}/{} 공시일={} 저장={} 새 규칙={}",
+                        stockId, report.fiscalYear(), report.fiscalPeriod(), report.publishedAt(), stored, incoming);
             }
         }
 
@@ -818,6 +832,9 @@ public class FinancialWriter {
                     stockId, report.fiscalYear(), report.fiscalPeriod(), report.publishedAt(),
                     String.join(" | ", corrections));
             tally.corrected += toCorrect.size() + toClear.size();
+            if (toCorrect.contains(Amount.SHARES_OUTSTANDING)) {
+                tally.sharesCorrected++;
+            }
             // 여기는 "행 없음 → 행 생김"이 아니라 "틀린 값 → 다른 값"이다. 그 값으로 계산된
             // 지표가 이미 저장돼 있으므로 지우지 않으면 낡은 값이 그대로 남는다.
             invalidationPort.invalidate(stockId, report.periodStart(),
@@ -925,6 +942,10 @@ public class FinancialWriter {
                 WHERE stock_id = ? AND fiscal_year = ? AND fiscal_period = ? AND shares_outstanding IS NOT NULL
                 """, BigDecimal.class, stockId, report.fiscalYear(), report.fiscalPeriod());
         BigDecimal incoming = report.sharesOutstanding();
+        if (stored.size() == 1 && report.supersedesShares(stored.get(0))) {
+            // 모인 저장값이 우리 옛 추출 값이면 잇지 않는다 — 같은 호출의 교정이 그 라벨의 다른 판을 새 값으로 고친다.
+            return incoming;
+        }
         if (stored.size() == 1) {
             BigDecimal kept = stored.get(0);
             if (incoming == null || incoming.compareTo(kept) != 0) {
@@ -1100,6 +1121,7 @@ public class FinancialWriter {
         private int untouched;
         private int insertedEarlier;
         private int renumberedLabels;
+        private int sharesCorrected;
         private LocalDate earliestInsertedPublication;
 
         long changed() {
