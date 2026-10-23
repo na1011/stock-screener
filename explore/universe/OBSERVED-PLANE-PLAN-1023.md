@@ -125,9 +125,10 @@
 5. **귀속 재료는 같은 실행 안에서 낸다**(안 7 · 밖 3) — ③-0(`--dates` 재생)을 걷는다. 그 재생은 앞 편입이 빈 집합에서 시작해 ③a와
    사슬이 다르다(`UsPastRanking.rosters`). 대신 쓰기 전에 `plan.membersOn(관측일)`을 지울 `OBSERVED` 명부와 견줘(`compare` 재사용)
    날짜마다 놓침 · 더든것 티커를 로그로 낸다. 결정 3이 L에서 뺀 · 넣은 티커도 낸다(안 6 — 지워지는 편출이 펜스에 안 남으므로).
-6. **거버넌스 꼬리**(밖 6 · 내가 확인: `GovernanceLoadJob.resolveTargets`가 `activeUniverseMemberIds` · `--tickers`도 열린 편입만 받는다) —
+6. **거버넌스 꼬리**(밖 6 · 내가 확인: `GovernanceLoadJob.resolveTargets`의 기본 모집단이 `activeUniverseMemberIds`(지금 편입) ·
+   `--tickers`는 `activeUniverseMemberIdsByTicker`라 보존 창의 닫힌 편입도 받는다 — 길은 있는데 아무도 그 티커를 안 준다) —
    닫힌 행만 가진 새 창 구성원(밖 6: 예상 신규 V · STZ · COKE · WMG · XOM … 전부 `governance_fact` 0행)은 거버넌스 원자료를
-   받을 길이 없다. **결정 2와 무관하게 관문 켬 복원(③ 지금 판)에도 선다** — 내 파이프라인을 지나는 결함이라 이 묶음에서 닫는다:
+   받지 못한다. **결정 2와 무관하게 관문 켬 복원(③ 지금 판)에도 선다** — 내 파이프라인을 지나는 결함이라 이 묶음에서 닫는다:
    복원 꼬리(`fillRestoredPriceGaps` 옆)에 닫힌 창 구성원의 거버넌스 결손 적재를 두고, 05 ④ 단언에 거버넌스 축을 더한다.
    결손 술어는 `MembershipGap`의 거버넌스 축을 그대로 쓴다(새로 짓지 않는다).
 7. **예탁 판 비율(B) 절차가 실행기에 없다**(밖 1 · `ops/apply-window`에 `depositary` 0건 · 운영 `share_basis_status='DEPOSITARY'` 0행) —
