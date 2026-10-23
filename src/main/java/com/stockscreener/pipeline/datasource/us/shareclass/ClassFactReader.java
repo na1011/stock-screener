@@ -47,8 +47,10 @@ public final class ClassFactReader {
      * 받는다(2026-10-21). 3 — 표지 글의 줄바꿈 없는 공백 · 너비 0 구분자를 공백으로, 방향 표시를 지운다({@link #plainText} · 2026-10-21).
      * 4 — IFRS 공시(ADR-0182 · 0183): 클래스 축 {@code ifrs-full:ClassesOfShareCapitalAxis}를 클래스 축으로 받고, IFRS의 EPS · 가중평균 ·
      * 분자를 같은 뜻의 us-gaap 이름으로 싣는다(AZN · VALE 표지가 그 축의 구성원에만 주식수를 싣는다 · 2026-10-22 인스턴스).
+     * 5 — LP 단위(ADR-0187): LP 단위 가중평균을 LP 클래스 축에서도 받고(표지 클래스 구성원만), LP+GP 합계 단위를 다른 가중평균이 없는
+     * 자리의 폴백으로 싣는다(SUN · GEL · 2026-10-23).
      */
-    public static final int READER_VERSION = 4;
+    public static final int READER_VERSION = 5;
 
     public static final String SHARES_OUTSTANDING = "EntityCommonStockSharesOutstanding";
     public static final String TRADING_SYMBOL = "TradingSymbol";
@@ -59,7 +61,18 @@ public final class ClassFactReader {
     public static final String DEPOSITORY_RATIO = "EntityListingDepositoryReceiptRatio";
     public static final List<String> WEIGHTED_TAGS = List.of("WeightedAverageNumberOfSharesOutstandingBasic",
             "WeightedAverageNumberOfShareOutstandingBasicAndDiluted", "WeightedAverageNumberOfSharesIssuedBasic",
-            "WeightedAverageLimitedPartnershipUnitsOutstanding");
+            "WeightedAverageLimitedPartnershipUnitsOutstanding",
+            "WeightedAverageNumberOfLimitedPartnershipAndGeneralPartnershipUnitOutstandingBasicAndDiluted",
+            "WeightedAverageLimitedPartnershipAndGeneralPartnershipUnitsOutstandingBasic");
+    /**
+     * LP와 GP를 합친 단위 가중평균 — 같은 (구성원, 기간)에 다른 가중평균 태그가 없을 때만 싣는다. 함께 실린 공시에서 뜻이 갈린다
+     * (CAPL 2016 Q1: LP 단위 28,475,363 대 합계 4,630,769 · JSPR 2022 9개월: 기본 36,425,000 대 합계 3,028,277 · 2026-10-23
+     * 탐색 {@code LP-UNIT-PLAN-1023.md}). 둘을 함께 두면 판정기의 앞 태그가 이기는 자리({@code firstPerMember})와 뒤 태그가
+     * 이기는 자리({@code periodValues})가 다른 값을 고른다 — 그래서 순서가 아니라 배타로 막는다.
+     */
+    public static final List<String> WEIGHTED_FALLBACK_TAGS = List.of(
+            "WeightedAverageNumberOfLimitedPartnershipAndGeneralPartnershipUnitOutstandingBasicAndDiluted",
+            "WeightedAverageLimitedPartnershipAndGeneralPartnershipUnitsOutstandingBasic");
     public static final List<String> EPS_TAGS = List.of("EarningsPerShareBasic", "EarningsPerShareBasicAndDiluted",
             "IncomeLossFromContinuingOperationsPerBasicShare");
     public static final String DECLARED_NUMERATOR = "NetIncomeLossAvailableToCommonStockholdersBasic";
@@ -73,6 +86,9 @@ public final class ClassFactReader {
     private static final Set<String> LISTING_COVER = Set.of(TRADING_SYMBOL, SECURITY_EXCHANGE, SECURITY_TITLE, DEPOSITORY_RATIO,
             SHARES_OUTSTANDING);
     private static final Set<String> DURATION = Set.copyOf(concat(WEIGHTED_TAGS, EPS_TAGS, NUMERATOR_TAGS));
+    /** LP 축을 클래스 축으로 받는 개념 — LP 단위 가중평균과 그 합계 폴백뿐이다(법인 태그는 안 넓힌다 — REIT 운영 파트너십 단위). */
+    private static final Set<String> LP_UNIT_TAGS = Set.copyOf(concat(List.of("WeightedAverageLimitedPartnershipUnitsOutstanding"),
+            WEIGHTED_FALLBACK_TAGS));
     /** 낱말을 가르는 비ASCII 공백 — 공백 분리자 전부와 너비 0 구분자(지우면 너비 0 공백으로 가른 두 낱말이 하나로 붙는다). */
     private static final Pattern WIDE_SPACE = Pattern.compile("[\\p{Zs}\\u200B\\u2060\\uFEFF]");
     /** 글자 사이에 끼어도 뜻이 없는 표시 — 방향 표시와 soft hyphen. */
@@ -91,6 +107,12 @@ public final class ClassFactReader {
             "ProfitLossAttributableToOwnersOfParent", "NetIncomeLoss",
             "ProfitLoss", "ProfitLoss");
     private static final String EQUITY_AXIS = "StatementEquityComponentsAxis";
+    /**
+     * LP 단위의 클래스 축 — LP 단위 가중평균에만 클래스 축으로 받는다. SUN은 2023-08 뒤 가중평균을 이 축의 {@code CommonUnitsMember}에만
+     * 싣고, 표지 주식수는 클래스 축의 같은 구성원에 싣는다(2026-10-23 인스턴스). 구성원이 그 공시 표지의 클래스 구성원일 때만 받는다 —
+     * 이 축에는 거래 구성원(KNOP {@code PartnersCapitalAccountSaleOfUnitsMember})과 0인 종속 단위(BSM)도 실린다.
+     */
+    private static final String LP_CLASS_AXIS = "LimitedPartnersCapitalAccountByClassAxis";
     private static final String SUBSEQUENT_AXIS = "SubsequentEventTypeAxis";
     /** 표지의 거래소 축 — 상장 판정 표지만 받는다(Two Harbors 10-Q는 표지 기호마다 클래스 축 + 이 축을 단다 · R-D6-0 2026-10-18). */
     private static final String LISTINGS_EXCHANGE_AXIS = "EntityListingsExchangeAxis";
@@ -120,6 +142,9 @@ public final class ClassFactReader {
                         ClassFacts.Measured measured) {
     }
 
+    private record Pending(String concept, String member, ClassFacts.Period period, ClassFacts.Measured measured) {
+    }
+
     public static Result read(InputStream xml, long cik, String context) throws DataSourceException {
         return read(xml, cik, context, COVER);
     }
@@ -140,6 +165,8 @@ public final class ClassFactReader {
         // 저장 표지의 넓힌 꼴(거래소 축 · 보통주 구성요소 축)로만 온 기호 · 증권 이름 — 구성원마다 문서 순서로 모은다
         Map<String, LinkedHashMap<String, LinkedHashSet<String>>> widened = new LinkedHashMap<>();
         List<Late> late = new ArrayList<>();
+        List<Pending> lpAxis = new ArrayList<>();
+        List<Pending> fallback = new ArrayList<>();
         List<Raw> raws = new ArrayList<>();
         String documentType = null;
         int unreadable = 0;
@@ -172,7 +199,8 @@ public final class ClassFactReader {
                         documentType = r.getElementText().trim();
                         continue;
                     }
-                    if (!coverConcepts.contains(local) && !DURATION.contains(local)) {
+                    if (!coverConcepts.contains(local) && !DURATION.contains(local)
+                            || coverConcepts != COVER && WEIGHTED_FALLBACK_TAGS.contains(local)) {
                         continue;
                     }
                     String contextRef = r.getAttributeValue(null, "contextRef");
@@ -201,6 +229,13 @@ public final class ClassFactReader {
             extra.remove(CLASS_AXIS);
             extra.remove(IFRS_CLASS_AXIS);
             String member = c.dims().getOrDefault(CLASS_AXIS, c.dims().getOrDefault(IFRS_CLASS_AXIS, ClassFacts.AXISLESS));
+            boolean lpMember = false;
+            if (coverConcepts == COVER && LP_UNIT_TAGS.contains(local) && !c.dims().containsKey(CLASS_AXIS)
+                    && c.dims().containsKey(LP_CLASS_AXIS)) {
+                member = c.dims().get(LP_CLASS_AXIS);
+                extra.remove(LP_CLASS_AXIS);
+                lpMember = true;
+            }
             if (coverConcepts == LISTING_COVER) {
                 // 상장 판정은 기호 · 거래소 · 증권 이름(과 예탁증권 판정의 비율 · 표지 주식수)만 본다(저장 팩트 COVER는 그 판을 안 바꾸려고 그대로 둔다).
                 //  - 거래소 축은 그 줄이 어느 거래소의 것인지 말한다 — 이중 상장은 줄이 거래소마다 따로라 구성원 열쇠에 거래소를 붙인다
@@ -257,6 +292,12 @@ public final class ClassFactReader {
                 continue;
             }
             ClassFacts.Period period = new ClassFacts.Period(c.start(), c.end());
+            if (lpMember || WEIGHTED_FALLBACK_TAGS.contains(local)) {
+                if (extra.isEmpty()) {
+                    (WEIGHTED_FALLBACK_TAGS.contains(local) ? fallback : lpAxis).add(new Pending(local, member, period, measured));
+                }
+                continue;
+            }
             if (extra.isEmpty()) {
                 durations.computeIfAbsent(local, k -> new LinkedHashMap<>()).put(new ClassFacts.MemberPeriod(member, period), measured);
             } else {
@@ -270,6 +311,24 @@ public final class ClassFactReader {
             } else {
                 durations.computeIfAbsent(l.concept(), k -> new LinkedHashMap<>())
                         .putIfAbsent(new ClassFacts.MemberPeriod(l.member(), l.period()), l.measured());
+            }
+        }
+        // LP 축 사실은 그 구성원이 표지의 클래스 구성원일 때만, 클래스 축 사실이 없는 자리만 채운다.
+        Set<String> coverMembers = cover.getOrDefault(SHARES_OUTSTANDING, new LinkedHashMap<>()).keySet();
+        for (Pending p : lpAxis) {
+            if (coverMembers.contains(p.member())) {
+                durations.computeIfAbsent(p.concept(), k -> new LinkedHashMap<>())
+                        .putIfAbsent(new ClassFacts.MemberPeriod(p.member(), p.period()), p.measured());
+            }
+        }
+        // 합계 단위는 같은 (구성원, 기간)에 다른 가중평균이 없을 때만 — 위 LP 축 사실까지 다 실은 뒤에 본다.
+        for (Pending p : fallback) {
+            ClassFacts.MemberPeriod key = new ClassFacts.MemberPeriod(p.member(), p.period());
+            boolean lp = !ClassFacts.AXISLESS.equals(p.member());
+            boolean taken = WEIGHTED_TAGS.stream().filter(t -> !WEIGHTED_FALLBACK_TAGS.contains(t))
+                    .anyMatch(t -> durations.getOrDefault(t, new LinkedHashMap<>()).containsKey(key));
+            if (!taken && (!lp || coverMembers.contains(p.member()))) {
+                durations.computeIfAbsent(p.concept(), k -> new LinkedHashMap<>()).putIfAbsent(key, p.measured());
             }
         }
         // 넓힌 꼴은 축 없는(클래스 축만 단) 사실이 없는 구성원만 채운다. 이중 상장(SunOpta STKL · NASDAQ과 SOY · TSX)은 한 증권의 기호가

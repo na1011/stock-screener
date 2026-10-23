@@ -35,6 +35,14 @@ public record IssuerFacts(Map<String, Filing> filings,
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final List<String> WEIGHTED = List.of("WeightedAverageNumberOfSharesOutstandingBasic",
             "WeightedAverageNumberOfShareOutstandingBasicAndDiluted");
+    /**
+     * 판독기 목록({@link ClassFactReader#WEIGHTED_TAGS})에서 위 둘 밖의 태그 — 그 공시의 축 없는 표지 주식수로 확인될 때만 받는다
+     * (|log10(가중평균 ÷ 표지)| ≤ {@link IssuerTimeline#TAU_COVER}). companyfacts에는 축이 없어 그 태그가 무엇을 셌는지 모른다 —
+     * REG의 축 없는 LP 단위는 운영 파트너십의 외부 조합원 단위(표지의 0.5%)이고 NRP · VANI는 천 단위로 잘못 실었다(2026-10-23
+     * 탐색 {@code LP-UNIT-PLAN-1023.md} 반증). 확인 안 되면 비운다 — 틀린 n보다 값 없음이다.
+     */
+    private static final List<String> WEIGHTED_CONFIRMED = ClassFactReader.WEIGHTED_TAGS.stream()
+            .filter(t -> !WEIGHTED.contains(t)).toList();
     private static final List<String> PROXY = List.of("NetIncomeLoss", "ProfitLoss");
     /** 가지친 트리에서 공시 목록을 싣는 자리 — us-gaap 개념 이름과 안 겹친다(밑줄로 시작하는 개념 없음). */
     private static final String FILINGS = "_filings";
@@ -57,8 +65,15 @@ public record IssuerFacts(Map<String, Filing> filings,
         for (JsonNode x : root.path("facts").path("dei").path(ClassFactReader.SHARES_OUTSTANDING).path("units").path("shares")) {
             cover.put(x.path("accn").asString(), x.path("val").asDouble());
         }
+        Map<Key, Double> weighted = pick(gaap, WEIGHTED, "shares");
+        pick(gaap, WEIGHTED_CONFIRMED, "shares").forEach((k, v) -> {
+            Double c = cover.get(k.accession());
+            if (c != null && c > 0 && v > 0 && Math.abs(Math.log10(v / c)) <= IssuerTimeline.TAU_COVER) {
+                weighted.putIfAbsent(k, v);
+            }
+        });
         return new IssuerFacts(filings,
-                pick(gaap, WEIGHTED, "shares"),
+                weighted,
                 pick(gaap, ClassFactReader.EPS_TAGS, "USD/shares"),
                 pick(gaap, List.of(ClassFactReader.DECLARED_NUMERATOR), "USD"),
                 pick(gaap, PROXY, "USD"),
@@ -94,7 +109,7 @@ public record IssuerFacts(Map<String, Filing> filings,
                 }
             }
         }
-        for (String tag : concat(WEIGHTED, ClassFactReader.EPS_TAGS, List.of(ClassFactReader.DECLARED_NUMERATOR), PROXY)) {
+        for (String tag : concat(WEIGHTED, WEIGHTED_CONFIRMED, ClassFactReader.EPS_TAGS, List.of(ClassFactReader.DECLARED_NUMERATOR), PROXY)) {
             if (gaap.has(tag)) {
                 prunedGaap.set(tag, gaap.get(tag));
             }
