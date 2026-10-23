@@ -58,6 +58,7 @@ final class FinancialFiguresFixture {
     private BigDecimal weightedShares;
     private BigDecimal discontinuedIncome;
     private BigDecimal discontinuedIncomeControlling;
+    private BigDecimal discontinuedRule;
 
     private FinancialFiguresFixture() {
     }
@@ -127,6 +128,7 @@ final class FinancialFiguresFixture {
         fixture.weightedShares = source.weightedShares();
         fixture.discontinuedIncome = source.discontinuedIncome();
         fixture.discontinuedIncomeControlling = source.discontinuedIncomeControlling();
+        fixture.discontinuedRule = source.discontinuedRule();
         return fixture;
     }
 
@@ -296,10 +298,11 @@ final class FinancialFiguresFixture {
         return this;
     }
 
-    /** 중단영업 연결 몫과 지배 몫(F2b · ADR-0184). 기본값 null은 「이 규칙으로 안 읽은 행」이다. */
+    /** 중단영업 연결 몫과 지배 몫을 F2b 규칙(판 1)으로 읽은 행(ADR-0184). 안 부르면 「이 규칙으로 안 읽은 행」이다. */
     FinancialFiguresFixture discontinued(BigDecimal consolidated, BigDecimal controlling) {
         this.discontinuedIncome = consolidated;
         this.discontinuedIncomeControlling = controlling;
+        this.discontinuedRule = BigDecimal.ONE;
         return this;
     }
 
@@ -315,6 +318,6 @@ final class FinancialFiguresFixture {
                 noninterestExpense, benefitsLossesAndExpenses,
                 grossProfit, operatingExpenses, costsAndExpenses,
                 incomeTaxExpense, profitBeforeTax, shareBasisMultiple, shareBasisStatus, shareClassState,
-                weightedShares, discontinuedIncome, discontinuedIncomeControlling);
+                weightedShares, discontinuedIncome, discontinuedIncomeControlling, discontinuedRule);
     }
 }

@@ -143,9 +143,14 @@ class SecEdgarControllingQ4GateTest {
     }
 
     @Test
-    @DisplayName("비지배가 없는 회사: 켜도 바뀌지 않는다")
+    @DisplayName("비지배가 없는 회사: 켜도 바뀌지 않는다 — 켬이 더하는 중단영업 판정(F2b · 이 회사는 0) 말고는")
     void noNoncontrollingCompanyUnchanged() throws Exception {
-        assertThat(build("adbe-controlling-q4.json", true))
+        List<RawFinancialReport> on = build("adbe-controlling-q4.json", true);
+        // 관문 켬은 중단영업 세 칸(ADR-0184)도 싣는다 — 이 시험이 묻는 것은 지배주주 Q4 규칙이라 그 셋은 따로 묻는다.
+        assertThat(on)
+                .usingRecursiveFieldByFieldElementComparatorIgnoringFields(
+                        "discontinuedIncome", "discontinuedIncomeControlling", "discontinuedRule")
                 .isEqualTo(build("adbe-controlling-q4.json", false));
+        assertThat(on).allSatisfy(r -> assertThat(r.discontinuedIncome()).isEqualByComparingTo("0"));
     }
 }

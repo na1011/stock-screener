@@ -109,7 +109,7 @@ public class IndicatorDataReader {
      * 생기고, 꺼진 시장의 행은 이 축이 없던 때와 바이트까지 같아야 한다(「us 켬 · kr 끔에서 국내 행 무변화」).
      */
     private static final String DISCONTINUED_COLUMNS = """
-            , discontinued_income, discontinued_income_controlling
+            , discontinued_income, discontinued_income_controlling, discontinued_rule
             """;
 
     /**
@@ -591,6 +591,7 @@ public class IndicatorDataReader {
                 rs.getString("share_basis_status"),
                 state, weighted,
                 discontinued ? rs.getBigDecimal("discontinued_income") : null,
-                discontinued ? rs.getBigDecimal("discontinued_income_controlling") : null);
+                discontinued ? rs.getBigDecimal("discontinued_income_controlling") : null,
+                discontinued ? rs.getBigDecimal("discontinued_rule") : null);
     }
 }

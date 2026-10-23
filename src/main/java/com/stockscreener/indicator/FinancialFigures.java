@@ -119,8 +119,8 @@ public record FinancialFigures(
         BigDecimal weightedShares,
 
         /**
-         * <b>중단영업 손익(연결 · 세후 · 비지배 몫 포함).</b> 0은 「읽었고 중단영업 줄이 없다」, {@code null}은 「이 규칙으로
-         * 읽지 않았다」(관문 꺼짐 · 관문 전 행)다 — 그때 계속영업은 순이익 그대로라 동작이 이 축이 생기기 전과 같다(ADR-0184).
+         * <b>중단영업 손익(연결 · 세후 · 비지배 몫 포함).</b> 0은 「중단영업 줄이 없다」다. {@link #discontinuedRule}이 있는데
+         * {@code null}이면 원장이 그 판에서 정해 주지 않은 것이다(재분류된 해의 Q4 — 계속영업을 지어내지 않는다).
          */
         BigDecimal discontinuedIncome,
 
@@ -128,18 +128,29 @@ public record FinancialFigures(
          * <b>중단영업 손익의 지배주주 몫.</b> 연결 몫이 0이 아닌데 이것이 {@code null}이면 원장이 지배 몫을 정해 주지
          * 않은 것이다 — 지배 계속영업을 지어내지 않는다({@link #continuingIncomeControlling}).
          */
-        BigDecimal discontinuedIncomeControlling
+        BigDecimal discontinuedIncomeControlling,
+
+        /**
+         * <b>이 행의 중단영업을 판정한 규칙의 판</b>(1 = F2b). {@code null}은 「이 규칙으로 읽지 않았다」(관문 꺼짐 · 관문 전 행 ·
+         * 전체 재무제표가 안 닿은 국내 행)다 — 그때 계속영업은 순이익 그대로라 동작이 이 축이 생기기 전과 같다(ADR-0184).
+         * 「안 읽음」과 「읽었는데 모름」을 두 금액 칸만으로는 못 가른다 — 앞을 모름으로 읽으면 국내 27종목(최신 TTM에 안 닿은
+         * 행 84)이 통째로 미표시된다(2026-10-23 운영 SELECT).
+         */
+        BigDecimal discontinuedRule
 ) {
 
     /**
      * <b>계속영업 순이익(연결).</b> 순이익에서 중단영업을 뺀다 — 중단영업은 정의상(ASC 205-20 · K-IFRS 1105) 이어지지 않는
-     * 손익이고 매각 차익을 싣는다. 중단영업을 안 읽은 행({@code null})은 순이익 그대로다.
+     * 손익이고 매각 차익을 싣는다. 이 규칙으로 안 읽은 행은 순이익 그대로, 읽었는데 연결 중단영업을 모르면 {@code null}이다.
      */
     public BigDecimal continuingIncome() {
         if (netIncome == null) {
             return null;
         }
-        return discontinuedIncome == null ? netIncome : netIncome.subtract(discontinuedIncome);
+        if (discontinuedRule == null) {
+            return netIncome;
+        }
+        return discontinuedIncome == null ? null : netIncome.subtract(discontinuedIncome);
     }
 
     /**
@@ -153,10 +164,13 @@ public record FinancialFigures(
         if (netIncomeControlling == null) {
             return null;
         }
+        if (discontinuedRule == null) {
+            return netIncomeControlling;
+        }
         if (discontinuedIncomeControlling != null) {
             return netIncomeControlling.subtract(discontinuedIncomeControlling);
         }
-        if (discontinuedIncome == null || discontinuedIncome.signum() == 0) {
+        if (discontinuedIncome != null && discontinuedIncome.signum() == 0) {
             return netIncomeControlling;
         }
         return null;

@@ -537,7 +537,10 @@ public class FinancialWriter {
         Set<Amount> managed = EnumSet.noneOf(Amount.class);
         for (RawFinancialReport report : reports) {
             for (Amount amount : Amount.values()) {
-                if (amount.of(report) != null) {
+                // 관문 컬럼은 「없다」 판정만 실은 호출도 관할이다 — 지배 몫이 한 판도 안 정해진 발행사에서 옛 값을 지우려면
+                // 그 칸이 SELECT에 들어야 한다. 관문 밖 컬럼의 관할 판정은 그대로다(값이 난 적 있는가 · 594칸 실측).
+                if (amount.of(report) != null
+                        || (amount.gated() && report.assertedAbsent().contains(amount.column))) {
                     managed.add(amount);
                 }
             }
@@ -545,9 +548,20 @@ public class FinancialWriter {
         return managed;
     }
 
+    /** 이 호출이 읽고 쓰는 금액 컬럼 — 관문 컬럼은 관할일 때만({@link Amount#gated}). */
+    private static List<Amount> columnsFor(Set<Amount> managed) {
+        List<Amount> columns = new ArrayList<>();
+        for (Amount amount : Amount.values()) {
+            if (!amount.gated() || managed.contains(amount)) {
+                columns.add(amount);
+            }
+        }
+        return columns;
+    }
+
     private void writeOne(long stockId, RawFinancialReport report, WriteMode mode,
                           Set<Amount> managed, boolean insertEarlier, Tally tally) {
-        Existing existing = findLatest(stockId, report);
+        Existing existing = findLatest(stockId, report, managed);
 
         if (existing == null) {
             // 아직 없는 기간이다. 모드와 무관하게 새로 쓴다 — 편입은 됐는데 재무를 한 번도
@@ -579,7 +593,7 @@ public class FinancialWriter {
             // 실측으로 그 한정 때문에 잃는 표적은 **0행**이다(16,342행 전부 미국·refill 경로).
             // APPEND_ONLY는 일일 갱신이라 판 이력을 다시 쓰면 안 된다.
             Existing vintage = mode == WriteMode.FILL_MISSING
-                    ? findVintage(stockId, report) : null;
+                    ? findVintage(stockId, report, managed) : null;
             if (vintage != null) {
                 fillMissing(stockId, vintage, report, managed, tally);
                 return;
@@ -691,7 +705,7 @@ public class FinancialWriter {
         List<Amount> toClear = new ArrayList<>();
         List<String> corrections = new ArrayList<>();
 
-        for (Amount amount : Amount.values()) {
+        for (Amount amount : columnsFor(managed)) {
             BigDecimal incoming = amount.of(report);
             if (incoming == null) {
                 // MUST: **우리가 만든 행에서만** 값을 지운다. 소스가 준 행에서 컬럼이 빠진 것은
@@ -820,8 +834,9 @@ public class FinancialWriter {
      * <p>금액 컬럼을 함께 읽는 이유는 {@link #fillMissing}이 "무엇이 비어 있는가"를 알아야
      * 하기 때문이다. 컬럼 목록을 {@link Amount}에서 만들어 SELECT와 SET이 갈라지지 않게 한다.
      */
-    private Existing findLatest(long stockId, RawFinancialReport report) {
-        String columns = Arrays.stream(Amount.values())
+    private Existing findLatest(long stockId, RawFinancialReport report, Set<Amount> managed) {
+        List<Amount> read = columnsFor(managed);
+        String columns = read.stream()
                 .map(amount -> amount.column)
                 .collect(Collectors.joining(", "));
         List<Existing> found = jdbcTemplate.query("""
@@ -831,7 +846,7 @@ public class FinancialWriter {
                 """.formatted(columns),
                 (rs, rowNum) -> {
                     Map<Amount, BigDecimal> amounts = new EnumMap<>(Amount.class);
-                    for (Amount amount : Amount.values()) {
+                    for (Amount amount : read) {
                         amounts.put(amount, rs.getBigDecimal(amount.column));
                     }
                     return new Existing(
@@ -857,14 +872,15 @@ public class FinancialWriter {
      * 키에 두므로 같은 공시일에 판번호만 다른 행을 막지 않는다. 언젠가 둘이 되면 정렬이
      * 없는 쪽은 <b>실행마다 다른 행을 고친다.</b>
      */
-    private Existing findVintage(long stockId, RawFinancialReport report) {
-        String columns = Arrays.stream(Amount.values())
+    private Existing findVintage(long stockId, RawFinancialReport report, Set<Amount> managed) {
+        List<Amount> read = columnsFor(managed);
+        String columns = read.stream()
                 .map(amount -> amount.column)
                 .collect(Collectors.joining(", "));
         List<Existing> found = jdbcTemplate.query(Q_FIND_VINTAGE.formatted(columns),
                 (rs, rowNum) -> {
                     Map<Amount, BigDecimal> amounts = new EnumMap<>(Amount.class);
-                    for (Amount amount : Amount.values()) {
+                    for (Amount amount : read) {
                         amounts.put(amount, rs.getBigDecimal(amount.column));
                     }
                     return new Existing(
@@ -926,26 +942,15 @@ public class FinancialWriter {
 
     private void insert(long stockId, RawFinancialReport report, int revisionNo, boolean isLatest,
                         BigDecimal sharesOutstanding) {
-        jdbcTemplate.update("""
-                INSERT INTO financial_statement
-                    (stock_id, fiscal_year, fiscal_period, period_start, period_end, published_at,
-                     revision_no, is_latest, report_code, currency_code,
-                     revenue, operating_income, net_income, total_assets, total_equity,
-                     total_equity_controlling,
-                     total_liabilities, current_assets, current_liabilities, retained_earnings,
-                     operating_cash_flow, shares_outstanding, eps, bps,
-                     cost_of_sales, cash_and_equivalents, capex, inventories,
-                     net_income_controlling,
-                     interest_and_dividend_income, noninterest_income, interest_expense,
-                     noninterest_expense, benefits_losses_and_expenses,
-                     gross_profit, operating_expenses, costs_and_expenses,
-                     income_tax_expense, profit_before_tax, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, now())
-                """,
+        // 관문 컬럼(중단영업 두 칸)은 그 보고서가 실었을 때만 넣는다 — 관문 꺼짐 어댑터의 행은 이 축이 생기기 전과 같은 SQL이다.
+        boolean discontinued = report.discontinuedRule() != null;
+        List<Object> args = new ArrayList<>(List.of(
                 stockId, report.fiscalYear(), report.fiscalPeriod(),
                 report.periodStart(), report.periodEnd(), report.publishedAt(),
-                revisionNo, isLatest, report.reportCode(), report.currencyCode(),
+                revisionNo, isLatest));
+        args.add(report.reportCode());
+        args.add(report.currencyCode());
+        args.addAll(Arrays.asList(
                 report.revenue(), report.operatingIncome(), report.netIncome(),
                 report.totalAssets(), report.totalEquity(), report.totalEquityControlling(),
                 report.totalLiabilities(),
@@ -958,7 +963,32 @@ public class FinancialWriter {
                 report.interestExpense(), report.noninterestExpense(),
                 report.benefitsLossesAndExpenses(),
                 report.grossProfit(), report.operatingExpenses(), report.costsAndExpenses(),
-                report.incomeTaxExpense(), report.profitBeforeTax());
+                report.incomeTaxExpense(), report.profitBeforeTax()));
+        if (discontinued) {
+            args.add(report.discontinuedIncome());
+            args.add(report.discontinuedIncomeControlling());
+            args.add(report.discontinuedRule());
+        }
+        jdbcTemplate.update(("""
+                INSERT INTO financial_statement
+                    (stock_id, fiscal_year, fiscal_period, period_start, period_end, published_at,
+                     revision_no, is_latest, report_code, currency_code,
+                     revenue, operating_income, net_income, total_assets, total_equity,
+                     total_equity_controlling,
+                     total_liabilities, current_assets, current_liabilities, retained_earnings,
+                     operating_cash_flow, shares_outstanding, eps, bps,
+                     cost_of_sales, cash_and_equivalents, capex, inventories,
+                     net_income_controlling,
+                     interest_and_dividend_income, noninterest_income, interest_expense,
+                     noninterest_expense, benefits_losses_and_expenses,
+                     gross_profit, operating_expenses, costs_and_expenses,
+                     income_tax_expense, profit_before_tax%s, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?%s, now())
+                """).formatted(
+                        discontinued ? ", discontinued_income, discontinued_income_controlling, discontinued_rule" : "",
+                        discontinued ? ", ?, ?, ?" : ""),
+                args.toArray());
     }
 
     /**
@@ -1005,7 +1035,21 @@ public class FinancialWriter {
         OPERATING_EXPENSES("operating_expenses", RawFinancialReport::operatingExpenses),
         COSTS_AND_EXPENSES("costs_and_expenses", RawFinancialReport::costsAndExpenses),
         INCOME_TAX_EXPENSE("income_tax_expense", RawFinancialReport::incomeTaxExpense),
-        PROFIT_BEFORE_TAX("profit_before_tax", RawFinancialReport::profitBeforeTax);
+        PROFIT_BEFORE_TAX("profit_before_tax", RawFinancialReport::profitBeforeTax),
+        // 중단영업 두 칸(F2b · ADR-0184). 관문 마이그레이션의 컬럼이라 그 시장 관문이 켜진 어댑터가 실은 호출에서만 쓴다(gated).
+        DISCONTINUED_INCOME(RawFinancialReport.DISCONTINUED_INCOME, RawFinancialReport::discontinuedIncome),
+        DISCONTINUED_INCOME_CONTROLLING(RawFinancialReport.DISCONTINUED_INCOME_CONTROLLING,
+                RawFinancialReport::discontinuedIncomeControlling),
+        DISCONTINUED_RULE(RawFinancialReport.DISCONTINUED_RULE, RawFinancialReport::discontinuedRule);
+
+        /**
+         * <b>관문 마이그레이션의 컬럼인가.</b> 그렇다면 이 호출의 보고서가 그 칸을 실었거나 「없다」고 판정했을 때만 SELECT ·
+         * SET · INSERT에 넣는다({@link #columnsFor}) — 관문이 꺼진 어댑터는 싣지 않으므로 운영 SQL이 이 축이 생기기 전과
+         * 같고, 컬럼이 아직 없는 운영 DB를 건드리지 않는다.
+         */
+        boolean gated() {
+            return this == DISCONTINUED_INCOME || this == DISCONTINUED_INCOME_CONTROLLING || this == DISCONTINUED_RULE;
+        }
 
         /**
          * 값이 달라졌을 때 <b>덮어도 되는가.</b>

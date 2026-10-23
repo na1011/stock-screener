@@ -253,12 +253,15 @@ final class SecEdgarFacts {
         if (frame != null) {
             facts = frame.facts();
         }
-        Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn = collect(facts);
-        Map<String, Anchor> anchors = anchorsOf(byColumn);
-        NavigableMap<LocalDate, Window> fiscalYears = annualWindows(byColumn, anchors);
+        Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn = collect(facts, usGate);
+        // 관문 뒤 재료(F2b)는 값만 댄다 — 공시 앵커 · 연차 창 · 라벨 기간을 찾는 데 넣지 않는다. 넣으면 10-K의 Q4 3개월 처분손익 팩트
+        // 하나가 소스 Q4 라벨을 새로 열어 4분기 유도의 판 집합이 바뀐다(GD 2016 Q4 · 2026-10-23 스윕).
+        Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> structure = withoutGated(byColumn);
+        Map<String, Anchor> anchors = anchorsOf(structure);
+        NavigableMap<LocalDate, Window> fiscalYears = annualWindows(structure, anchors);
         Map<Label, Window> windows = new TreeMap<>();
         Map<Label, Anchor> labelAnchors = new LinkedHashMap<>();
-        int dropped = labelPeriods(byColumn, anchors, fiscalYears, windows, labelAnchors,
+        int dropped = labelPeriods(structure, anchors, fiscalYears, windows, labelAnchors,
                 fromFiscalYear);
 
         List<RawFinancialReport> reports = new ArrayList<>();
@@ -285,6 +288,10 @@ final class SecEdgarFacts {
         reports.removeIf(r -> replaced.contains(
                 r.fiscalYear() + "/" + r.fiscalPeriod() + "@" + r.publishedAt()));
         reports.addAll(fourthQuarters);
+        if (usGate) {
+            reports.replaceAll(r -> "Q4".equals(r.fiscalPeriod())
+                    ? q4DiscontinuedAsVisible(r, fourthQuarters, reports, byColumn) : r);
+        }
         if (frame != null && frame.latestAnnualCurrency() != null
                 && !MARKET_CURRENCY.equals(frame.latestAnnualCurrency())) {
             // 통화 게이트는 종목 단위다(ADR-0094): 가장 늦은 연차 공시가 비USD면 옛 USD 판도 담지 않는다 — 담으면 저장 행이
@@ -307,12 +314,25 @@ final class SecEdgarFacts {
      * <p>후보를 하나만 보지 않는 이유는 <b>같은 회사가 연도에 따라 태그를 바꾸기 때문</b>이다 —
      * 「첫 후보가 있으면 그것만 본다」로 짜면 그 회사의 옛 연도가 통째로 빈다.
      */
-    private static Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> collect(JsonNode facts) {
+    /** 관문 뒤 재료 컬럼을 비운 사본 — 구조(앵커 · 창 · 라벨) 탐색용이다. 관문이 꺼졌으면 그 컬럼이 이미 비어 같은 내용이다. */
+    private static Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> withoutGated(
+            Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn) {
+        Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> structure = new EnumMap<>(SecEdgarColumn.class);
+        byColumn.forEach((column, byTag) -> structure.put(column, column.gated() ? new LinkedHashMap<>() : byTag));
+        return structure;
+    }
+
+    private static Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> collect(JsonNode facts, boolean usGate) {
         Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn =
                 new EnumMap<>(SecEdgarColumn.class);
         for (SecEdgarColumn column : SecEdgarColumn.values()) {
             // 후보 순서(우선순위)를 유지한다. 아래에서 기간마다 태그 하나를 고를 때 쓴다.
             Map<String, Map<Slot, Fact>> byTag = new LinkedHashMap<>();
+            if (column.gated() && !usGate) {
+                // 관문 뒤 재료(F2b)는 관문이 꺼졌으면 안 모은다 — 판 판정 · 태그 선택 · 통화가 이 컬럼들이 생기기 전과 같다.
+                byColumn.put(column, byTag);
+                continue;
+            }
             for (String candidate : column.candidates()) {
                 boolean dei = candidate.startsWith("dei:");
                 JsonNode tag = facts.path(dei ? "dei" : "us-gaap")
@@ -397,7 +417,8 @@ final class SecEdgarFacts {
             JsonNode facts, Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn) {
         List<FinancialColumnAbsence> absences = new ArrayList<>();
         for (SecEdgarColumn column : SecEdgarColumn.values()) {
-            if (!byColumn.getOrDefault(column, Map.of()).isEmpty()) {
+            // 관문 뒤 재료(F2b)는 저장 컬럼이 아니라 판정 재료다 — 부재 사유 카드의 대상이 아니다(관문 꺼짐 출력도 그대로).
+            if (column.gated() || !byColumn.getOrDefault(column, Map.of()).isEmpty()) {
                 continue;
             }
             boolean tagExists = false;
@@ -920,7 +941,8 @@ final class SecEdgarFacts {
             RawFinancialReport candidate = toReport(label, window, reporter, currency, carried,
                     byColumn.getOrDefault(SecEdgarColumn.MINORITY_INTEREST, Map.of()).isEmpty(),
                     noNoncontrollingIncomeBy(lastNoncontrolling, window),
-                    byColumn.getOrDefault(SecEdgarColumn.DISCONTINUED_OPERATIONS, Map.of()).isEmpty());
+                    byColumn.getOrDefault(SecEdgarColumn.DISCONTINUED_OPERATIONS, Map.of()).isEmpty(),
+                    usGate);
             // MUST: 「저장될 행이 달라지는가」로 판정한다. 원시 컬럼 맵으로 판정하면 안 된다 —
             // 다리 컬럼(유도 재료)이 달라져도 유도 결과가 같으면 저장은 한 칸도 안 바뀌고,
             // 반대로 reportEvidence()로 좁히면 income_tax_expense·profit_before_tax만 더하는
@@ -1128,13 +1150,21 @@ final class SecEdgarFacts {
                 || differs(a.operatingExpenses(), b.operatingExpenses())
                 || differs(a.costsAndExpenses(), b.costsAndExpenses())
                 || differs(a.incomeTaxExpense(), b.incomeTaxExpense())
-                || differs(a.profitBeforeTax(), b.profitBeforeTax());
+                || differs(a.profitBeforeTax(), b.profitBeforeTax())
+                // 관문 켬(F2b)만 값이 있다 — 꺼짐은 둘 다 null이라 판 판정이 그대로다.
+                || differs(a.discontinuedIncome(), b.discontinuedIncome())
+                || differs(a.discontinuedIncomeControlling(), b.discontinuedIncomeControlling());
     }
 
     /** 둘 다 값이 있는 컬럼 중 하나라도 다른가. 한쪽이 null인 것은 다름이 아니다. */
     private static boolean conflicts(Map<SecEdgarColumn, BigDecimal> a,
                                      Map<SecEdgarColumn, BigDecimal> b) {
         for (SecEdgarColumn column : SecEdgarColumn.values()) {
+            if (column.gated()) {
+                // 관문 뒤 재료(F2b)의 차이는 저장 칸(중단영업)이 달라질 때만 판을 낸다 — storedDiffers가 본다. 원시 재료 차이로 판을
+                // 내면 계속영업 태그 하나의 정정이 무관한 4분기 칸을 움직인다(ABT 2016 Q4 · 2026-10-23 스윕).
+                continue;
+            }
             BigDecimal x = a.get(column);
             BigDecimal y = b.get(column);
             // MUST: BigDecimal.compareTo로 본다. equals는 scale이 달라 같은 수를 다르다고 읽고,
@@ -1293,6 +1323,18 @@ final class SecEdgarFacts {
             }
             values.put(column, fact == null ? null : fact.value());
         }
+        if (ownCover && values.get(SecEdgarColumn.NET_INCOME) == null
+                && values.get(SecEdgarColumn.NET_INCOME_TOTAL) == null
+                && values.get(SecEdgarColumn.NET_INCOME_CONTROLLING) == null) {
+            // 관문 켬(F2b): 중단 · 계속영업 재료는 그 공시가 같은 기간의 순이익도 실을 때만 받는다 — 순이익 없이 중단만 실은
+            // 비교열을 받으면 앞 판의 순이익과 뒤 판의 재분류가 한 행에 섞인다(원 공시에 중단 줄이 없다가 뒤 판에 생긴 기간에서
+            // 순이익이 1% · 1M 넘게 바뀐 것 26 — 탐색 F2B-PLAN-1023.md 1b).
+            for (SecEdgarColumn column : SecEdgarColumn.values()) {
+                if (column.gated()) {
+                    values.put(column, null);
+                }
+            }
+        }
         return values;
     }
 
@@ -1316,6 +1358,122 @@ final class SecEdgarFacts {
             }
         }
         return null;
+    }
+
+    private static RawFinancialReport toReport(Label label, Window window, Anchor anchor,
+                                               String currency,
+                                               Map<SecEdgarColumn, BigDecimal> v,
+                                               boolean noNoncontrolling,
+                                               boolean noNoncontrollingIncome,
+                                               boolean noDiscontinued,
+                                               boolean usGate) {
+        RawFinancialReport report = toReport(label, window, anchor, currency, v, noNoncontrolling,
+                noNoncontrollingIncome, noDiscontinued);
+        // 4분기 라벨(10-K 분기 표)은 여기서 판정하지 않는다 — 그 표의 「중단 줄 없음」은 0이 아니다. 판정은 4분기 유도 뒤
+        // q4DiscontinuedAsVisible이 한다. 여기서 0을 달면 그 차이가 판을 새로 낸다(ABT 2016 Q4 · 2026-10-23 스윕).
+        return usGate && !"Q4".equals(label.period()) ? withDiscontinued(report, v, noNoncontrollingIncome) : report;
+    }
+
+    /**
+     * <b>한 판의 중단영업 판정</b>(F2b · ADR-0184 · 관문 켬). 들어온 {@code v}는 {@code carryForward}가 판을 가로질러 이은
+     * 뒤의 맵이라 「그 라벨을 실은 어느 판에도 중단 줄이 없다」면 0이다.
+     *
+     * <p>못 정한 칸은 {@code assertedAbsent}에 실어 옛 값을 지운다 — 소스 행의 {@code null}은 저장이 안 지운다
+     * ({@code FinancialWriter.fillMissing}).
+     */
+    private static RawFinancialReport withDiscontinued(RawFinancialReport report, Map<SecEdgarColumn, BigDecimal> v,
+                                                       boolean noNoncontrollingIncome) {
+        BigDecimal consolidated = discontinuedConsolidated(v, noNoncontrollingIncome);
+        BigDecimal controlling = discontinuedControlling(v, consolidated, noNoncontrollingIncome);
+        return report.withDiscontinued(consolidated, controlling,
+                discontinuedAbsence(report.assertedAbsent(), consolidated, controlling));
+    }
+
+    private static java.util.Set<String> discontinuedAbsence(java.util.Set<String> absent, BigDecimal consolidated,
+                                                            BigDecimal controlling) {
+        java.util.Set<String> merged = new java.util.LinkedHashSet<>(absent);
+        if (consolidated == null) {
+            merged.add(RawFinancialReport.DISCONTINUED_INCOME);
+        }
+        if (controlling == null) {
+            merged.add(RawFinancialReport.DISCONTINUED_INCOME_CONTROLLING);
+        }
+        return merged;
+    }
+
+    /**
+     * <b>중단영업 연결 몫.</b> 직접 → 지배 + 비지배 → 구성요소(같은 공시의 {@code 연결 순이익 − 연결 계속영업}과 같을 때만) →
+     * 비지배를 안 내는 회사의 지배 몫 → 중단 재료가 하나도 없으면 0 → 그 밖은 {@code null}(원장이 안 정해 줌).
+     */
+    private static BigDecimal discontinuedConsolidated(Map<SecEdgarColumn, BigDecimal> v,
+                                                       boolean noNoncontrollingIncome) {
+        BigDecimal total = v.get(SecEdgarColumn.DISCONTINUED_INCOME_TOTAL);
+        if (total != null) {
+            return total;
+        }
+        BigDecimal parent = v.get(SecEdgarColumn.DISCONTINUED_INCOME_PARENT);
+        BigDecimal noncontrolling = v.get(SecEdgarColumn.DISCONTINUED_INCOME_NONCONTROLLING);
+        if (parent != null && noncontrolling != null) {
+            return parent.add(noncontrolling);
+        }
+        if (parent != null && noncontrolling == null && (noNoncontrollingIncome || parent.signum() == 0)) {
+            // 비지배가 없는 회사의 지배 몫은 곧 연결 몫이다. 지배 몫 줄만 0으로 실은 공시(JNJ FY2025)는 중단영업이 없다는 표시다 —
+            // 비지배 몫만 있는 중단영업은 원장에 그 몫의 줄이 따로 선다. 구성요소(증인 없음)보다 먼저 본다.
+            return parent;
+        }
+        BigDecimal gain = v.get(SecEdgarColumn.DISCONTINUED_DISPOSAL_GAIN);
+        BigDecimal phaseOut = v.get(SecEdgarColumn.DISCONTINUED_PHASE_OUT);
+        if (gain != null || phaseOut != null) {
+            BigDecimal parts = (gain == null ? BigDecimal.ZERO : gain)
+                    .add(phaseOut == null ? BigDecimal.ZERO : phaseOut);
+            BigDecimal net = v.get(SecEdgarColumn.NET_INCOME_TOTAL);
+            BigDecimal continuing = v.get(SecEdgarColumn.CONTINUING_INCOME_TOTAL);
+            return net != null && continuing != null && net.subtract(continuing).compareTo(parts) == 0
+                    ? parts : null;
+        }
+        return parent == null && noncontrolling == null ? BigDecimal.ZERO : null;
+    }
+
+    /**
+     * <b>중단영업 지배주주 몫</b> — 항등식 갈래만이다. 「비지배 몫 0」 가정은 두지 않는다: 답을 아는 칸에서 원장이 자기정합한데
+     * 그 가정만 틀린 것이 104/144다(탐색 F2B-PLAN-1023.md 1b). 「계속영업」 태그는 이 행에 중단 연결 몫이 있을 때만 쓴다(이름이
+     * 계약이 아니다 — 중단 없는 행에서 그 태그가 지분법 전 이익인 칸 88).
+     *
+     * @param consolidated 연결 몫. {@code null}이면 원장이 연결 몫을 안 정해 줬다 — 그래도 중단 줄은 있으므로 지배 몫의
+     *                     직접 태그 · 항등식은 그대로 탄다
+     */
+    private static BigDecimal discontinuedControlling(Map<SecEdgarColumn, BigDecimal> v, BigDecimal consolidated,
+                                                      boolean noNoncontrollingIncome) {
+        if (consolidated != null && consolidated.signum() == 0) {
+            return BigDecimal.ZERO;
+        }
+        BigDecimal parent = v.get(SecEdgarColumn.DISCONTINUED_INCOME_PARENT);
+        if (parent != null) {
+            return parent;
+        }
+        BigDecimal noncontrolling = v.get(SecEdgarColumn.DISCONTINUED_INCOME_NONCONTROLLING);
+        if (noncontrolling != null && consolidated != null) {
+            return consolidated.subtract(noncontrolling);
+        }
+        BigDecimal controllingNet = controllingIncome(v);
+        if (controllingNet != null) {
+            BigDecimal continuing = v.get(SecEdgarColumn.CONTINUING_INCOME_PARENT);
+            if (continuing != null) {
+                return controllingNet.subtract(continuing);
+            }
+            BigDecimal common = v.get(SecEdgarColumn.CONTINUING_INCOME_AVAILABLE_TO_COMMON);
+            BigDecimal commonNet = v.get(SecEdgarColumn.NET_INCOME_AVAILABLE_TO_COMMON);
+            if (common != null && commonNet != null && commonNet.compareTo(controllingNet) == 0) {
+                // 우선주 배분이 0이라는 증인이 같은 행에 있다 — 보통주 귀속 계속영업 = 지배 계속영업.
+                return controllingNet.subtract(common);
+            }
+            BigDecimal continuingTotal = v.get(SecEdgarColumn.CONTINUING_INCOME_TOTAL);
+            BigDecimal continuingNoncontrolling = v.get(SecEdgarColumn.CONTINUING_INCOME_NONCONTROLLING);
+            if (continuingTotal != null && continuingNoncontrolling != null) {
+                return controllingNet.subtract(continuingTotal.subtract(continuingNoncontrolling));
+            }
+        }
+        return noNoncontrollingIncome ? consolidated : null;
     }
 
     private static RawFinancialReport toReport(Label label, Window window, Anchor anchor,
@@ -2066,6 +2224,19 @@ final class SecEdgarFacts {
         if (source == null) {
             return residual;
         }
+        RawFinancialReport merged = mergeQ4Amounts(source, residual);
+        if (source.discontinuedRule() == null && residual.discontinuedRule() == null) {
+            return merged;
+        }
+        // 관문 켬(F2b): 중단영업은 잔차(FY − 9개월) 것을 잇는다 — 소스 4분기(10-K 분기 표)는 toReport가 판정하지 않는다. 자기 공시의
+        // 3개월 중단 팩트는 build 끝의 q4DiscontinuedAsVisible이 다시 본다.
+        RawFinancialReport from = residual.discontinuedRule() != null ? residual : source;
+        return merged.withDiscontinued(from.discontinuedIncome(), from.discontinuedIncomeControlling(),
+                discontinuedAbsence(merged.assertedAbsent(), from.discontinuedIncome(),
+                        from.discontinuedIncomeControlling()));
+    }
+
+    private static RawFinancialReport mergeQ4Amounts(RawFinancialReport source, RawFinancialReport residual) {
         return new RawFinancialReport(
                 residual.fiscalYear(), residual.fiscalPeriod(),
                 residual.periodStart(), residual.periodEnd(), residual.publishedAt(),
@@ -2157,7 +2328,7 @@ final class SecEdgarFacts {
                                               boolean usGate) {
         boolean subtractable = sameCurrency(fy, q1, q2, q3);
         Slot slot = new Slot(accnOf(fy.reportCode()), start, fy.periodEnd());
-        return new RawFinancialReport(
+        RawFinancialReport q4 = new RawFinancialReport(
                 fiscalYear, "Q4", start, fy.periodEnd(), fy.publishedAt(),
                 fy.reportCode(), fy.currencyCode(),
                 sourceOrMinus(byColumn, SecEdgarColumn.REVENUE, slot, subtractable, fy.revenue(),
@@ -2207,6 +2378,130 @@ final class SecEdgarFacts {
                 // derived=true라 지우기는 이미 열려 있다. 그래도 같은 사실을 같은 자리에 싣는
                 // 이유는 mergeQ4가 이 판과 소스 판을 합치면서 **derived를 잃을 수 있기** 때문이다.
                 assertedAbsentOf(consolidatedIncomeQ4(byColumn, slot, subtractable, fy, q1, q2, q3)));
+        return usGate && subtractable ? q4Discontinued(q4, start, fy, q3, byColumn) : q4;
+    }
+
+    /**
+     * <b>4분기 중단영업 = FY − 같은 해 9개월 누계</b>(F2b · 관문 켬). 9개월은 그 Q4를 짓는 Q3 판 공시가 실은 누계다.
+     *
+     * <p><b>MUST NOT: {@code FY − (Q1 + Q2 + Q3)}로 짓지 않는다.</b> 해 중간에 중단으로 분류되면 FY 중단액에 앞 분기 사업부
+     * 손익이 재분류돼 들어가는데 그 분기들의 원 공시에는 중단 줄이 없다 — 잔차가 그 몫을 떠안는다(MLM FY2025 94 대 참값 46 ·
+     * SWX −63.4 대 −1.5 · 탐색 F2B-PLAN-1023.md 1b). 9개월 공시에 중단 줄이 없는데 FY ≠ 0이면(Q3 뒤 재분류) 그 판에서는 원장이
+     * 쪼개 주지 않는다 — {@code null}이다. 다음 해 비교열로 뒤 판을 채우는 길은 P3a(분기 새 판마다 Q4 재유도)와 같은 설계다.
+     */
+    /**
+     * <b>4분기 판의 중단영업을 그 공시일에 보이던 잔차로 맞춘다</b>(관문 켬). 자기 공시가 3개월 중단 팩트를 직접 실었으면 그 판정을
+     * 두고, 아니면 그 공시일 이하에서 가장 늦은 잔차(FY − 9개월) 판의 값을 잇는다 — 10-K 분기 표는 중단영업을 대개 안 쪼개므로
+     * 「줄 없음 = 0」이 틀린다(ABT 2016 Q4 · FY 중단 337M). 잔차가 없으면 그 해 FY 중단이 0일 때만 0이다.
+     */
+    private static RawFinancialReport q4DiscontinuedAsVisible(RawFinancialReport q4, List<RawFinancialReport> residuals,
+                                                              List<RawFinancialReport> reports,
+                                                              Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn) {
+        RawFinancialReport visible = null;
+        for (RawFinancialReport residual : residuals) {
+            if (residual.fiscalYear() == q4.fiscalYear() && residual.discontinuedRule() != null
+                    && !residual.publishedAt().isAfter(q4.publishedAt())
+                    && (visible == null || residual.publishedAt().isAfter(visible.publishedAt()))) {
+                visible = residual;
+            }
+        }
+        BigDecimal consolidated;
+        BigDecimal controlling;
+        if (visible != null) {
+            consolidated = visible.discontinuedIncome();
+            controlling = visible.discontinuedIncomeControlling();
+        } else {
+            RawFinancialReport fy = null;
+            for (RawFinancialReport r : reports) {
+                if (r.fiscalYear() == q4.fiscalYear() && "FY".equals(r.fiscalPeriod())
+                        && !r.publishedAt().isAfter(q4.publishedAt())
+                        && (fy == null || r.publishedAt().isAfter(fy.publishedAt()))) {
+                    fy = r;
+                }
+            }
+            boolean none = fy != null && fy.discontinuedIncome() != null && fy.discontinuedIncome().signum() == 0;
+            consolidated = none ? BigDecimal.ZERO : null;
+            controlling = consolidated;
+        }
+        // 자기 공시가 3개월 중단을 직접 실었으면 그 칸이 이긴다(직접 낸 값이 언제나 이긴다 · ADR-0104). 10-K 분기 표는 연결 몫만
+        // 쪼개고 지배 몫은 안 쪼개는 일이 많다 — 그때 지배 몫은 같은 기간의 잔차 것을 둔다(PAA 2025 Q4: 연결 102 · 지배 383 − 281).
+        Slot own = new Slot(accnOf(q4.reportCode()), q4.periodStart(), q4.periodEnd());
+        Map<SecEdgarColumn, BigDecimal> v = new EnumMap<>(SecEdgarColumn.class);
+        for (SecEdgarColumn column : SecEdgarColumn.values()) {
+            v.put(column, sourceAt(byColumn, column, own));
+        }
+        if (v.get(SecEdgarColumn.DISCONTINUED_INCOME_TOTAL) != null
+                || v.get(SecEdgarColumn.DISCONTINUED_INCOME_PARENT) != null
+                || v.get(SecEdgarColumn.DISCONTINUED_INCOME_NONCONTROLLING) != null) {
+            LocalDate lastNoncontrolling = lastNoncontrollingIncome(byColumn);
+            boolean noNoncontrolling = lastNoncontrolling == null || lastNoncontrolling.isBefore(q4.periodStart());
+            BigDecimal ownConsolidated = discontinuedConsolidated(v, noNoncontrolling);
+            BigDecimal ownControlling = discontinuedControlling(v, ownConsolidated, noNoncontrolling);
+            if (ownConsolidated != null) {
+                consolidated = ownConsolidated;
+            }
+            if (ownControlling != null) {
+                controlling = ownControlling;
+            }
+        }
+        return q4.withDiscontinued(consolidated, controlling,
+                discontinuedAbsence(q4.assertedAbsent(), consolidated, controlling));
+    }
+
+    /**
+     * 그 FY 판의 공시일에 보이던 <b>9개월 누계를 실은 공시</b>의 슬롯 — 그 기간 순이익 9개월 팩트를 실은 공시 중 FY 공시일 이하에서
+     * 가장 늦은 것. Q4를 짓는 Q3 판은 10-K의 분기 표일 수 있고 거기에는 9개월 누계가 없다(ABT 2016 · 2026-10-23 스윕).
+     */
+    private static Slot nineMonthSlot(Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn,
+                                      LocalDate start, LocalDate end, LocalDate visibleOn) {
+        Fact latest = null;
+        for (SecEdgarColumn column : List.of(SecEdgarColumn.NET_INCOME, SecEdgarColumn.NET_INCOME_TOTAL,
+                SecEdgarColumn.NET_INCOME_CONTROLLING)) {
+            for (Fact fact : allFacts(byColumn.getOrDefault(column, Map.of()))) {
+                if (start.equals(fact.start()) && end.equals(fact.end()) && !fact.filed().isAfter(visibleOn)
+                        && (latest == null || fact.filed().isAfter(latest.filed()))) {
+                    latest = fact;
+                }
+            }
+        }
+        return latest == null ? null : new Slot(latest.accn(), start, end);
+    }
+
+    private static RawFinancialReport q4Discontinued(RawFinancialReport q4, LocalDate start, RawFinancialReport fy,
+                                                     RawFinancialReport q3,
+                                                     Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn) {
+        if (fy.discontinuedRule() == null) {
+            return q4;
+        }
+        BigDecimal fyTotal = fy.discontinuedIncome();
+        if (fyTotal != null && fyTotal.signum() == 0) {
+            return q4.withDiscontinued(BigDecimal.ZERO, BigDecimal.ZERO, q4.assertedAbsent());
+        }
+        // MUST: 9개월은 FY 시작부터다 — start는 4분기 기간의 시작이다.
+        Slot nine = nineMonthSlot(byColumn, fy.periodStart(), q3.periodEnd(), fy.publishedAt());
+        if (nine == null) {
+            return q4.withDiscontinued(null, null, discontinuedAbsence(q4.assertedAbsent(), null, null));
+        }
+        Map<SecEdgarColumn, BigDecimal> v9 = new EnumMap<>(SecEdgarColumn.class);
+        for (SecEdgarColumn column : SecEdgarColumn.values()) {
+            v9.put(column, sourceAt(byColumn, column, nine));
+        }
+        boolean line = v9.get(SecEdgarColumn.DISCONTINUED_INCOME_TOTAL) != null
+                || v9.get(SecEdgarColumn.DISCONTINUED_INCOME_PARENT) != null
+                || v9.get(SecEdgarColumn.DISCONTINUED_INCOME_NONCONTROLLING) != null
+                || v9.get(SecEdgarColumn.DISCONTINUED_DISPOSAL_GAIN) != null
+                || v9.get(SecEdgarColumn.DISCONTINUED_PHASE_OUT) != null;
+        BigDecimal total = null;
+        BigDecimal controlling = null;
+        if (line) {
+            LocalDate lastNoncontrolling = lastNoncontrollingIncome(byColumn);
+            boolean noNoncontrolling = lastNoncontrolling == null || lastNoncontrolling.isBefore(fy.periodStart());
+            BigDecimal nineTotal = discontinuedConsolidated(v9, noNoncontrolling);
+            total = minus(fyTotal, nineTotal);
+            controlling = minus(fy.discontinuedIncomeControlling(),
+                    discontinuedControlling(v9, nineTotal, noNoncontrolling));
+        }
+        return q4.withDiscontinued(total, controlling, discontinuedAbsence(q4.assertedAbsent(), total, controlling));
     }
 
     /**

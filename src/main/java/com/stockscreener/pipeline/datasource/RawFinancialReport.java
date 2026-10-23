@@ -206,8 +206,83 @@ public record RawFinancialReport(
          * <p>{@code null}이면 빈 집합으로 정규화한다 — 어댑터가 안 채우면 <b>지금까지와 똑같이</b>
          * 동작한다.
          */
-        Set<String> assertedAbsent
+        Set<String> assertedAbsent,
+
+        /**
+         * <b>중단영업 손익(연결 · 세후 · 비지배 몫 포함)</b> — F2b · ADR-0184. 0은 「읽었고 중단영업 줄이 없다」(어댑터 판정),
+         * {@code null}은 「이 규칙으로 읽지 않았다」(그 시장의 관문이 꺼졌다)다. 저장은 이 호출의 보고서가 실었을 때만 컬럼을
+         * 쓴다({@code FinancialWriter}) — 관문 꺼짐 어댑터는 싣지 않으므로 운영 SQL이 이 축이 생기기 전과 같다.
+         */
+        BigDecimal discontinuedIncome,
+
+        /**
+         * <b>중단영업 손익의 지배주주 몫.</b> 연결 몫이 0이 아닌데 {@code null}이면 원장이 지배 몫을 안 정해 줬다 — 그 판정은
+         * {@link #assertedAbsent}에 {@link #DISCONTINUED_INCOME_CONTROLLING}으로 실어 옛 값을 지운다.
+         */
+        BigDecimal discontinuedIncomeControlling,
+
+        /**
+         * <b>이 행의 중단영업을 판정한 규칙의 판</b>(1 = F2b). {@code null}이면 위 두 칸도 「읽지 않았다」이고 저장은 세 칸을
+         * 안 건드린다. 있는데 {@link #discontinuedIncome}이 {@code null}이면 원장이 그 판에서 정해 주지 않은 것이다.
+         */
+        BigDecimal discontinuedRule
 ) {
+
+    /** 중단영업 판정 규칙의 지금 판(F2b · ADR-0184). 규칙을 바꾸면 올린다 — 저장이 그 판으로 옛 판정을 고친다. */
+    public static final BigDecimal DISCONTINUED_RULE_VERSION = BigDecimal.ONE;
+
+    /** {@code discontinued_rule}의 DB 컬럼명. */
+    public static final String DISCONTINUED_RULE = "discontinued_rule";
+
+    /** {@code discontinued_income}의 DB 컬럼명({@link #assertedAbsent} · {@code FinancialWriter}와 문자열로 만난다). */
+    public static final String DISCONTINUED_INCOME = "discontinued_income";
+
+    /** {@code discontinued_income_controlling}의 DB 컬럼명. */
+    public static final String DISCONTINUED_INCOME_CONTROLLING = "discontinued_income_controlling";
+
+    /**
+     * 중단영업을 안 싣는 행 — 관문 꺼짐 어댑터와 중단영업을 안 다루는 소스(국내 주요계정)가 쓴다. 두 칸은 {@code null}
+     * (「읽지 않았다」)이다.
+     */
+    public RawFinancialReport(int fiscalYear, String fiscalPeriod, LocalDate periodStart,
+                              LocalDate periodEnd, LocalDate publishedAt, String reportCode,
+                              String currencyCode, BigDecimal revenue, BigDecimal operatingIncome,
+                              BigDecimal netIncome, BigDecimal totalAssets, BigDecimal totalEquity,
+                              BigDecimal totalEquityControlling,
+                              BigDecimal totalLiabilities, BigDecimal currentAssets,
+                              BigDecimal currentLiabilities, BigDecimal retainedEarnings,
+                              BigDecimal operatingCashFlow, BigDecimal sharesOutstanding,
+                              BigDecimal eps, BigDecimal bps, BigDecimal costOfSales,
+                              BigDecimal cashAndEquivalents, BigDecimal capex,
+                              BigDecimal inventories, BigDecimal netIncomeControlling,
+                              BigDecimal interestAndDividendIncome, BigDecimal noninterestIncome,
+                              BigDecimal interestExpense, BigDecimal noninterestExpense,
+                              BigDecimal benefitsLossesAndExpenses, BigDecimal grossProfit,
+                              BigDecimal operatingExpenses, BigDecimal costsAndExpenses,
+                              BigDecimal incomeTaxExpense, BigDecimal profitBeforeTax,
+                              boolean derived, Set<String> assertedAbsent) {
+        this(fiscalYear, fiscalPeriod, periodStart, periodEnd, publishedAt, reportCode,
+                currencyCode, revenue, operatingIncome, netIncome, totalAssets, totalEquity,
+                totalEquityControlling, totalLiabilities, currentAssets, currentLiabilities,
+                retainedEarnings, operatingCashFlow, sharesOutstanding, eps, bps, costOfSales,
+                cashAndEquivalents, capex, inventories, netIncomeControlling, interestAndDividendIncome,
+                noninterestIncome, interestExpense, noninterestExpense, benefitsLossesAndExpenses,
+                grossProfit, operatingExpenses, costsAndExpenses, incomeTaxExpense,
+                profitBeforeTax, derived, assertedAbsent, null, null, null);
+    }
+
+    /** 같은 행에 중단영업 판정(두 금액 · 지금 규칙 판)을 단다 — 관문 켬 어댑터가 판을 다 지은 뒤 싣는다. */
+    public RawFinancialReport withDiscontinued(BigDecimal consolidated, BigDecimal controlling,
+                                               Set<String> absent) {
+        return new RawFinancialReport(fiscalYear, fiscalPeriod, periodStart, periodEnd, publishedAt, reportCode,
+                currencyCode, revenue, operatingIncome, netIncome, totalAssets, totalEquity,
+                totalEquityControlling, totalLiabilities, currentAssets, currentLiabilities,
+                retainedEarnings, operatingCashFlow, sharesOutstanding, eps, bps, costOfSales,
+                cashAndEquivalents, capex, inventories, netIncomeControlling, interestAndDividendIncome,
+                noninterestIncome, interestExpense, noninterestExpense, benefitsLossesAndExpenses,
+                grossProfit, operatingExpenses, costsAndExpenses, incomeTaxExpense,
+                profitBeforeTax, derived, absent, consolidated, controlling, DISCONTINUED_RULE_VERSION);
+    }
 
     /**
      * {@code net_income}의 DB 컬럼명. {@link #assertedAbsent}에 담는 값과

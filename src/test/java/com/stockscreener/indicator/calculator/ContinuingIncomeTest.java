@@ -126,6 +126,19 @@ class ContinuingIncomeTest {
     }
 
     @Test
+    @DisplayName("읽었는데 연결 중단영업을 모르는 행(재분류된 해의 Q4)은 연결 · 지배 계속영업이 둘 다 미정이다 — 안 읽은 행과 다르다")
+    void readButUnknownIsNotUnread() {
+        FinancialFigures unread = FinancialFiguresFixture.quarter(LocalDate.of(2025, 12, 31))
+                .netIncome(new BigDecimal("250")).netIncomeControlling(new BigDecimal("200")).build();
+        FinancialFigures unknown = FinancialFiguresFixture.from(unread).discontinued(null, null).build();
+
+        assertThat(unread.continuingIncome()).isEqualByComparingTo("250");
+        assertThat(unread.continuingIncomeControlling()).isEqualByComparingTo("200");
+        assertThat(unknown.continuingIncome()).isNull();
+        assertThat(unknown.continuingIncomeControlling()).isNull();
+    }
+
+    @Test
     @DisplayName("연결 중단영업이 0이면 지배 몫이 없어도 지배주주 순이익 그대로다")
     void zeroDiscontinuedNeedsNoControllingShare() {
         FinancialFigures row = FinancialFiguresFixture.quarter(LocalDate.of(2025, 12, 31))
@@ -147,7 +160,7 @@ class ContinuingIncomeTest {
     /**
      * 연결 250 · 지배 200 · 주식수 100 · 매출 500 · 자산 4000 · 자본 2000(지배 1500) · 영업현금흐름 100인 네 분기.
      *
-     * @param discontinued 네 분기 모두의 연결 중단영업(null이면 안 읽은 행)
+     * @param discontinued 네 분기 모두의 연결 중단영업(null이면 이 규칙으로 안 읽은 행)
      * @param controlling  네 분기 모두의 지배 중단영업
      */
     private static List<FinancialFigures> quarters(String discontinued, String controlling) {
@@ -163,9 +176,12 @@ class ContinuingIncomeTest {
                     .totalEquity(new BigDecimal("2000"))
                     .totalEquityControlling(new BigDecimal("1500"))
                     .operatingCashFlow(new BigDecimal("100"))
-                    .discontinued(discontinued == null ? null : new BigDecimal(discontinued),
-                            controlling == null ? null : new BigDecimal(controlling))
                     .build());
+            if (discontinued != null) {
+                list.set(i, FinancialFiguresFixture.from(list.get(i))
+                        .discontinued(new BigDecimal(discontinued),
+                                controlling == null ? null : new BigDecimal(controlling)).build());
+            }
         }
         return list;
     }

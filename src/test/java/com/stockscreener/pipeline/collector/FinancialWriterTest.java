@@ -193,6 +193,36 @@ class FinancialWriterTest {
         }
 
         @Test
+        @DisplayName("중단영업 세 칸(관문 컬럼)은 보고서가 실었을 때만 쓴다 — 안 실은 호출은 그 칸을 SELECT조차 안 하고 안 건드린다")
+        void gatedDiscontinuedColumnsAreWrittenOnlyWhenCarried() {
+            writer.write(stockId, List.of(report(2025, "FY", "2026-03-15", "1000")));
+            assertThat(latestRow().get("discontinued_rule")).as("관문 꺼짐 어댑터의 행").isNull();
+
+            writer.write(stockId, List.of(report(2025, "FY", "2026-03-15", "1000")
+                    .withDiscontinued(new BigDecimal("120"), new BigDecimal("100"), java.util.Set.of())), WriteMode.FILL_MISSING);
+            assertThat((BigDecimal) latestRow().get("discontinued_income")).isEqualByComparingTo("120");
+            assertThat((BigDecimal) latestRow().get("discontinued_income_controlling")).isEqualByComparingTo("100");
+            assertThat(((Number) latestRow().get("discontinued_rule")).intValue()).isEqualTo(1);
+
+            writer.write(stockId, List.of(report(2025, "FY", "2026-03-15", "1000")), WriteMode.FILL_MISSING);
+            assertThat((BigDecimal) latestRow().get("discontinued_income")).as("안 실은 호출").isEqualByComparingTo("120");
+        }
+
+        @Test
+        @DisplayName("지배 몫을 모른다는 판정(assertedAbsent)은 옛 지배 몫을 지운다 — 소스 행의 null이라도")
+        void unresolvedControllingShareClearsTheOldValue() {
+            writer.write(stockId, List.of(report(2025, "FY", "2026-03-15", "1000")
+                    .withDiscontinued(new BigDecimal("120"), new BigDecimal("100"), java.util.Set.of())));
+
+            writer.write(stockId, List.of(report(2025, "FY", "2026-03-15", "1000")
+                    .withDiscontinued(new BigDecimal("120"), null,
+                            java.util.Set.of(RawFinancialReport.DISCONTINUED_INCOME_CONTROLLING))), WriteMode.FILL_MISSING);
+
+            assertThat(latestRow().get("discontinued_income_controlling")).isNull();
+            assertThat((BigDecimal) latestRow().get("discontinued_income")).isEqualByComparingTo("120");
+        }
+
+        @Test
         @DisplayName("같은 공시일에 값이 달라지면 덮고, 무엇이 무엇으로 바뀌었는지 남긴다")
         void overwritesAndRecordsOnMismatch() {
             writer.write(stockId, List.of(report(2025, "FY", "2026-03-15", "1000")));

@@ -82,8 +82,8 @@ class DiscontinuedGateTest {
                 INSERT INTO financial_statement
                     (stock_id, fiscal_year, fiscal_period, period_start, period_end,
                      published_at, revision_no, is_latest, currency_code, net_income, net_income_controlling,
-                     discontinued_income, discontinued_income_controlling)
-                VALUES (?, 2024, 'FY', '2024-01-01', '2024-12-31', '2025-03-31', 0, true, ?, 1000, 900, 120, 100)
+                     discontinued_income, discontinued_income_controlling, discontinued_rule)
+                VALUES (?, 2024, 'FY', '2024-01-01', '2024-12-31', '2025-03-31', 0, true, ?, 1000, 900, 120, 100, 1)
                 """, stockId, currencyCode);
     }
 }

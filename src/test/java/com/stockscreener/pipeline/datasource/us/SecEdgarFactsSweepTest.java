@@ -185,6 +185,13 @@ class SecEdgarFactsSweepTest {
                         BigDecimal v = f.apply(r);
                         line.append('\t').append(v == null ? "" : v.stripTrailingZeros().toPlainString());
                     }
+                    if (usGate) {
+                        // 관문 켬만 중단영업 세 칸(F2b · ADR-0184)을 줄 끝에 붙인다 — 꺼짐 TSV는 형식까지 그대로라 main과 바이트 대조가 선다.
+                        for (BigDecimal v : java.util.Arrays.asList(r.discontinuedIncome(),
+                                r.discontinuedIncomeControlling(), r.discontinuedRule())) {
+                            line.append('\t').append(v == null ? "" : v.stripTrailingZeros().toPlainString());
+                        }
+                    }
                     w.write(line.toString());
                     w.newLine();
                     rows++;

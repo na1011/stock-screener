@@ -447,7 +447,58 @@ enum SecEdgarColumn {
             "IncomeLossFromDiscontinuedOperationsNetOfTax",
             "IncomeLossFromDiscontinuedOperationsNetOfTaxAttributableToReportingEntity",
             "DiscontinuedOperationIncomeLossFromDiscontinuedOperationNetOfTax",
-            "IncomeLossFromDiscontinuedOperationsNetOfTaxAttributableToNoncontrollingInterest"));
+            "IncomeLossFromDiscontinuedOperationsNetOfTaxAttributableToNoncontrollingInterest")),
+
+    // ── 중단영업 · 계속영업 재료(F2b · ADR-0184 · 관문 켬만 · 분기도 읽는다) ──────────────────────────
+    // 저장 컬럼 둘(discontinued_income · _controlling)을 짓는 재료다. 위 DISCONTINUED_OPERATIONS ·
+    // INCOME_FROM_CONTINUING_OPERATIONS(연간만 · profitBeforeTax의 회사 단위 게이트와 세전 유도)는 건드리지 않는다 — 그 둘을 분기로
+    // 열면 관문 꺼짐의 판 집합이 바뀐다(conflicts가 원시 컬럼 전체를 본다).
+    // MUST: 이름이 계약이 아니다 — 「계속영업」 태그는 중단영업 줄이 있는 행에서만 쓴다. 2019 뒤 중단 태그 없는 798칸 중 88은
+    // 그 태그가 지분법 전 이익이었다(MPLX · THG · 탐색 F2B-PLAN-1023.md 1b).
+
+    /** 중단영업 손익 연결(비지배 몫 포함). 후보 둘은 같은 뜻의 옛 · 새 이름이다. */
+    DISCONTINUED_INCOME_TOTAL(Kind.DURATION, Unit.MONETARY, List.of(
+            "IncomeLossFromDiscontinuedOperationsNetOfTax",
+            "DiscontinuedOperationIncomeLossFromDiscontinuedOperationNetOfTax")),
+
+    /** 중단영업 손익의 지배주주 몫. */
+    DISCONTINUED_INCOME_PARENT(Kind.DURATION, Unit.MONETARY, List.of(
+            "IncomeLossFromDiscontinuedOperationsNetOfTaxAttributableToReportingEntity")),
+
+    /** 중단영업 손익의 비지배 몫. */
+    DISCONTINUED_INCOME_NONCONTROLLING(Kind.DURATION, Unit.MONETARY, List.of(
+            "IncomeLossFromDiscontinuedOperationsNetOfTaxAttributableToNoncontrollingInterest")),
+
+    /**
+     * 중단영업 처분 손익(세후) — 구성요소. 연결 후보가 없는 행에서만 쓰고, 같은 공시의 {@code 연결 순이익 − 연결 계속영업}과
+     * <b>같을 때만</b> 연결 몫으로 받는다(구성요소가 하나뿐인지 원장이 확인해 준 것). 지금 창 16칸 · 6종목(GTES · KEY · LAUR ·
+     * AES · ESE · TEX).
+     */
+    DISCONTINUED_DISPOSAL_GAIN(Kind.DURATION, Unit.MONETARY, List.of(
+            "DiscontinuedOperationGainLossOnDisposalOfDiscontinuedOperationNetOfTax")),
+
+    /** 중단영업 처분 전 기간 손익(세후) — 구성요소. {@link #DISCONTINUED_DISPOSAL_GAIN}과 같은 규칙이다. */
+    DISCONTINUED_PHASE_OUT(Kind.DURATION, Unit.MONETARY, List.of(
+            "DiscontinuedOperationIncomeLossFromDiscontinuedOperationDuringPhaseOutPeriodNetOfTax")),
+
+    /** 계속영업 손익의 지배주주 몫. 중단영업 줄이 있는 행에서 {@code 지배주주 순이익 − 이것 = 지배 중단}의 재료다. */
+    CONTINUING_INCOME_PARENT(Kind.DURATION, Unit.MONETARY, List.of(
+            "IncomeLossFromContinuingOperations")),
+
+    /** 계속영업 손익 연결 — {@link #INCOME_FROM_CONTINUING_OPERATIONS}와 같은 태그를 분기에서도 읽는 관문 몫이다. */
+    CONTINUING_INCOME_TOTAL(Kind.DURATION, Unit.MONETARY, List.of(
+            "IncomeLossFromContinuingOperationsIncludingPortionAttributableToNoncontrollingInterest")),
+
+    /** 계속영업 손익의 비지배 몫. */
+    CONTINUING_INCOME_NONCONTROLLING(Kind.DURATION, Unit.MONETARY, List.of(
+            "IncomeLossFromContinuingOperationsAttributableToNoncontrollingEntity")),
+
+    /**
+     * 보통주 귀속 계속영업 손익(지배주주 − 우선주 배분). 같은 행 {@link #NET_INCOME_AVAILABLE_TO_COMMON}이 지배주주 순이익과
+     * 같을 때만(우선주 배분 0의 증인) 지배 계속영업으로 쓴다.
+     */
+    CONTINUING_INCOME_AVAILABLE_TO_COMMON(Kind.DURATION, Unit.MONETARY, List.of(
+            "NetIncomeLossFromContinuingOperationsAvailableToCommonShareholdersBasic"));
 
     private enum Kind { DURATION, INSTANT, ANCHORED_INSTANT }
 
@@ -638,7 +689,8 @@ enum SecEdgarColumn {
      * 그 둘의 후보가 {@link #NET_INCOME}의 부분집합이라 증거 자격을 새로 만들지 않는다.
      */
     private boolean derivationMaterial() {
-        return this == NET_INCOME_AVAILABLE_TO_COMMON
+        return gated()
+                || this == NET_INCOME_AVAILABLE_TO_COMMON
                 || this == MINORITY_INTEREST
                 || this == MEZZANINE_EQUITY
                 || this == OPERATING_CASH_FLOW_DISCONTINUED
@@ -653,6 +705,22 @@ enum SecEdgarColumn {
                 || this == NET_INCOME_NONCONTROLLING
                 || this == NET_INCOME_NONCONTROLLING_REDEEMABLE
                 || this == NET_INCOME_NONCONTROLLING_NONREDEEMABLE;
+    }
+
+    /**
+     * <b>미국 관문 뒤 재료인가</b>(F2b). 관문이 꺼졌으면 수집하지 않는다({@code SecEdgarFacts.collect}) — 그러면 판 판정 ·
+     * 태그 선택 · 통화 · 부재 목록이 이 컬럼들이 생기기 전과 같다.
+     */
+    boolean gated() {
+        return this == DISCONTINUED_INCOME_TOTAL
+                || this == DISCONTINUED_INCOME_PARENT
+                || this == DISCONTINUED_INCOME_NONCONTROLLING
+                || this == DISCONTINUED_DISPOSAL_GAIN
+                || this == DISCONTINUED_PHASE_OUT
+                || this == CONTINUING_INCOME_PARENT
+                || this == CONTINUING_INCOME_TOTAL
+                || this == CONTINUING_INCOME_NONCONTROLLING
+                || this == CONTINUING_INCOME_AVAILABLE_TO_COMMON;
     }
 
     boolean anchoredInstant() {
