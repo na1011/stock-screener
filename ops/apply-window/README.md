@@ -20,15 +20,17 @@
 | `02b-intake.sh` | 세션 안 | 폐지 실체 인입 `us-delisted-intake --apply=true`(행만 · 원자료는 03이 받는다) · 늘어난 행 = 요약의 만든 행 · 들인 행 전부 비운 표지·등록인·시대 끝 · 후보 수 다시 셈 |
 | `03-refill.sh` | 세션 안 | 재적재 `cur`(`--universe=US_TOP1000`) → `cand`(`--population=candidates`) · 11년 · 이른 판 · 관문 인자 · 실패는 구성원마다 |
 | `04-unresolved.sh` | 읽기 | 클래스 축 미해결 0 · 해석 실패·보충 실패·옛 판·회수정지 전원 판정(`verdicts.tsv`) · a2 미국 0 |
-| `05-roster.sh` | 세션 안 | 순위 가드(훅을 그 DB로) → `market-calendar` → `universe-restore --apply=true --replace=true` → 창 결손 0 |
+| `04b-depositary.sh` | 세션 안 | 예탁 판 비율(ADR-0183): `depositary-splits` → `adjustment-rebuild` → `share-basis-derive` → DEPOSITARY 행 > 0 — 두 순위가 읽으므로 05 앞 |
+| `05-roster.sh` | 세션 안 | 순위 가드(훅을 그 DB로) → `market-calendar` → L = 미국 마지막 마감 세션 → `universe-restore --rebuild-observed=true --as-of=L --apply=true --replace=true`(관측 평면까지 켬 기저 · 같은 실행 안 L 리밸런싱 SUCCESS) → 관측 하한 = L · 지금 편입 1,000 → 창 결손 0(봉 · 거버넌스) |
 | `06-reconcile.sh` | 세션 안 | 화해 두 판 — 둘째 판 ①② 쓴·지운 0 · 두 판 실패 0 → VACUUM |
 | `02-snapshot.sh after <db> on` | 읽기 | 순위는 켠 판독기 |
 | `07-judge.sh after-<db> before-<db> [after-<작은 db>]` | 읽기 | 국내 불변 · ADJ_CLOSE 감소 0 · 표본 동일성 · 펜스 귀속 |
 | `09-flip.md` | 사람 | 세션 닫기 → 기본값 커밋 → 배포 → 켜면서 고칠 것 → 설정 걷기 |
 
-**MUST: `05-roster.sh`만으로 관문이 닫히지 않는다** — 관측 평면(08-31~)도 옛 순위 기저이고 그것을 다시 짓는 잡은 클래스 축 묶음의
-설계 항목이다(`docs/reload-gate.md` 「관측 평면이 옛 순위 기저로 남음」). 그 잡이 생기면 `05`의 ③을 바꾼다.
-**MUST: 창 결손 0은 복원 잡의 꼬리가 채운다는 전제다** — 그 꼬리가 main에 들어가기 전에는 `05` ④가 멈춘다(V·STZ·FWONA 시세 0행).
+**`05` ③은 관측 평면까지 다시 짓는다**(탐색 `explore/universe/OBSERVED-PLANE-PLAN-1023.md` v1.1 · ADR-0135 「관문 날 관측 하한이 옮겨간다」) —
+관측 하한이 08-31에서 L로 옮겨가고 꺼진 기저 관측 이력은 지워진다. **되돌리기 재료는 `01` 덤프뿐이다**(`02`의 `membership.tsv`에는 `id` ·
+`stock_id` · `created_at`이 없다). 귀속 재료(지운 관측 평면 대 과거 순위 · L 오늘 순위 대 과거 순위)는 `roster-attribution-<db>.txt`.
+**MUST: 창 결손 0은 복원 잡의 두 꼬리(시세 · 거버넌스 원문)가 채운다는 전제다.**
 
 ## 드라이런 (작은 DB · 계획 v2 §3)
 

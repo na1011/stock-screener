@@ -21,6 +21,7 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * 지수 구성종목 리밸런싱.
@@ -119,6 +120,23 @@ public class UniverseRebalanceJob {
      */
     public BatchStatus run(LocalDate asOf, BatchExecutionRecorder.TriggeredBy triggeredBy,
                            String onlyCode) {
+        return run(asOf, triggeredBy, onlyCode, null);
+    }
+
+    /**
+     * 지수 하나를 앞 편입을 손으로 정해 리밸런싱한다 — 관측 평면 다시 짓기({@code UniverseRestoreJob})만 부른다.
+     *
+     * <p>앞 편입은 미국 클래스 축의 편입 보류({@code HELD})가 읽는 유일한 경로 재료다. 다시 짓기는 열린 행을 전부 남긴 채(공시 소비 ·
+     * 따라잡기 시계) 같은 기준일 재실행으로 고르므로, 열린 집합(꺼진 기저 명부 ∪ 과거 순위 L 명부)을 앞 편입으로 읽으면 보류가 옛 기저를
+     * 잇는다. 그래서 과거 순위의 L 명부를 넘긴다(탐색 {@code OBSERVED-PLANE-PLAN-1023.md} v1.1 · 반증 안 3).
+     *
+     * @param previousTickers {@code null}이면 지금 열린 편입(정기 경로와 같다). 주면 {@code onlyCode}가 있어야 한다
+     */
+    public BatchStatus run(LocalDate asOf, BatchExecutionRecorder.TriggeredBy triggeredBy,
+                           String onlyCode, Set<String> previousTickers) {
+        if (previousTickers != null && onlyCode == null) {
+            throw new IllegalArgumentException("앞 편입을 손으로 줄 때는 지수 하나를 고른다 — 지수마다 앞 편입이 다르다.");
+        }
         List<UniverseTarget> targets =
                 onlyCode == null ? scheduledTargets() : oneUniverse(onlyCode);
         boolean candidatePool = targets.stream().anyMatch(t -> CANDIDATE_POOLS.contains(t.universeCode()));
@@ -144,7 +162,8 @@ public class UniverseRebalanceJob {
                 }
                 try {
                     UniverseReconciler.Result result = rebalanceOne(target, asOf,
-                            US_MARKET.equals(target.marketCode()) ? identity : UsIdentityTriage.Outcome.NOT_RUN);
+                            US_MARKET.equals(target.marketCode()) ? identity : UsIdentityTriage.Outcome.NOT_RUN,
+                            previousTickers);
                     changedRows += result.addedCount() + result.removedCount();
                     succeeded++;
                     if (result.changed()) {
@@ -287,12 +306,12 @@ public class UniverseRebalanceJob {
     }
 
     private UniverseReconciler.Result rebalanceOne(UniverseTarget target, LocalDate asOf,
-                                                   UsIdentityTriage.Outcome identity)
+                                                   UsIdentityTriage.Outcome identity, Set<String> previousTickers)
             throws DataSourceException {
         UniverseDataSource source = registry.universeSource(target.universeCode());
         // 앞 편입을 넘긴다 — 미국 클래스 축의 편입 보류가 앞 편입에만 선다(관문 뒤 · 다른 소스는 안 쓴다).
         UniverseSnapshot snapshot = withoutBlocked(target, source.fetchConstituents(target.universeCode(), asOf,
-                reconciler.currentMemberTickers(target.universeCode())), identity);
+                previousTickers != null ? previousTickers : reconciler.currentMemberTickers(target.universeCode())), identity);
 
         // 티커 해석이 먼저다. universe_membership이 stock_id를 FK로 참조한다.
         List<Long> stockIds =

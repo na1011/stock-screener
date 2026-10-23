@@ -187,6 +187,85 @@ public class UniverseLedgerRestorer {
         return inserted;
     }
 
+    /**
+     * 격자 끝 점({@code through})까지의 계획 — 관측 평면 다시 짓기({@link #rebuildObserved})가 쓴다. 구간은 끝 점 <b>앞</b>
+     * 격자만으로 짓고 끝 점에서 닫는다. 끝 점 명부는 구간을 안 만들고 그 앞 격자와의 교체 가드만 탄다.
+     *
+     * <p>MUST: 끝 점을 {@link #plan}의 격자에 넣지 않는다 — 끝 점에서 처음 든 종목이 {@code [끝, 끝)}이 되어
+     * {@code ck_membership_period}가 다시 짓기 트랜잭션째 되돌린다(관측 평면 계획 v1 반증 · 안 2 · 밖 4).
+     */
+    public Plan planThrough(String universeCode, List<DatedMembers> grid, DatedMembers through, Map<Long, LocalDate> eraTo) {
+        Plan closed = plan(universeCode, through.date(), grid, eraTo);
+        if (grid.isEmpty()) {
+            return closed;
+        }
+        DatedMembers last = grid.get(grid.size() - 1);
+        List<StepDiff> steps = new ArrayList<>(closed.steps());
+        steps.add(diff(universeCode, last.date(), through.date(), last.stockIds(), through.stockIds()));
+        return new Plan(universeCode, through.date(), closed.intervals(), List.copyOf(steps));
+    }
+
+    /**
+     * 관측 평면을 관문 켬 기저로 다시 짓는다 — 관문 날 한 번(탐색 {@code explore/universe/OBSERVED-PLANE-PLAN-1023.md} v1.1).
+     * 관측 하한이 {@code closed.floor()}(= L, 관문 날 미국 마지막 마감 세션)로 옮겨간다.
+     *
+     * <p>한 트랜잭션에서 차례대로 — 이 순서가 GiST 즉시 검사를 지나는 유일한 순서다(복원 구간 {@code [x, L)}을 열린 행을 L로 옮기기
+     * 전에 넣으면 아직 08-31에서 시작하는 열린 행과 겹친다):
+     * <ol>
+     *   <li>복원 평면 전부와 닫힌 관측 행 전부를 지운다 — 꺼진 기저로 고른 이력이다.</li>
+     *   <li>열린 관측 행 <b>전부</b>의 시작일을 L로 옮긴다. 지우지 않는다 — {@code created_at}이 공시 소비 지연 시계
+     *       ({@code FilingLedgerStore} {@code due_from})와 따라잡기 표지({@code StockRefreshStore} {@code joined_at})다. L 명부에 없는
+     *       열린 행도 남긴다: 뒤따르는 같은 기준일 리밸런싱이 오늘 순위로 고르며, 시작일이 L이라 빠지는 행은 닫지 않고 지운다.</li>
+     *   <li>L 명부에 있는데 열린 행이 없는 종목을 {@code [L, NULL)}로 연다.</li>
+     *   <li>L 앞 격자의 구간을 복원 평면으로 넣는다(L에서 닫힘 — 이어지는 종목은 관측 행과 L에서 붙는다).</li>
+     * </ol>
+     *
+     * @param closed    {@link #planThrough}의 결과
+     * @param rosterAtL 같은 사슬의 L 명부
+     * @throws IllegalStateException 관측 원장에 L보다 늦은 시작 · 끝이 있으면 — 그 뒤의 관측을 과거 순위로 덮게 된다
+     */
+    @Transactional
+    public RebuildResult rebuildObserved(Plan closed, Set<Long> rosterAtL) {
+        String code = closed.universeCode();
+        LocalDate floor = closed.floor();
+        LocalDate latest = jdbcTemplate.queryForObject("""
+                SELECT max(greatest(effective_from, coalesce(effective_to, effective_from))) FROM universe_membership
+                WHERE universe_code = ? AND origin = 'OBSERVED'
+                """, LocalDate.class, code);
+        if (latest != null && latest.isAfter(floor)) {
+            throw new IllegalStateException("관측 원장에 L(%s)보다 늦은 날짜 %s가 있다: %s — L은 관문 날의 마지막 마감 세션이어야 한다"
+                    .formatted(floor, latest, code));
+        }
+        int restoredWiped = jdbcTemplate.update(
+                "DELETE FROM universe_membership WHERE universe_code = ? AND origin = 'RESTORED'", code);
+        int closedWiped = jdbcTemplate.update("""
+                DELETE FROM universe_membership
+                WHERE universe_code = ? AND origin = 'OBSERVED' AND effective_to IS NOT NULL
+                """, code);
+        int moved = jdbcTemplate.update("""
+                UPDATE universe_membership SET effective_from = ?
+                WHERE universe_code = ? AND origin = 'OBSERVED' AND effective_to IS NULL AND effective_from <> ?
+                """, floor, code, floor);
+        int opened = 0;
+        for (Long stockId : new TreeSet<>(rosterAtL)) {
+            opened += jdbcTemplate.update("""
+                    INSERT INTO universe_membership
+                        (universe_code, stock_id, effective_from, effective_to, origin, created_at)
+                    VALUES (?, ?, ?, NULL, 'OBSERVED', now())
+                    ON CONFLICT (universe_code, stock_id, effective_from) DO NOTHING
+                    """, code, stockId, floor);
+        }
+        int restored = apply(closed, false);
+        RebuildResult result = new RebuildResult(code, floor, restoredWiped, closedWiped, moved, opened, restored);
+        log.info("관측 평면을 다시 지었다. {}", result);
+        return result;
+    }
+
+    /** {@link #rebuildObserved}가 바꾼 행 수. */
+    public record RebuildResult(String universeCode, LocalDate floor, int restoredWiped, int closedObservedWiped,
+                                int openMovedToFloor, int openedAtFloor, int restoredInserted) {
+    }
+
     private static void addCut(List<Interval> intervals, Interval interval, Map<Long, LocalDate> eraTo) {
         LocalDate end = eraTo.get(interval.stockId());
         if (end == null || !end.isBefore(interval.to())) {

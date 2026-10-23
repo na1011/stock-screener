@@ -410,6 +410,33 @@ public class StockRegistrar {
     }
 
     /**
+     * 보존 창 편입 중 <b>닫힌</b> 행이 있는 종목 중 거버넌스 <b>원문</b>이 한 행도 없는 것의 티커 — 복원 꼬리가 받는다(관측 평면 계획 v1.1
+     * · 반증 밖 6: 복원이 처음 넣은 V · STZ · COKE … 전부 원문 0행 · {@code governance-load}의 기본 모집단은 지금 편입뿐이다).
+     *
+     * <p>결손의 뜻은 {@link #membershipGaps}의 {@code GOVERNANCE} 축과 같다 — 원문 0행이고 그 시장에 원문이 하나라도 있을 것
+     * ({@link MembershipGap.Axis#GOVERNANCE} javadoc: 팩트로 재면 무배당 · 완결 게이트가 섞인다). 술어 조각은
+     * {@link #windowClosedMembersWithoutBars}와 같아 여기서 낸 티커는 {@code governance-load --tickers}의 술어
+     * ({@link #activeUniverseMemberIdsByTicker})에 그대로 든다.
+     */
+    public List<String> windowClosedMembersWithoutGovernance() {
+        return jdbcTemplate.queryForList("""
+                SELECT DISTINCT s.ticker FROM universe_membership m
+                JOIN stock s ON s.id = m.stock_id
+                JOIN universe u ON u.code = m.universe_code AND u.is_active
+                WHERE s.is_active
+                  -- 시대 무관: 보존 창 편입 — 창 안 과거 날짜를 다시 쓰는 일이라 닫힌 행의 시대 안 날짜도 대상이다
+                  AND s.market_code IN (%s)
+                  AND m.effective_to IS NOT NULL
+                  AND %s
+                  AND NOT EXISTS (SELECT 1 FROM governance_report_row r WHERE r.stock_id = s.id)
+                  AND EXISTS (SELECT 1 FROM governance_report_row r2 JOIN stock s2 ON s2.id = r2.stock_id
+                              WHERE s2.market_code = s.market_code)
+                ORDER BY s.ticker
+                """.formatted(collectedMarketPlaceholders(), IN_RETENTION_WINDOW),
+                String.class, collectedMarkets());
+    }
+
+    /**
      * 원장에 <b>적용 대기</b>({@code APPROVED} — 공시가 종류·비율을 확정했지만 계수 재구축이 아직 안 돈) 행이 있는 종목 중 보존 창
      * 편입이 아닌 것(ADR-0178). 재구축의 기본 대상({@link #windowMemberIds})에 더한다 — 아니면 그 행은 영영 {@code APPLIED}가 안 되고
      * 순위의 주식수 보정({@code JdbcStoredShareCounts.SHIFT_TO_ASOF} — {@code APPLIED}만 읽는다)에 안 실린다. 그런 행을 쓰는 곳은

@@ -65,12 +65,14 @@ public class UniverseRestoreJob {
     private final JdbcTemplate jdbcTemplate;
     private final MembershipGapFiller gapFiller;
     private final ObjectProvider<UsPastRanking> pastRanking;
+    private final UniverseRebalanceJob rebalanceJob;
     /** 미국 관문 설정 — 켜졌으면 미국 복원 격자를 과거 날짜 순위(행 · 그날 범주 · 닻 봉)로 짓는다(D4). */
     private final boolean usGate;
 
     public UniverseRestoreJob(DataSourceRegistry registry, StockRegistrar stockRegistrar,
                               UniverseLedgerRestorer restorer, JdbcTemplate jdbcTemplate,
                               MembershipGapFiller gapFiller, ObjectProvider<UsPastRanking> pastRanking,
+                              UniverseRebalanceJob rebalanceJob,
                               @Value("${stockscreener.gate.us}") boolean usGate) {
         this.registry = registry;
         this.stockRegistrar = stockRegistrar;
@@ -78,6 +80,7 @@ public class UniverseRestoreJob {
         this.jdbcTemplate = jdbcTemplate;
         this.gapFiller = gapFiller;
         this.pastRanking = pastRanking;
+        this.rebalanceJob = rebalanceJob;
         this.usGate = usGate;
     }
 
@@ -93,6 +96,17 @@ public class UniverseRestoreJob {
      *              사람이 해석해야 한다.</b> 대조는 그 날짜들이 필요하므로 쓰기 없는 갈래에서만 연다
      */
     public Report run(LocalDate asOf, String universeCode, boolean apply, boolean replace, List<LocalDate> dates) {
+        return run(asOf, universeCode, apply, replace, dates, false);
+    }
+
+    /**
+     * @param rebuildObserved 관측 평면까지 관문 켬 기저로 다시 짓는다({@link #rebuildObserved}) — 관문 날 한 번
+     */
+    public Report run(LocalDate asOf, String universeCode, boolean apply, boolean replace, List<LocalDate> dates,
+                      boolean rebuildObserved) {
+        if (rebuildObserved) {
+            return rebuildObserved(asOf, universeCode, apply, replace, dates);
+        }
         if (apply && dates != null && !dates.isEmpty()) {
             throw new IllegalArgumentException(
                     "--dates는 --apply와 함께 못 쓴다 — 관측 하한 뒤의 격자로 쓰면 겹치는 구간을 만들려다 제약에 걸리고, 막힌 이유를 사람이 해석해야 한다. 대조만 할 때 쓴다.");
@@ -108,7 +122,7 @@ public class UniverseRestoreJob {
         if (grid.isEmpty()) {
             log.info("복원할 격자점이 없다. {} 하한={} — 보존 창이 이미 관측 구간 안이다",
                     universeCode, floor);
-            return new Report(universeCode, floor, List.of(), 0, 0, Set.of(), null, 0, List.of(), List.of());
+            return new Report(universeCode, floor, List.of(), 0, 0, Set.of(), null, 0, List.of(), List.of(), List.of());
         }
 
         // ── Phase A: 페치. 트랜잭션 밖이고, 쓰기 갈래에서만 stock 행을 만든다.
@@ -176,8 +190,95 @@ public class UniverseRestoreJob {
         // 꼬리 — 복원이 처음 넣은 종목은 그 구간의 시세가 없다(ADR-0135 「데이터가 없는 복원 구성원」). 리밸런싱 꼬리와 같은 이유로 잡
         // 안에 둔다: 부르는 길이 늘어도 빠지지 않는다. 쓰기 갈래에서만 — 대조 갈래는 편입을 안 바꾼다.
         List<String> priceGapsLeft = apply ? gapFiller.fillRestoredPriceGaps(asOf) : List.of();
+        List<String> governanceGapsLeft = apply ? gapFiller.fillRestoredGovernanceGaps(asOf) : List.of();
         return new Report(universeCode, floor, grid, fetched, plan.intervals().size(),
-                Set.copyOf(unresolved), plan, inserted, recalls, priceGapsLeft);
+                Set.copyOf(unresolved), plan, inserted, recalls, priceGapsLeft, governanceGapsLeft);
+    }
+
+    /**
+     * 관측 평면을 관문 켬 기저로 다시 짓는다 — 관문 날 한 번(탐색 {@code explore/universe/OBSERVED-PLANE-PLAN-1023.md} v1.1).
+     *
+     * <p>관측 평면(08-31~)은 꺼진 순위 판독기가 고른 명부다. 복원 하한 앞만 다시 지으면 창 안에 기저가 둘 섞인다. 그래서:
+     * <ol>
+     *   <li>L = {@code asOf} — 관문 날 미국 마지막 마감 세션(실행기가 정한다). 보존 창 첫날 ~ L 앞의 주간 격자와 L을 과거 날짜 순위
+     *       한 사슬로 짓는다 — 오늘 목록으로 과거를 고르지 않는다(D4).</li>
+     *   <li>쓰기 전에 지울 관측 평면과 견준다 — 귀속 재료(날짜마다 놓침 · 더든것). 같은 실행의 같은 사슬이라 재생과 달리 앞 편입이
+     *       갈리지 않는다(반증 안 7 · 밖 3).</li>
+     *   <li>한 트랜잭션으로 다시 짓는다({@link UniverseLedgerRestorer#rebuildObserved}) — 열린 행은 하나도 안 지운다.</li>
+     *   <li>두 꼬리(닫힌 구성원의 시세 · 거버넌스 원문).</li>
+     *   <li>같은 기준일 L에 오늘 순위로 지금 편입을 고른다 — 앞 편입은 과거 순위의 L 명부다. 실패하면 던진다: 그 상태는 숨은 상장 ·
+     *       예탁 표지 판정이 빠진 명부가 지금 편입인 채다(반증 안 5 · 밖 5). 다시 돌리면 같은 L로 멱등이다.</li>
+     * </ol>
+     */
+    private Report rebuildObserved(LocalDate asOf, String universeCode, boolean apply, boolean replace,
+                                   List<LocalDate> dates) {
+        if (!usGate || !UsMarketCapUniverseAdapter.UNIVERSE_CODE.equals(universeCode) || !apply || !replace
+                || (dates != null && !dates.isEmpty())) {
+            throw new IllegalArgumentException(("--rebuild-observed=true는 미국 관문 켬(--stockscreener.gate.us=true) · --universe=%s · "
+                    + "--apply=true · --replace=true일 때만 받고 --dates와 함께 못 쓴다 — 받은 것: 관문=%s 유니버스=%s apply=%s replace=%s "
+                    + "dates=%s").formatted(UsMarketCapUniverseAdapter.UNIVERSE_CODE, usGate, universeCode, apply, replace, dates));
+        }
+        Target target = target(universeCode);
+        LocalDate oldFloor = restorer.observedFloor(universeCode).orElseThrow(() -> new IllegalStateException(
+                "관측 편입이 없다: " + universeCode + " — 다시 지을 관측 평면이 없다."));
+        LocalDate floor = asOf;
+        List<LocalDate> grid = restorer.weeklyGrid(target.marketCode(), floor);
+        if (grid.isEmpty()) {
+            throw new IllegalStateException("L(%s) 앞 격자가 없다 — 지표 거래일 색인이 비었다".formatted(floor));
+        }
+        UsPastRanking ranking = pastRanking.getIfAvailable();
+        if (ranking == null) {
+            throw new IllegalStateException("미국 관문이 켜졌는데 과거 날짜 순위가 없다(Alpaca 키) — 오늘 기호로 과거를 고르지 않는다.");
+        }
+        List<LocalDate> chain = new ArrayList<>(grid);
+        chain.add(floor);
+        List<DatedMembers> points = new ArrayList<>();
+        try {
+            for (UsPastRanking.Roster roster : ranking.rosters(chain)) {
+                points.add(new DatedMembers(roster.date(), new LinkedHashSet<>(roster.stockIds())));
+            }
+        } catch (DataSourceException e) {
+            throw new IllegalStateException("과거 날짜 순위를 못 지었다: %s (%s) — 격자 하나라도 빼고 이으면 없던 편입을 지어낸다"
+                    .formatted(universeCode, e.kind()), e);
+        }
+        if (points.size() != chain.size() || !points.get(points.size() - 1).date().equals(floor)) {
+            throw new IllegalStateException("과거 날짜 순위가 격자와 다른 명부를 냈다: 격자 %d점 · 명부 %d점".formatted(chain.size(), points.size()));
+        }
+        DatedMembers atFloor = points.get(points.size() - 1);
+        Plan plan = restorer.planThrough(universeCode, points.subList(0, points.size() - 1), atFloor, eraTo());
+        log.info("관측 평면 다시 짓기 계획. {} 옛 하한={} L={} 격자={}점({}~{}) 구간={} L 명부={}", universeCode, oldFloor, floor,
+                grid.size(), grid.get(0), grid.get(grid.size() - 1), plan.intervals().size(), atFloor.stockIds().size());
+
+        List<LocalDate> observedDates = jdbcTemplate.queryForList("""
+                SELECT DISTINCT effective_from FROM universe_membership
+                WHERE universe_code = ? AND origin = 'OBSERVED' AND effective_from < ?
+                ORDER BY effective_from
+                """, LocalDate.class, universeCode, floor);
+        List<Recall> recalls = compare(universeCode, observedDates, plan);
+
+        UniverseLedgerRestorer.RebuildResult rebuilt = restorer.rebuildObserved(plan, atFloor.stockIds());
+        List<String> priceGapsLeft = gapFiller.fillRestoredPriceGaps(asOf);
+        List<String> governanceGapsLeft = gapFiller.fillRestoredGovernanceGaps(asOf);
+
+        Set<String> previous = new LinkedHashSet<>(tickers(atFloor.stockIds()));
+        BatchStatus status = rebalanceJob.run(floor, BatchExecutionRecorder.TriggeredBy.MANUAL, universeCode, previous);
+        if (status != BatchStatus.SUCCESS) {
+            throw new IllegalStateException(("L(%s) 같은 기준일 리밸런싱이 %s로 끝났다 — 지금 편입이 과거 순위 L 명부(숨은 상장 · 예탁 표지 판정 "
+                    + "없음)와 꺼진 기저 열린 행의 합인 채다. 원인을 고치고 같은 인자로 다시 돈다(멱등)").formatted(floor, status));
+        }
+        Set<Long> open = new LinkedHashSet<>(jdbcTemplate.queryForList("""
+                SELECT stock_id FROM universe_membership WHERE universe_code = ? AND effective_to IS NULL
+                """, Long.class, universeCode));
+        Set<Long> dropped = new LinkedHashSet<>(atFloor.stockIds());
+        dropped.removeAll(open);
+        Set<Long> added = new LinkedHashSet<>(open);
+        added.removeAll(atFloor.stockIds());
+        log.info("L 오늘 순위 대 과거 순위 L 명부. {} L={} 오늘 순위가 뺌={} {} 넣음={} {}", universeCode, floor,
+                dropped.size(), tickers(dropped), added.size(), tickers(added));
+        log.info("관측 평면을 켬 기저로 다시 지었다. {} L={} {} 지금 편입={} 시세 결손 남음={} 거버넌스 결손 남음={}", universeCode, floor,
+                rebuilt, open.size(), priceGapsLeft, governanceGapsLeft);
+        return new Report(universeCode, floor, grid, points.size(), plan.intervals().size(), Set.of(), plan,
+                rebuilt.restoredInserted(), recalls, priceGapsLeft, governanceGapsLeft);
     }
 
     /**
@@ -292,7 +393,8 @@ public class UniverseRestoreJob {
      */
     public record Report(String universeCode, LocalDate floor, List<LocalDate> grid,
                          int fetchedPoints, int intervals, Set<String> unresolvedTickers,
-                         Plan plan, int inserted, List<Recall> recalls, List<String> priceGapsLeft) {
+                         Plan plan, int inserted, List<Recall> recalls, List<String> priceGapsLeft,
+                         List<String> governanceGapsLeft) {
     }
 
     /**

@@ -301,6 +301,35 @@ public class MembershipGapFiller {
         return left;
     }
 
+    /**
+     * 복원 평면의 거버넌스 원문 결손을 채운다 — {@code universe-restore --apply}의 둘째 꼬리(관측 평면 계획 v1.1 · 반증 밖 6).
+     *
+     * <p>시세 꼬리와 같은 이유다: {@code governance-load}의 기본 모집단은 지금 편입이고 리밸런싱 꼬리({@link #fillAndAlert})도 열린
+     * 편입만 보므로, 복원이 처음 넣은 닫힌 구성원은 원문을 받을 길이 없다 — 그 구간의 거버넌스 지표가 비고 아무 단언에도 안 걸린다.
+     * 상한이 없는 이유도 시세 꼬리와 같다(손 잡 · 관문 창 결손 단언이 다시 센다).
+     *
+     * <p>유도는 잇지 않는다 — 거버넌스 유도의 기본 모집단이 보존 창 편입이라({@code GovernanceDeriveJob.resolveTargets}) 관문의 화해
+     * 입력 유도가 이 종목들을 이미 덮는다. 여기서 티커로 한 번 더 부르면 같은 일을 두 번 한다.
+     *
+     * @return 다시 잰 뒤에도 남은 티커(비면 결손 0)
+     */
+    public List<String> fillRestoredGovernanceGaps(LocalDate asOf) {
+        List<String> tickers = stockRegistrar.windowClosedMembersWithoutGovernance();
+        if (tickers.isEmpty()) {
+            // MUST: 빈 목록이면 부르지 않는다 — governance-load의 빈 티커는 지금 편입 전량이다(fillAndAlert 거버넌스 갈래와 같은 근거).
+            log.info("복원 평면 거버넌스 결손 0 — 받을 것이 없다.");
+            return tickers;
+        }
+        log.info("복원 평면 거버넌스 결손 — {}종목을 받는다. 종목={}", tickers.size(), tickers);
+        // span을 주지 않는다 — fillAndAlert 거버넌스 갈래와 같은 근거(표마다 해 수가 다르다).
+        governanceLoadJob.run(asOf, BatchExecutionRecorder.TriggeredBy.GAP_FILL, null, null, List.of(), tickers);
+        List<String> left = stockRegistrar.windowClosedMembersWithoutGovernance();
+        if (!left.isEmpty()) {
+            log.error("복원 평면 거버넌스 결손이 받은 뒤에도 남았다 — 그 구간의 거버넌스 지표는 판정불가로 남는다. 종목={}", left);
+        }
+        return left;
+    }
+
     /** 시세를 {@link #PRICE_YEARS}년으로 좁혀 받는다 — 두 꼬리(리밸런싱 · 복원)가 같은 적재 인자를 쓰게 한 자리. */
     private void loadPrices(LocalDate asOf, List<String> tickers) {
         initialLoadJob.run(asOf, BatchExecutionRecorder.TriggeredBy.GAP_FILL, new InitialLoadJob.LoadRange(

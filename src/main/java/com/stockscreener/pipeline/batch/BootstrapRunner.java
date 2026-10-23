@@ -334,7 +334,9 @@ public class BootstrapRunner implements ApplicationRunner {
                 universeRestoreJob.run(asOf, required(args, "universe"),
                         flag(args, "apply"),
                         flag(args, "replace"),
-                        dates(args, "dates"));
+                        dates(args, "dates"),
+                        // 관문 날 한 번 — 관측 평면까지 켬 기저로 다시 짓고 같은 기준일에 지금 편입을 고른다(잡이 인자 조합을 검사한다).
+                        flag(args, "rebuild-observed"));
                 yield BatchStatus.SUCCESS;
             }
             case "initial-load" -> initialLoadJob.run(
@@ -544,7 +546,7 @@ public class BootstrapRunner implements ApplicationRunner {
             "governance-endpoints",
             "ca-id", "ca-status", "ca-type", "ca-ticker", "ca-limit",
             "ca-ratio", "ca-effective-date", "ca-listing-date", "ca-note", "ca-price-ratio",
-            "apply", "heal-closed", "replace", "dates", "insert-earlier-vintages", "population",
+            "apply", "heal-closed", "replace", "rebuild-observed", "dates", "insert-earlier-vintages", "population",
             // share-basis-derive 전용. 기본값 US다 — 국내는 봉의 listed_shares 를 쓰므로
             // 이 축을 원리적으로 안 탄다(재무 shares_outstanding 이 KR 전량 NULL 이다).
             "market",
@@ -845,7 +847,7 @@ public class BootstrapRunner implements ApplicationRunner {
      */
     static final java.util.Set<String> BOOLEAN_OPTIONS = java.util.Set.of(
             "skip-financial", "skip-price", "reload-existing", "quarters", "all-quarters",
-            "apply", "heal-closed", "replace", "insert-earlier-vintages");
+            "apply", "heal-closed", "replace", "rebuild-observed", "insert-earlier-vintages");
 
     /** {@code --ciks=HLX:866829,ANY:1561032} — 손 후보. 형식이 틀리면 던진다(오타 하나가 다른 등록인을 묶지 않게). */
     static java.util.Map<String, Long> handCiks(ApplicationArguments args) {
