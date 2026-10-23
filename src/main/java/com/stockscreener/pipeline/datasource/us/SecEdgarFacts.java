@@ -392,7 +392,56 @@ final class SecEdgarFacts {
             }
             byColumn.put(column, byTag);
         }
+        if (usGate) {
+            keepPartnersEquityOnBalanceSheets(byColumn);
+        }
         return byColumn;
+    }
+
+    /**
+     * <b>LP 자본 팩트는 같은 공시가 그 날짜의 자산도 실은 것만 남긴다</b>(ADR-0188 · 관문 켬). 자본변동표만 실은 뒤 공시의
+     * 재작성 자본이 앞 판의 자산 · 부채와 한 행에 섞인다 — MPLX 2019-03-31 · WES 2018-03-31에서 「부채 + 자본 > 자산」
+     * 대차대조표가 10개 새로 났다(ADR-0158 펜스).
+     */
+    private static void keepPartnersEquityOnBalanceSheets(Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn) {
+        Set<String> sheets = new HashSet<>();
+        for (Map<Slot, Fact> slots : byColumn.getOrDefault(SecEdgarColumn.TOTAL_ASSETS, Map.of()).values()) {
+            for (Slot slot : slots.keySet()) {
+                sheets.add(slot.accn() + "|" + slot.end());
+            }
+        }
+        for (SecEdgarColumn column : SecEdgarColumn.values()) {
+            if (!column.partnersEquity()) {
+                continue;
+            }
+            Map<String, Map<Slot, Fact>> byTag = byColumn.get(column);
+            byTag.values().forEach(slots -> slots.keySet().removeIf(slot -> !sheets.contains(slot.accn() + "|" + slot.end())));
+            byTag.values().removeIf(Map::isEmpty);
+        }
+    }
+
+    /**
+     * <b>날짜마다 「두 자본 태그를 함께 실은 공시 가운데 둘이 1% 넘게 갈린 것이 있는가」</b>(ADR-0188). 이어받은 맵의 차이는
+     * 판 혼합일 수 있다 — PANW 2018 Q1은 옛 10-Q의 지배자본과 ASC 606 재작성 총자본이, DXCM 2020 FY는 재작성 총자본과 옛
+     * 지배자본이 한 행에 섞였고, UHAL은 같은 공시 안에서 둘이 늘 같다.
+     *
+     * <p><b>MUST NOT: 판(앵커) 단위로 판정하지 않는다.</b> 판마다 판정이 갈려 같은 라벨의 판끼리 지배자본이 오가고, 그 차이가
+     * 판을 새로 낸다(시안: 새 판 1,648).
+     */
+    private static Set<LocalDate> equityPairsDiffer(Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn) {
+        Map<String, Map<Slot, Fact>> byTag = byColumn.getOrDefault(SecEdgarColumn.TOTAL_EQUITY, Map.of());
+        Map<Slot, Fact> including = byTag.getOrDefault(
+                "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest", Map.of());
+        Map<Slot, Fact> controlling = byTag.getOrDefault("StockholdersEquity", Map.of());
+        Set<LocalDate> differ = new HashSet<>();
+        for (Map.Entry<Slot, Fact> e : including.entrySet()) {
+            Fact c = controlling.get(e.getKey());
+            if (c != null && c.value() != null && e.getValue().value() != null
+                    && differsMaterially(c.value(), e.getValue().value())) {
+                differ.add(e.getKey().end());
+            }
+        }
+        return differ;
     }
 
     /**
@@ -895,6 +944,8 @@ final class SecEdgarFacts {
         // 손익 비지배의 마지막 관측. 이 기간보다 앞이면 「그 뒤로 비지배를 안 낸다」이고
         // 연결 총액을 지배주주 값으로 채울 수 있다(noNoncontrollingIncomeBy).
         LocalDate lastNoncontrolling = lastNoncontrollingIncome(byColumn);
+        LocalDate lastNonzeroNoncontrolling = usGate ? lastNonzeroNoncontrollingIncome(byColumn) : null;
+        Set<LocalDate> pairsDiffer = usGate ? equityPairsDiffer(byColumn) : Set.of();
 
         // MUST: 컬럼마다 태그를 **기간 단위로 하나** 고정한다.
         //
@@ -989,7 +1040,8 @@ final class SecEdgarFacts {
                     byColumn.getOrDefault(SecEdgarColumn.MINORITY_INTEREST, Map.of()).isEmpty(),
                     noNoncontrollingIncomeBy(lastNoncontrolling, window),
                     byColumn.getOrDefault(SecEdgarColumn.DISCONTINUED_OPERATIONS, Map.of()).isEmpty(),
-                    usGate);
+                    usGate, noNoncontrollingIncomeBy(lastNonzeroNoncontrolling, window),
+                    usGate && pairsDiffer.contains(window.end()));
             // MUST: 「저장될 행이 달라지는가」로 판정한다. 원시 컬럼 맵으로 판정하면 안 된다 —
             // 다리 컬럼(유도 재료)이 달라져도 유도 결과가 같으면 저장은 한 칸도 안 바뀌고,
             // 반대로 reportEvidence()로 좁히면 income_tax_expense·profit_before_tax만 더하는
@@ -1396,7 +1448,9 @@ final class SecEdgarFacts {
             // 비교열을 받으면 앞 판의 순이익과 뒤 판의 재분류가 한 행에 섞인다(원 공시에 중단 줄이 없다가 뒤 판에 생긴 기간에서
             // 순이익이 1% · 1M 넘게 바뀐 것 26 — 탐색 F2B-PLAN-1023.md 1b).
             for (SecEdgarColumn column : SecEdgarColumn.values()) {
-                if (column.gated()) {
+                // LP 잔액 재료는 빼낸다 — 뒤 해 10-Q의 비교 재무상태표는 순이익 없이 자산 · 부채 · LP 자본을 함께 싣는다.
+                // 지우면 자산 · 부채만 새 판이고 LP 자본은 앞 판이 이어져 판이 섞인다(WES 2018 FY — 반증 안 1).
+                if (column.gated() && !column.partnersEquity()) {
                     values.put(column, null);
                 }
             }
@@ -1432,8 +1486,27 @@ final class SecEdgarFacts {
                                                boolean noNoncontrolling,
                                                boolean noNoncontrollingIncome,
                                                boolean noDiscontinued,
-                                               boolean usGate) {
-        RawFinancialReport report = toReport(label, window, anchor, currency, v, noNoncontrolling,
+                                               boolean usGate,
+                                               boolean noNonzeroNoncontrollingIncome,
+                                               boolean pairsDiffer) {
+        Map<SecEdgarColumn, BigDecimal> equity = v;
+        boolean noNoncontrollingEquity = noNoncontrolling;
+        if (usGate) {
+            boolean noNci = noNoncontrolling && noNonzeroNoncontrollingIncome
+                    && v.get(SecEdgarColumn.PARTNERS_EQUITY_NONCONTROLLING) == null;
+            GatedEquity gated = gatedEquity(v, noNci, pairsDiffer);
+            equity = gated.values();
+            // 비지배 판정(ADR-0188)은 원장이 그 날짜에 두 자본을 갈라 실었거나 LP 지배 태그를 실었을 때만 새 술어로 — 아니면
+            // 이어받은 값끼리의 차이라 판 혼합이다(UHAL 2020 · 2021 FY 2023-06-02 판). 새 술어는 「MinorityInterest를 안 낸다」
+            // ∧ 「이 기간 뒤 0이 아닌 손익 · 포괄손익 비지배가 없다」 ∧ 「LP 비지배가 없다」다. ADR-0159의 MinorityInterest 하나로는
+            // ARES · BX · TKO · AMG · UBER처럼 비지배를 다른 태그로 내는 회사의 지배자본이 총자본이 된다.
+            // MUST NOT: 모든 판에 새 술어를 걸지 않는다 — 부채 유도까지 바뀌어, 손익 비지배가 상환가능분(이미 메자닌)뿐인 ARMK 등
+            // 8종목 215칸의 부채가 지워졌다.
+            if (pairsDiffer || gated.partnersControlling()) {
+                noNoncontrollingEquity = noNci;
+            }
+        }
+        RawFinancialReport report = toReport(label, window, anchor, currency, equity, noNoncontrollingEquity,
                 noNoncontrollingIncome, noDiscontinued);
         // 4분기 라벨(10-K 분기 표)은 여기서 판정하지 않는다 — 그 표의 「중단 줄 없음」은 0이 아니다. 판정은 4분기 유도 뒤
         // q4DiscontinuedAsVisible이 한다. 여기서 0을 달면 그 차이가 판을 새로 낸다(ABT 2016 Q4 · 2026-10-23 스윕).
@@ -1716,6 +1789,30 @@ final class SecEdgarFacts {
      * 이 술어는 그 기간 하나가 비었는지를 묻지 않는다 — <b>그 뒤로 한 번도 안 냈는지</b>를 묻고,
      * 마지막 관측이 이 기간보다 뒤면(또는 같으면) 폴백을 <b>안</b> 건다.
      */
+    /**
+     * <b>값이 0이 아닌 손익 비지배의 마지막 관측</b>(ADR-0188 · 관문 켬 지배자본 판정 전용). {@link #lastNoncontrollingIncome}은
+     * 0인 태그도 세서 비지배가 없는 회사(LPX · ICLR — 상환가능 비지배 0)를 「있음」으로 읽는다. 포괄손익 비지배를 더한다(TKO).
+     */
+    private static LocalDate lastNonzeroNoncontrollingIncome(
+            Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn) {
+        LocalDate last = null;
+        for (SecEdgarColumn column : List.of(
+                SecEdgarColumn.NET_INCOME_NONCONTROLLING,
+                SecEdgarColumn.NET_INCOME_NONCONTROLLING_REDEEMABLE,
+                SecEdgarColumn.NET_INCOME_NONCONTROLLING_NONREDEEMABLE,
+                SecEdgarColumn.COMPREHENSIVE_INCOME_NONCONTROLLING)) {
+            for (Map<Slot, Fact> bySlot : byColumn.getOrDefault(column, Map.of()).values()) {
+                for (Map.Entry<Slot, Fact> e : bySlot.entrySet()) {
+                    BigDecimal value = e.getValue().value();
+                    if (value != null && value.signum() != 0 && (last == null || e.getKey().end().isAfter(last))) {
+                        last = e.getKey().end();
+                    }
+                }
+            }
+        }
+        return last;
+    }
+
     private static boolean noNoncontrollingIncomeBy(LocalDate lastNoncontrolling, Window window) {
         return lastNoncontrolling == null || lastNoncontrolling.isBefore(window.start());
     }
@@ -1905,6 +2002,93 @@ final class SecEdgarFacts {
             return netInterest.add(noninterest);
         }
         return v.get(SecEdgarColumn.REVENUE);
+    }
+
+    /** {@code partnersControlling}: LP 지배 태그를 지배자본 자리에 실었다 — 그 판의 비지배 판정은 관문 켬 술어를 쓴다. */
+    private record GatedEquity(Map<SecEdgarColumn, BigDecimal> values, boolean partnersControlling) {
+    }
+
+    /**
+     * <b>관문 켬 자본 재료</b>(ADR-0188). 두 일을 한다.
+     * <ol>
+     *   <li><b>LP · LLC 태그</b> — 비어 있는 자리만 채운다. LP 총(비지배 포함)은 그대로, LP 비지배는 {@code MINORITY_INTEREST}가 빌 때,
+     *       LP 지배는 <b>확인될 때만</b> 지배자본: 비지배가 있으면 지배 + 비지배 = 총(없으면 자산 − 부채 − 메자닌) · 비지배가 전혀
+     *       없으면 그대로 · 손익에만 비지배가 있으면 총과 같을 때만. 2020-09 뒤 두 값이 함께 실린 칸은 전부 닫혔다(EPD · PAA · IEP ·
+     *       WES · MPLX · ET …). <b>확인이 안 되고 비지배가 있으면 {@code MINORITY_INTEREST}를 지운다</b> — 비지배가 표준 태그 밖으로
+     *       갈린 자리라 「총 − 비지배」가 지어낸 값이 된다(BX 2017: 지배 6,636M인데 유도 10,265M).</li>
+     *   <li><b>비지배 없음인데 원장이 그 날짜에 두 자본을 갈라 실었으면</b> 자산 − 부채 − 메자닌(ADR-0158 증거)이 지배 쪽을 고를 때만
+     *       비지배 포함 태그를 버린다(UNM: 비지배 포함 −1,870M · 지배 10,810M · 항등식이 지배를 확인). 증거가 없으면 지금 동작 그대로.</li>
+     * </ol>
+     */
+    private static GatedEquity gatedEquity(Map<SecEdgarColumn, BigDecimal> v, boolean noNci, boolean pairsDiffer) {
+        Map<SecEdgarColumn, BigDecimal> w = new EnumMap<>(SecEdgarColumn.class);
+        w.putAll(v);
+        boolean partnersControlling = false;
+        {
+            BigDecimal partnersTotal = v.get(SecEdgarColumn.PARTNERS_EQUITY_INCLUDING_NCI);
+            BigDecimal ctl = v.get(SecEdgarColumn.PARTNERS_EQUITY);
+            BigDecimal nci = v.get(SecEdgarColumn.PARTNERS_EQUITY_NONCONTROLLING);
+            if (nci != null && w.get(SecEdgarColumn.MINORITY_INTEREST) == null) {
+                w.put(SecEdgarColumn.MINORITY_INTEREST, nci);
+            }
+            if (partnersTotal != null && w.get(SecEdgarColumn.TOTAL_EQUITY_INCLUDING_NCI) == null) {
+                w.put(SecEdgarColumn.TOTAL_EQUITY_INCLUDING_NCI, partnersTotal);
+                if (w.get(SecEdgarColumn.TOTAL_EQUITY) == null) {
+                    w.put(SecEdgarColumn.TOTAL_EQUITY, partnersTotal);
+                }
+            }
+            if (ctl != null && w.get(SecEdgarColumn.TOTAL_EQUITY_CONTROLLING) == null) {
+                BigDecimal minority = w.get(SecEdgarColumn.MINORITY_INTEREST);
+                boolean hasMinority = minority != null && minority.signum() != 0;
+                BigDecimal incl = w.get(SecEdgarColumn.TOTAL_EQUITY_INCLUDING_NCI);
+                BigDecimal target = balanceTarget(v);
+                boolean controlling;
+                if (hasMinority) {
+                    BigDecimal total = incl != null ? incl : target;
+                    controlling = total != null && within(ctl.add(minority), total);
+                } else if (noNci) {
+                    controlling = true;
+                } else {
+                    controlling = incl != null && within(ctl, incl);
+                }
+                if (controlling) {
+                    w.put(SecEdgarColumn.TOTAL_EQUITY_CONTROLLING, ctl);
+                    partnersControlling = true;
+                } else if (hasMinority) {
+                    // 지배 + 비지배가 총과 안 닫힌다 — 비지배가 표준 태그 밖으로 갈렸다(BX 2017). 총 − 비지배 유도도 못 믿는다
+                    w.remove(SecEdgarColumn.MINORITY_INTEREST);
+                }
+                if (w.get(SecEdgarColumn.TOTAL_EQUITY) == null) {
+                    if (target != null && target.signum() != 0 && within(ctl, target)) {
+                        w.put(SecEdgarColumn.TOTAL_EQUITY, ctl);
+                    } else if (!hasMinority && noNci) {
+                        w.put(SecEdgarColumn.TOTAL_EQUITY, ctl);
+                    }
+                }
+            }
+        }
+        // 비지배가 없는데 원장이 그 날짜에 두 자본을 갈라 실었으면 — 자산 − 부채가 지배 쪽을 고를 때만 비지배 포함 태그를 버린다.
+        BigDecimal incl = w.get(SecEdgarColumn.TOTAL_EQUITY_INCLUDING_NCI);
+        BigDecimal ctlNow = w.get(SecEdgarColumn.TOTAL_EQUITY_CONTROLLING);
+        if (noNci && pairsDiffer && incl != null && ctlNow != null && differsMaterially(ctlNow, incl)) {
+            BigDecimal evidence = equityByBalanceEvidence(w);
+            if (evidence != null && evidence.compareTo(incl) != 0) {
+                w.put(SecEdgarColumn.TOTAL_EQUITY_INCLUDING_NCI, evidence);
+                w.put(SecEdgarColumn.TOTAL_EQUITY, evidence);
+            }
+        }
+        return new GatedEquity(w, partnersControlling);
+    }
+
+    private static BigDecimal balanceTarget(Map<SecEdgarColumn, BigDecimal> v) {
+        BigDecimal assets = v.get(SecEdgarColumn.TOTAL_ASSETS);
+        BigDecimal liabilities = v.get(SecEdgarColumn.TOTAL_LIABILITIES);
+        if (assets == null || liabilities == null) {
+            return null;
+        }
+        BigDecimal mezzanine = v.get(SecEdgarColumn.MEZZANINE_EQUITY);
+        BigDecimal target = assets.subtract(liabilities);
+        return mezzanine != null ? target.subtract(mezzanine) : target;
     }
 
     private static BigDecimal totalEquity(Map<SecEdgarColumn, BigDecimal> v) {

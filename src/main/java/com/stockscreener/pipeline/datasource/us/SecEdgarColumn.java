@@ -292,6 +292,28 @@ enum SecEdgarColumn {
      */
     MINORITY_INTEREST(Kind.INSTANT, Unit.MONETARY, List.of("MinorityInterest")),
 
+    /**
+     * <b>LP · LLC 자본(관문 뒤 재료 · ADR-0188).</b> 법인 {@code StockholdersEquity…} 대신 파트너십 · LLC 태그로 자본을 싣는 발행사가
+     * 있다(EPD · ET · PAA · CQP · MPLX · WES). 사다리 후보로 넣지 않고 재료로 따로 받는 이유는 둘이다 — 후보는 판 증거
+     * ({@code reportEvidence})라 자본변동표만 실은 얕은 보고서가 판을 새로 내고(첫 시안: 새 판 77 · 사라짐 47), {@code PartnersCapital}의
+     * 뜻이 발행사마다 갈린다(비지배를 포함해 실은 CG 2016~2019). 어느 자리에 실을지는 {@code SecEdgarFacts.gatedEquity}가
+     * 같은 공시의 합(지배 + 비지배 = 총)으로 확인해 정한다.
+     */
+    PARTNERS_EQUITY_INCLUDING_NCI(Kind.INSTANT, Unit.MONETARY, List.of(
+            "PartnersCapitalIncludingPortionAttributableToNoncontrollingInterest",
+            "MembersEquityIncludingPortionAttributableToNoncontrollingInterest",
+            "LimitedLiabilityCompanyLlcMembersEquityIncludingPortionAttributableToNoncontrollingInterest")),
+    PARTNERS_EQUITY(Kind.INSTANT, Unit.MONETARY, List.of("PartnersCapital", "MembersEquity")),
+    /**
+     * <b>포괄손익의 비지배 몫(관문 뒤 재료 · ADR-0188).</b> 「이 기간에 비지배가 있는가」의 손익 쪽 증거에 더한다 — TKO는 2026년
+     * 비지배(49억 달러)를 손익 태그 없이 이 태그로만 낸다.
+     */
+    COMPREHENSIVE_INCOME_NONCONTROLLING(Kind.DURATION, Unit.MONETARY, List.of(
+            "ComprehensiveIncomeNetOfTaxAttributableToNoncontrollingInterest")),
+    PARTNERS_EQUITY_NONCONTROLLING(Kind.INSTANT, Unit.MONETARY, List.of(
+            "PartnersCapitalAttributableToNoncontrollingInterest",
+            "MembersEquityAttributableToNoncontrollingInterest")),
+
     CURRENT_ASSETS(Kind.INSTANT, Unit.MONETARY, List.of("AssetsCurrent")),
     CURRENT_LIABILITIES(Kind.INSTANT, Unit.MONETARY, List.of("LiabilitiesCurrent")),
     RETAINED_EARNINGS(Kind.INSTANT, Unit.MONETARY, List.of("RetainedEarningsAccumulatedDeficit")),
@@ -739,7 +761,19 @@ enum SecEdgarColumn {
                 || this == CONTINUING_INCOME_PARENT
                 || this == CONTINUING_INCOME_TOTAL
                 || this == CONTINUING_INCOME_NONCONTROLLING
-                || this == CONTINUING_INCOME_AVAILABLE_TO_COMMON;
+                || this == CONTINUING_INCOME_AVAILABLE_TO_COMMON
+                || this == PARTNERS_EQUITY_INCLUDING_NCI
+                || this == PARTNERS_EQUITY
+                || this == PARTNERS_EQUITY_NONCONTROLLING
+                || this == COMPREHENSIVE_INCOME_NONCONTROLLING;
+    }
+
+    /**
+     * LP · LLC 자본 잔액 재료(ADR-0188). F2b의 「순이익 없는 공시 → 관문 재료 null」에서 빠진다 — 뒤 해 10-Q의 비교 재무상태표는
+     * 순이익 없이 자산 · 부채 · LP 자본을 함께 싣는데, 지우면 자산 · 부채만 새 판이고 LP 자본은 앞 판이 이어진다(WES 2018 FY).
+     */
+    boolean partnersEquity() {
+        return this == PARTNERS_EQUITY_INCLUDING_NCI || this == PARTNERS_EQUITY || this == PARTNERS_EQUITY_NONCONTROLLING;
     }
 
     boolean anchoredInstant() {
