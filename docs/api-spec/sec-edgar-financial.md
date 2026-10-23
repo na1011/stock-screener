@@ -503,6 +503,28 @@ depositary shares」 단독 등 글에 비율이 없다). 꼴은 수사 · 숫�
 - 표지 주식수(`EntityCommonStockSharesOutstanding`)는 보통주다(25종목 대조). 발행사 태깅 오류가 있다 — BABA FY2026 20-F 인스턴스
   1,858,037,427 · 본문 18,580,374,278(10배).
 
+### 중단영업 — 연결 몫은 거의 늘 오고, 지배 몫은 덜 온다 (2026-10-23 · `.factcache` 994 · 0콜)
+
+**fact** — 편입 최근 TTM에 중단영업 ≠ 0이 81종목이다. 연결 몫(`IncomeLossFromDiscontinuedOperationsNetOfTax` ·
+`DiscontinuedOperationIncomeLossFromDiscontinuedOperationNetOfTax`)은 `NI_T = CO_T + DI_T`가 분기 103/104 · FY 79/79로 선다.
+지배 몫은 직접(`…AttributableToReportingEntity`) · 비지배 몫 · `NIC − IncomeLossFromContinuingOperations` · 보통주 귀속 계속영업
+(우선주 배분 0 증인) · `NIC − (CO_T − …AttributableToNoncontrollingEntity)`로만 정한다(ADR-0184). 재현: 탐색
+`explore/universe/f2b/measure2.py` · `SecEdgarFactsSweepTest`(관문 켬은 줄 끝에 중단영업 세 칸).
+
+- GE는 지배 몫을 회사 확장 태그(`ge:EarningsFromContinuingOperationsAttributableToCommonShareownersBasic` · Q2'25 2,008M ·
+  인스턴스 2콜)로만 준다 — companyfacts에 없고 이름이 회사마다 달라 계약이 없다.
+- 4분기는 FY − 같은 해 9개월 누계다. 9개월은 FY 공시일 이하에서 그 9개월 순이익을 실은 가장 늦은 공시(대개 Q3 10-Q)에서 읽는다
+  — 4분기를 짓는 Q3 판이 10-K 분기 표면 거기에는 9개월이 없다.
+
+### 함정
+
+- 「…ContinuingOperations」 태그를 중단 줄이 없는 행에서 쓰지 마라 — 2019 뒤 중단 태그 없는 798칸 중 88은 그 태그가 지분법 전
+  이익이었다(MPLX · THG). 이름이 계약이 아니다.
+- 10-K 분기 표에 중단 줄이 없는 것을 「4분기 중단 0」으로 읽지 마라 — 그 표는 대개 연결 몫만 쪼개거나 아예 안 쪼갠다(ABT 2016 ·
+  PAA 2025).
+- 관문 뒤 재료 팩트를 앵커 · 라벨 탐색이나 원시 비교에 넣지 마라 — 10-K의 Q4 3개월 처분손익 팩트 하나가 소스 Q4 라벨을 열고(GD 2016),
+  계속영업 태그 정정 하나가 무관한 4분기 칸을 움직였다(ABT 2016).
+
 ### 공시 보충 — companyfacts가 빠뜨린 정기 공시 (2026-10-06 실측)
 
 **companyfacts는 판 이력 전부가 아니다.** 정기 공시 일부의 us-gaap 팩트를 통째로 안 싣는다 — 83 CIK 표본의

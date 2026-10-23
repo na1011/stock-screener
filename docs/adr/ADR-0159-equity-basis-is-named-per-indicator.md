@@ -48,6 +48,9 @@ applies_to:
 | **지배주주** | `ROE` · `ROE_MIN_3Y` · `PER` · `PER_MEDIAN_5Y` · `EPS_TTM` · `EPS_CAGR_5Y` · `EPS_GROWTH_TTM_YOY` · `DIVIDEND_PAYOUT` · `EXEC_PAY_TO_NET_INCOME` · **`PBR`** · **`PBR_MEDIAN_5Y`** |
 | **연결 총액** | **`ROA`** · **`NET_MARGIN`** · **`ACCRUAL_RATIO`** · `DEBT_RATIO` · `ALTMAN_Z_DOUBLE_PRIME` · `ROIC_PRETAX` · `OPERATING_MARGIN` · `GROSS_MARGIN` · `GP_TO_ASSETS` · `FCF_MARGIN` |
 
+**순이익 분자의 기간 기저는 ADR-0184가 정한다**(관문 뒤) — 위 두 기저 안에서 `PER` 계열 · `EPS` 계열 · `ROE`(둘) · `ROA` ·
+`NET_MARGIN` · 세율 계열은 **계속영업**, `ACCRUAL_RATIO` · `DIVIDEND_PAYOUT` · `EXEC_PAY_TO_NET_INCOME`은 **중단 포함 합계**다.
+
 ## 왜 연결총액에 **게이트가 필수인가** — 커버리지가 정한다
 
 **MUST: 이 절을 「`net_income`은 지배주주로 둔다」로 읽지 않는다 — §결정은 연결총액이다.**
