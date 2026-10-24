@@ -1,4 +1,4 @@
-# 주당 지표의 분자를 보통주 몫으로 — 클래스 축 엔진이 공시마다 정한다 (계획 v1 · 2026-10-24)
+# 주당 지표의 분자를 보통주 몫으로 — 클래스 축 엔진이 공시마다 정한다 (계획 v2 · 2026-10-24 — v1은 반증 「다시 짠다」 · 6절)
 
 `docs/reload-gate.md` 「주당 지표의 분자 · 분모가 보통주 몫이 아니다」 행의 **분자** 부분. 분모(PBR · BPS의 우선주 · GP 자본)는 다음 계획이다.
 ★ = 내가 이 세션에 쟀다. 모든 수는 0콜(팩트 캐시 · 운영 SELECT) 또는 표시한 콜 수다.
@@ -51,61 +51,101 @@
 - `net_income` · `net_income_controlling` 컬럼의 뜻은 안 바꾼다 — 원장 `eps`와 맞대는 소비자 셋(배당 주식수 20% 게이트 · 순위 오염 훅 · ADR-0126 축척)이 그대로다.
 - `financial_share_class_filing` 소비자: `ShareClassStore` · `ShareClassDeriver` · `StockFold` · 시험 둘(`ShareClassAxisReadTest` · `ShareClassHoldReplayLiveTest`) · 표는 관문 시험 마이그레이션 `V70`(운영에 아직 없다).
 
-## 2. 계획 — 관문 뒤(`stockscreener.gate.us`)
+## 2. 계획 v2 — 관문 뒤(`stockscreener.gate.us`)
 
-### 2a. 엔진(`IssuerTimeline` · ENGINE_VERSION 4 → 5)
+### 2a. 값의 단위는 (공시, 기간)이고 저장하는 것은 「배분」이다
 
-**판정이 있든 없든 그 발행사 companyfacts의 모든 공시**(정기 · 정정 10-K/A · 10-Q/A · 6-K)마다, 그 공시의 **행 기간**(10-Q 3개월 · 10-K Q4 · 20-F · 40-F 연간 · 6-K는 그 공시의 당기 기간)과 10-K는 **연간**에 대해 보통주 귀속 이익 하나씩을 정한다. 사다리(첫 번째로 서는 것):
-1. **선언**: NIC(축 없음 · IFRS 별칭 포함).
-2. **NI 폐합**: `NetIncomeLoss`(ProfitLoss 아님)가 그 기간 기본 EPS × n과 `strictCloses` 안에서 닫힘 → NI(배분 0의 증인).
-3. **LP 배분 폐합**: `NetIncomeLossAllocatedToLimitedPartners`가 LP 단위 기본 EPS × n과 닫힘.
-4. **원장 주당이익**: 그 공시의 판정이 지금 경로(d · 앵커 아닌 T)이고 기본 EPS(LP는 LP 단위 기본 EPS)와 그 판정의 n이 있으면 EPS × n — 같은 공시 축 없는 값 둘이라 범위가 같다. 클래스 축 앵커(T 클래스) · 판정 없는 공시는 이 갈래를 안 탄다(n이 검증되지 않았거나 축 없는 EPS가 어느 클래스인지 모른다).
-5. 못 정함 → 비움.
+- ★ 행의 `report_code`는 그 기간의 최신 판 공시라, 한 접수번호가 여러 기간 행을 싣는다. GS 2024 Q1 행 = 2025 Q1 10-Q(`…25-000009` · 개정 1 · 공시일 2025-05-02). 현 편입 직전 TTM 행의 618/3,834 · 5년 창 2,620/18,792가 그 꼴이다(반증 안 1 · 밖 1).
+- 그래서 엔진은 **IssuerFacts의 모든 (접수번호, 기간)**(당기 · 비교열 · 정정 · 6-K · 보충 공시)마다 보통주 귀속 이익 `common`과 **배분** `allocation = NetIncomeLoss − common`(그 키에 NI가 없으면 null)을 낸다. NI는 `NetIncomeLoss`(IFRS는 `ProfitLossAttributableToOwnersOfParent` 별칭)만 — `ProfitLoss`로 안 떨어진다(`strictCloses`를 그대로 안 쓴다).
+- 행은 자기 (접수번호, period_start, period_end)로 붙인다. 행의 보통주 몫 = **행 지배 NI − allocation**(행 값의 판 · F2b 갈래를 그대로 쓴다). allocation이 null이고 common만 있으면 common.
 
-- 재료: 그 (공시, 기간)의 companyfacts 값(`IssuerFacts`) → 없으면 그 공시 인스턴스의 축 없는 값(`ClassFacts` — `instanceCloses`가 이미 읽는 NIC · NI · EPS). 보충만으로 쌓인 발행사(AUGO · AERO · MAKO · SCZM · TGE — ADR-0190)는 companyfacts가 비어 인스턴스만 있다.
-  - 수집(`ShareClassCollector`)은 지금 정기 공시 앵커 · 분모 후보의 인스턴스만 받는다. 판정이 없는 공시(정정 · 6-K · 20-F/A)는 companyfacts에 그 기간 NI가 없을 때만 인스턴스를 더 받는다(관문 날 한 번 · 수는 드라이런 1에서 센다 — AUGO는 유일한 XBRL 공시가 20-F/A다).
-- n: 판정이 있으면 행 기간은 판정의 분모(10-K는 Q4 n), 연간은 그 공시 연간 가중평균(단위 확인 뒤). 판정이 없는 공시(정정 · 6-K)는 그 공시 같은 기간 가중평균(단위 확인 뒤)을 **폐합(2 · 3)에만** 쓴다.
-- Q4는 `FY − 9개월`(Q3 10-Q의 9개월 · 같은 사다리) → 없으면 `FY − 3개월 셋`. 하나라도 비면 Q4도 비운다.
-- 숨김 판정(status X)의 공시도 분자를 정한다 — 주식수가 숨으면 어차피 지표가 안 나온다.
-- 갈래를 남긴다(decl · ni · lp · eps · none).
+### 2b. 사다리(키마다 · 첫 번째로 서는 것)
 
-### 2b. 저장
+재료: 그 키의 companyfacts 값 → 없으면 그 공시 인스턴스의 축 없는 값(보충 공시 · 앵커 — 엔진이 이미 받는 것). EPS는 총 EPS 태그(`EarningsPerShareBasic` · `…BasicAndDiluted` · LP 단위 기본 EPS)만 — 계속영업 EPS(`IncomeLossFromContinuingOperationsPerBasicShare`)는 분자 사다리에서 안 쓴다(반증 안 7). W: 그 공시 당기 기간이고 판정이 지금 경로면 판정 n, 아니면 그 키의 가중평균이 그 공시 표지와 자릿수(`COVER_WITNESS_LOG`)로 맞을 때만(반증 안 8 — 비교열 · 연간 · 9개월에는 판정이 검증한 n이 없다).
 
-- 판정 표(`financial_share_class_filing`)에 안 싣는다 — 그 표는 정기 공시의 T · d 판정만 담고(`ck_…_kind`), `ShareClassLine.read`가 자기 판정을 찾으면 그 판정을 행에 입힌다. 정정 · 6-K를 그 표에 넣으면 주식수 판정이 바뀐다.
-- 관문 시험 마이그레이션 `V70_5__common_income.sql`: 새 표 `financial_common_income(stock_id, accession, scope ∈ {ROW, ANNUAL}, value numeric NULL, branch varchar(8), engine_version, derived_at · PK (stock_id, accession, scope))`. V70 · V70_1~4와 같이 먼저 여는 관문 직전에 main으로 옮긴다.
-- 유도(`ShareClassDeriver`)가 판정과 같은 판에 같은 발행사 단위로 갈아 넣는다. `StockFold`는 판정 표처럼 같이 옮긴다.
-- 지표 읽기(`IndicatorDataReader`)가 판정 줄과 함께 그 종목의 이 표를 읽어 행의 `report_code` 접수번호로 붙인다.
+1. **선언 NIC**(축 없음 · IFRS 별칭). EPS × W가 있으면 부호와 자릿수(10배)가 맞아야 받는다 — CTVA 2023 Q1 NIC 0.84 · PCVX 2023 부호 반대 · OKLO · AIG Q4'23 · VMI Q2'25(반증 안 6). EPS가 없으면 그대로 받는다(KKR · ARES · MGY · ASTS — 확인 못 함으로 갈래에 남긴다).
+2. **선언 배분**: 그 키에 우선주 배당(`PreferredStockDividendsAndOtherAdjustments` · `DividendsPreferredStock` · `PreferredStockDividendsIncomeStatementImpact`) · 참가증권(`ParticipatingSecuritiesDistributedAndUndistributedEarningsLossBasic` · `UndistributedEarningsLossAllocatedToParticipatingSecuritiesBasic`) · GP 배분(`NetIncomeLossAllocatedToGeneralPartners`) 태그가 있으면 NI − 그 합이 EPS × W와 닫힐 때 그 값.
+3. **NI 폐합**: 2의 태그가 그 키에 하나도 없을 때만 — NI가 EPS × W와 닫히면 NI(배분 0). 허용폭은 EPS 반 센트 × W + NI 끝자리 반폭. 반증 안 5의 거짓 증인 164 중 89는 2의 태그가 있는 키라 2가 먼저 받는다 · 남는 것은 원장 정밀도의 한계로 갈래에 남긴다.
+4. **LP 배분 폐합**: `NetIncomeLossAllocatedToLimitedPartners`가 EPS × W와 닫힘.
+5. **원장 주당이익**: 클래스 축 앵커가 아니고 EPS · W가 있으면 EPS × W(GWW · TDG 특별배당 분기 · CQP).
+6. **클래스 합**: 클래스 축 앵커면 인스턴스의 클래스 구성원 Σ EPS_m × W_m(`IssuerTimeline`이 이미 읽는 em · wv) — NI와 닫히면 NI, 아니면 그 합(반증 안 3 — TSN · HSY · BKR · CWEN · PAA · PAGP · SYRE).
+7. 못 정함 → 비움.
 
-### 2c. 지표
+### 2c. Q4
 
-- `FinancialFigures`에 `commonIncome`(행 기간 · FY 행은 연간 값)과 「이 규칙으로 읽었다」 표지(클래스 축 줄이 있는 행 = 관문 켬 미국)를 더한다.
-- `continuingIncomeCommon()`: 표지가 없으면 `continuingIncomeControlling()` 그대로(관문 꺼짐 · 국내 — 바이트 같음). 있으면 `commonIncome − 지배 중단`(F2b 재료 · 중단 규칙이 없으면 `commonIncome`) · `commonIncome`이 비면 비움.
-- `controllingTtm`이 그것을 합한다. 창 단위 연결 폴백(`sumControllingContinuingIncome`의 둘째 갈래)은 표지가 있는 창에서는 안 탄다 — 연결 몫이 보통주 몫이라는 근거가 없다.
-- `DIVIDEND_PAYOUT`: 표지가 있는 연간 행은 `commonIncome`(중단 포함 합계 — ADR-0184의 이 지표 기저).
+- 어댑터와 같은 길(`SecEdgarFacts.buildQ4` — 원천 3개월, 없으면 FY − Q1 − Q2 − Q3):
+  - 그 10-K 접수번호에 Q4 3개월 키가 있으면 그 키의 allocation.
+  - 없으면 **allocation_Q4 = allocation_FY − Σ allocation_Q1..Q3**(같은 회계연도 세 분기 행의 키) — 배분은 더해진다. 하나라도 비면 비움.
+- v1의 「FY − 9개월」은 버린다 — NIC 실린 FY 954 중 20이 FY의 1% 넘게 갈렸다(반증 안 4 · TPG FY2025 +4.5% · CELH −8%).
+- Q4 계산은 지표 읽기에서 한다(행 단위 · 그 판의 세 분기 행). 엔진은 키 값만 낸다.
 
-### 2d. 꺼진 출력
+### 2d. 저장
 
-- 관문 꺼짐은 클래스 축 줄이 없어(`IndicatorDataReader.mapFigures`의 `line == null`) 새 표지가 안 선다 → 지표 바이트 같음.
-- 엔진 · 저장은 관문 켬에서만 돈다.
+- 관문 시험 마이그레이션 `V70_5__common_income.sql`: 새 표 `financial_common_income(stock_id, accession, period_start, period_end, common numeric, allocation numeric, branch varchar(8), engine_version, derived_at · PK (stock_id, accession, period_start, period_end))`. V70 · V70_1~4와 함께 먼저 여는 관문 직전에 main으로 옮긴다.
+- 유도(`ShareClassDeriver`)가 판정과 같은 판 · 같은 발행사 단위로 갈아 넣는다. 판정 표(`financial_share_class_filing`)는 안 건드린다. `StockFold`가 같이 옮긴다.
+- ENGINE_VERSION 4 → 5(관문 날 클래스 축 재유도가 함께 채운다).
+
+### 2e. 지표
+
+- `FinancialFigures`: `commonAllocation` · `commonIncome`(행 키에 붙은 값) · 표지 = 관문 켬 미국 행(`line != null`).
+- 보통주 계속영업 = **`continuingIncomeControlling()`(F2b 네 갈래 그대로) − allocation** · allocation이 없고 common만 있으면 `common`에 같은 중단 갈래 · 둘 다 없으면 비움(반증 밖 7 — 중단 갈래를 다시 쓰지 않는다).
+- `controllingTtm` · 연간 `controllingContinuingIncomeOf` · `DIVIDEND_PAYOUT`(연간 · 중단 포함 합 = 행 지배 NI − allocation)이 그것을 쓴다. 표지가 있는 창은 연결 폴백을 안 탄다.
+- 표지가 있는데 값이 비는 행 → 그 창 미표시. 유도가 안 돈 발행사도 같다(숨김이 맞다 — 지배 NI로 떨어지면 그럴듯한 틀린 값). 그 수를 펜스가 센다(2g).
+- 관문 꺼짐 · 국내는 표지가 없어 바이트 같음.
+
+### 2f. 화면 · 문구(기본값을 뒤집는 jar 커밋에 · F2b ③과 같이)
+
+- `IndicatorUnavailabilityConfig`의 PER 「최근 4개 분기 순이익이 적자」 → 「보통주 귀속 순이익이 적자」(HPE · APG · LYV · JXN — 순이익 양수 · 보통주 몫 음수).
+- `EPS_TTM` · `PER` 설명의 「순이익」 → 「보통주 귀속 순이익」.
+- 재무 탭: 「보통주 귀속 순이익」 줄(관문 켬 미국만 값 · 꺼짐은 없음 — F2b 중단영업 줄과 같은 이유).
+
+### 2g. 펜스 · 관문 절차
+
+- premise(새 ADR): 관문 켬 현 편입 최신 TTM 행 중 표지가 있는데 보통주 몫이 빈 행 수와 그 종목 · 갈래 분포 — 드라이런 수 이하.
+- ADR-0085 premise(`COALESCE(net_income_controlling, net_income) <= 0`)는 미국 배당성향 분모가 바뀌면 적자 집합이 바뀐다 — 그 premise의 미국 몫을 보통주 몫으로 고친다(구현 때 그 premise 본문을 읽고 정한다).
+- `docs/reload-gate.md`: V70_5 이동 · 엔진 판 5 재유도 뒤 백필 · 보충 · 정정 공시 인스턴스 받기 실패를 10단계 미해결 질의에 · 위 premise · 59행은 분모가 남아 안 닫는다.
 
 ## 3. 드라이런(가장 싼 재료부터 · DB 생성 없음)
 
-1. **0콜 스윕** `SecShareClassSweepTest`(캐시 1,271 + IFRS USD 130 · 틀 켬 · 보충 목록): 공시마다 `common_income` · `common_branch`를 TSV에 더 찍는다. 기존 열은 바이트 같음(md5).
-2. 같은 원자료로 `SecEdgarFactsSweepTest` 관문 켬 TSV(행 · `report_code` · 지배 NI · 중단 지배)와 이어 붙여, 현 편입 최신 TTM 분자 변화와 새로 비는 창을 센다(파이썬 · 0콜).
-   - 수용: 1a의 큰 변화가 재현된다(TPG · MCHP · VST · 은행 · HPE · APG 부호) · 「원장이 말하는데 우리가 비움」이 0 또는 이유가 적힌 목록.
-3. 단위 시험: 갈래 다섯 · Q4 두 길 · 꺼짐 무변화 · 대조군(사다리 갈래 하나씩 되돌림)이 붉다.
+1. **0콜 스윕** `SecShareClassSweepTest`(캐시 1,271 + IFRS USD 130 · 틀 켬 · 보충 목록): 키마다 common · allocation · branch TSV. 기존 판정 열은 md5 같음.
+2. 같은 원자료의 `SecEdgarFactsSweepTest` 관문 켬 행 TSV와 (접수번호, 기간)으로 잇고 Q4는 2c로 지어(파이썬 · 0콜):
+   - 단언: 붙은 값의 기간 = 행의 기간(전부).
+   - 창: 최신 TTM · 직전 TTM · 20분기 전 TTM · FY 2~6번째 — 창마다 분자 변화 분포와 새로 비는 창 수 · 종목 · 갈래(가짜/진짜 분류).
+   - 수용: 1a의 큰 변화 재현(TPG · MCHP · VST · 은행 · HPE · APG 부호) · 「원장이 말하는데 비움」 0 또는 이유가 적힌 목록.
+3. 단위 시험: 갈래 일곱 · Q4 두 길 · 비교열 행 붙이기 · 꺼짐 무변화 · 대조군(갈래 · 키 하나씩 되돌림)이 붉다.
 
 ## 4. 재지 않았다 · 사정거리
 
-- ★ 운영(관문 꺼짐) 현 편입 최근 분기 4행 중 정기 10-Q · 10-K가 아닌 행: 6-K 20행 · 6종목(AER · BNT · CAMT · DSGX · TSEM — 반기라 분기 계열이 안 서 연간 계열로 간다 · ICLR은 6-K 분기) · 10-Q/A 2(AVAV · BWXT) · 6-K/A 1(ICLR) · 20-F 7(DOX · JHX Q4). 그래서 분자를 정기 판정 표가 아니라 공시마다 따로 정한다(2a · 2b). 관문 켬의 행 집합에서 그 수는 드라이런 2에서 다시 센다.
-- 클래스 축 앵커(T 클래스)에서 NIC도 NI 폐합도 없는 공시 수 — 있으면 클래스별 EPS × W 합 갈래를 더할지 그때 정한다.
-- 분모(PBR · BPS)의 우선주 · GP 자본 — 다음 계획.
-- **국내** — 같은 성격이 더 크다(아래 5절). 사용자 결정(2026-08-30 · ADR-0098 「우선주 분모」)의 근거 문장이 걸려 있어 이 계획에 안 넣는다.
+- 배분 중 중단영업 몫(참가증권이 중단영업에도 배분된 칸) — 원장은 중단영업 주당이익을 따로 주지만 크기는 재지 않았다(반증 안 10).
+- 갈래 5의 정밀도: NIC를 답으로 둔 5,848기간에서 중앙값 0.16% · p90 1.4% · p99 33%(반증 안 10 · EPS가 작은 발행사 — 원장 정밀도).
+- 보충 · 정정 공시 중 인스턴스를 엔진이 아직 안 받는 것(AUGO 20-F/A 등)의 수 — 드라이런 1에서 센다. ★ 운영(꺼짐) 현 편입 행 중 보충 OK 공시에서 온 것 110행 · 92종목.
+- 분모(PBR · BPS)는 다음 계획(탐색 메모 `scratchpad/pb/NOTES.md`의 실측 — 우선주가 있는 61 중 51이 자본 구성 합으로 닫힘).
 
-## 5. 같이 찾음 — 국내 우선주(사용자 판단)
+## 5. 국내 — 같은 항목에서 이어서 고친다(관문 `gate.kr` 뒤)
 
-- 국내 주당 지표 분자는 지배주주 순이익 전체이고 분모는 보통주다(ADR-0098). 지배주주 순이익에는 우선주 몫이 들어 있다.
-- ★ DART `fnlttSinglAcntAll` FY2025 6콜(CFS · `ifrs-full_BasicEarningsLossPerShare` 보통주 · `dart_BasicEarningsLossPerSharePreferredStock`) 대 지배 NI ÷ 보통주 유통주식수(`SHARE_TOTALS` 2025-12-31):
-  - 삼성전자 6,605 대 7,595(1.15배) · 현대차 36,088 대 46,507(1.29) · 미래에셋증권 2,680 대 3,600(1.34) · 두산 4,230 대 5,588(1.32) · 한화 4,072 대 5,369(1.32) · 아모레퍼시픽 3,416 대 4,033(1.18).
-- ★ 현 편입 국내 350 중 보통주 밖 주식이 있는 것 51(운영 SELECT · `SHARE_TOTALS` 최신) · 그 비중 1% 이상 38 · 20% 이상 4(미래에셋 · 두산 · 현대차 · 한화). `SHARE_TOTALS`가 없는 편입 종목 수는 재지 않았다(하한).
-- ADR-0098 §버린 대안의 「우리 시가총액이 보통주 기준이라 내부 일관성이 지금 쪽이 낫다」는 분자가 우선주 몫을 포함하는 한 서지 않는다 — PER = 보통주 시총 ÷ (보통주 + 우선주 몫 이익).
+- ★ DART 6콜: 지배 NI ÷ 보통주 수 대 원장 보통주 기본주당이익 — 삼성전자 1.15배 · 현대차 1.29 · 미래에셋증권 1.34 · 두산 1.32 · 한화 1.32 · 아모레퍼시픽 1.18. 현 편입 350 중 보통주 밖 주식 51 · 그 비중 1% 이상 38(`SHARE_TOTALS`가 없는 종목 수는 하한 밖).
+- 사용자 결정(2026-08-30)의 사정거리는 **분모에 우선주를 넣지 않는다**뿐이다(ADR-0098 §버린 대안 · `docs/progress.md` F2b 줄). 분자를 보통주 몫으로 바꾸면 분모는 그대로라 그 결정을 안 바꾸고, 그 결정의 근거(K-IFRS 1033 · 「시총이 보통주라 일관」)가 처음으로 선다. 그래서 묻지 않고 고친다(반증 밖 2 · v1의 「사용자 판단」은 사정거리를 잘못 읽었다).
+- spec §7(시장 간 계산식이 갈라지지 않게)이 두 시장을 함께 요구한다 — F2b처럼 미국 · 국내 두 관문 갈래로. 국내 `DIVIDEND_PAYOUT`은 배당 총액에 우선주 배당이 들어 있어 지배 NI가 짝이다(ADR-0098 premise 삼성 25.10%) — 국내는 PER · EPS 계열만.
+- 국내 설계(원장: `ifrs-full_BasicEarningsLossPerShare` 보통주 · `dart_BasicEarningsLossPerSharePreferredStock` · 우선주 수)는 이 계획 구현 뒤 다음 계획으로 잰다.
+
+## 6. v1 반증 판정 (2026-10-24 · 안 「다시 짠다」 · 밖 「고쳐서 간다」)
+
+| 렌즈 · 번호 | 지적 | v2 |
+|---|---|---|
+| 안 1 · 밖 1 | 접수번호 하나 = 값 하나 키 — 비교열 · 정정 행이 그 공시 당기 값을 받는다(직전 TTM 618행 · 298종목) | 키를 (접수번호, 기간)으로 · 모든 키에 사다리(2a) |
+| 안 2 | 1b의 941/994는 계획의 사다리가 아니다(③ · 갈래 4 · 희석 EPS · 첫 공시) | 1b 수를 계획 근거로 안 쓴다 — 드라이런 2가 행의 키 집합으로 다시 잰다 |
+| 안 3 | 클래스 축 발행사가 「못 정함」(TSN · HSY · BKR · CWEN · PAA · PAGP · SYRE) · 표지 정의 | 클래스 합 갈래 6 · 표지는 관문 켬 미국 행 · 빈 값은 숨김 + 펜스(2e · 2g) |
+| 안 4 | Q4 「FY − 9개월」이 어댑터와 갈림(20/954) | 어댑터와 같은 길 · 배분 차감(2c) |
+| 안 5 | NI 폐합 거짓 증인 164(89는 배분 태그 있음) · `strictCloses`의 ProfitLoss 떨어짐 | 선언 배분을 앞에 · NI 폐합은 배분 태그 없는 키만 · NI는 `NetIncomeLoss`만(2a · 2b) |
+| 안 6 | NIC 무검증(CTVA · PCVX · OKLO · AIG · VMI) | 부호 · 자릿수 확인(2b-1) |
+| 안 7 | 계속영업 EPS로 중단 이중 차감 | 분자 사다리에서 계속영업 EPS 제외 |
+| 안 8 | 연간 · 9개월 n은 판정이 검증한 n이 아님 | W 규칙을 키 종류별로(2b 머리) · 9개월 길 삭제 |
+| 안 9 | 정정 행 갈래 4 막음 → AVAV · BWXT 숨김 | 갈래 5가 정정 키에도 선다(표지 자릿수 확인 W) |
+| 안 10 | 중단 몫 배분 · 갈래 5 정밀도 | 4절에 수로 |
+| 안 11 · 밖 7 | 소비자 셈 누락 · F2b 갈래 재작성 | 시험 `ContinuingIncomeTest` · `SecEdgarIncomeBasisTest` · ADR-0098 · 0159 갱신 · F2b 함수 재사용(2e) |
+| 밖 2 | 국내를 빼면 spec §7 위반 · 사용자 결정은 분모뿐 | 5절 — 같은 항목에서 국내 관문 뒤로 |
+| 밖 3 | 미표시 사유 · 설명 · 재무 탭 | 2f |
+| 밖 4 | 오프셋 창 커버리지(옛 창 못 정함 5.8% 근사) | 드라이런 2 창 넷 |
+| 밖 5 | ADR-0085 premise 침묵 · 분자 펜스 없음 | 2g |
+| 밖 6 | 관문 절차 | 2g |
+| 밖 따로 | CREX FY2023 행 공시일 2022-11-14(기말보다 앞) | 이 계획 밖 — 보고 |
