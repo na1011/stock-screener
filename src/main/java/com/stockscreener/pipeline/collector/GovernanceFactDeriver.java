@@ -286,11 +286,19 @@ public class GovernanceFactDeriver {
         Map<Integer, BigDecimal> basisMultiple = new HashMap<>();
         java.util.Set<Integer> decided = new java.util.HashSet<>();
         jdbcTemplate.query("""
-                SELECT fiscal_year, published_at, report_code, shares_outstanding, share_basis_status, share_basis_multiple,
-                       coalesce(net_income_controlling, net_income) AS numerator, eps
-                  FROM financial_statement
-                 WHERE stock_id = ? AND fiscal_period = 'FY'
-                 ORDER BY fiscal_year, published_at
+                SELECT f.fiscal_year, f.published_at, f.report_code, f.shares_outstanding, f.share_basis_status,
+                       f.share_basis_multiple,
+                       -- 분자는 행의 보통주 몫(관문 켬 · 탐색 PERSHARE-NUM-PLAN-1024.md) — 원장 eps는 보통주 EPS라 지배 NI와 견주면
+                       -- 우선주 · 참가증권 배분만큼 함의 주식수가 부풀어 정상 총액이 기각된다(HPE · VST 등 19종목 · 앵커가 앞 해로
+                       -- 물러나 낡은 배당성향). 보통주 몫을 못 정한 행은 지배 NI 그대로(이 축 전과 같다).
+                       CASE WHEN ci.branch = 'ni' THEN coalesce(f.net_income_controlling, f.net_income)
+                            WHEN ci.common IS NOT NULL AND ci.basis = 'T' THEN ci.common
+                            ELSE coalesce(f.net_income_controlling, f.net_income) END AS numerator,
+                       f.eps
+                  FROM financial_statement f
+                  LEFT JOIN financial_common_income ci ON ci.financial_statement_id = f.id AND ci.report_code = f.report_code
+                 WHERE f.stock_id = ? AND f.fiscal_period = 'FY'
+                 ORDER BY f.fiscal_year, f.published_at
                 """, rs -> {
             int year = rs.getInt("fiscal_year");
             BigDecimal numerator = rs.getBigDecimal("numerator");

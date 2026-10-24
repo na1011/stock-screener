@@ -129,6 +129,7 @@ final class FinancialFiguresFixture {
         fixture.discontinuedIncome = source.discontinuedIncome();
         fixture.discontinuedIncomeControlling = source.discontinuedIncomeControlling();
         fixture.discontinuedRule = source.discontinuedRule();
+        fixture.common = source.common();
         return fixture;
     }
 
@@ -299,10 +300,18 @@ final class FinancialFiguresFixture {
     }
 
     /** 중단영업 연결 몫과 지배 몫을 F2b 규칙(판 1)으로 읽은 행(ADR-0184). 안 부르면 「이 규칙으로 안 읽은 행」이다. */
+    private com.stockscreener.indicator.CommonIncomeRead common;
+
     FinancialFiguresFixture discontinued(BigDecimal consolidated, BigDecimal controlling) {
         this.discontinuedIncome = consolidated;
         this.discontinuedIncomeControlling = controlling;
         this.discontinuedRule = BigDecimal.ONE;
+        return this;
+    }
+
+    /** 미국 관문 켬 행 — 보통주 귀속 이익을 붙인다(탐색 PERSHARE-NUM-PLAN-1024.md). */
+    FinancialFiguresFixture common(BigDecimal value, String basis, String branch) {
+        this.common = new com.stockscreener.indicator.CommonIncomeRead(value, basis, branch);
         return this;
     }
 
@@ -318,6 +327,6 @@ final class FinancialFiguresFixture {
                 noninterestExpense, benefitsLossesAndExpenses,
                 grossProfit, operatingExpenses, costsAndExpenses,
                 incomeTaxExpense, profitBeforeTax, shareBasisMultiple, shareBasisStatus, shareClassState,
-                weightedShares, discontinuedIncome, discontinuedIncomeControlling, discontinuedRule);
+                weightedShares, discontinuedIncome, discontinuedIncomeControlling, discontinuedRule, common);
     }
 }

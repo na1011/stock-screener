@@ -483,6 +483,23 @@ public final class IssuerTimeline {
         return ref != null && v > 0 && Math.abs(Math.log10(v / ref)) <= COVER_WITNESS_LOG;
     }
 
+    /**
+     * 공시 × 기간마다 보통주 귀속 이익({@link CommonIncome}) — 판정과 같은 재료(단위 확인을 지난 가중평균 · 기준 표지)와 판정의 n을 쓴다.
+     * 인스턴스는 받아 둔 것(보충 · 앵커)만 — 없으면 companyfacts만으로 정한다.
+     */
+    public Map<IssuerFacts.Key, CommonIncome.Value> commonIncomes(IssuerFacts given, Set<String> anchors, Instances instances,
+                                                                 List<Split> splits, List<Verdict> verdicts) {
+        Prepared prepared = prepare(given, instances, splits, anchors);
+        Map<String, ClassFacts> loaded = new LinkedHashMap<>();
+        for (String a : prepared.facts().filings().keySet()) {
+            ClassFacts f = load(instances, a);
+            if (f != null) {
+                loaded.put(a, f);
+            }
+        }
+        return CommonIncome.judge(prepared.facts(), prepared.references(), loaded, verdicts, splits);
+    }
+
     /** 결과 — 고친 companyfacts 재료와 인스턴스가 필요했는데 못 받은 공시. */
     private record Prepared(IssuerFacts facts, Map<String, Double> references, Set<String> noInstance) {
     }
@@ -491,6 +508,43 @@ public final class IssuerTimeline {
      * 받기 후보(ADR-0189) — 지금 경로 공시 중 companyfacts만으로는 당기 분모가 안 서는 것. 받기({@code ShareClassCollector})와 유도가 같은
      * 함수를 부른다(인스턴스 없이 지은 결과에서 당기 값이 0도 아닌 「없음」인 공시).
      */
+    /**
+     * 보통주 귀속 이익 후보 — {@link IssuerFacts#INSTANCE_FROM}(지표 창 − 5년 여유는 {@link #DENOMINATOR_FROM}) 뒤 공시 중 companyfacts만으로
+     * 당기 보통주 몫을 못 정하는 것(축 없는 NIC도 총 EPS도 없다 — PAA는 LP 단위 EPS를 LP 클래스 축에만, BKR은 Class A에만 싣는다). 받기가
+     * 이 공시의 인스턴스를 더 받는다(탐색 {@code PERSHARE-NUM-PLAN-1024.md} v2.1 · 앵커 · 분모 후보는 이미 받는다).
+     */
+    public static Set<String> numeratorCandidates(IssuerFacts cf) {
+        Prepared p = standard().prepare(cf, accession -> null, List.of(), Set.of());
+        Map<IssuerFacts.Key, CommonIncome.Value> keys = CommonIncome.judge(p.facts(), p.references(), Map.of(), List.of(), List.of());
+        Map<String, Boolean> undecided = new LinkedHashMap<>();
+        keys.forEach((k, v) -> {
+            IssuerFacts.Filing f = cf.filings().get(k.accession());
+            LocalDate end = cf.currentEnd(k.accession());
+            if (f == null || f.filed().isBefore(DENOMINATOR_FROM) || end == null
+                    || Math.abs(ChronoUnit.DAYS.between(k.period().end(), end)) > SAME_END_DAYS) {
+                return;
+            }
+            undecided.merge(k.accession(), !v.decided(), Boolean::logicalAnd);
+        });
+        Set<String> out = new LinkedHashSet<>();
+        undecided.forEach((a, none) -> {
+            if (none) {
+                out.add(a);
+            }
+        });
+        // 당기 손익 · EPS 키가 하나도 없는 행 폼 공시 — companyfacts가 그 공시의 손익을 안 실었다(POR 2025 Q1 10-Q는 가중평균만).
+        cf.filings().forEach((a, f) -> {
+            if (ROW_FORMS.contains(f.form()) && !f.filed().isBefore(DENOMINATOR_FROM) && !undecided.containsKey(a)) {
+                out.add(a);
+            }
+        });
+        return out;
+    }
+
+    /** 재무 행의 {@code report_code}가 될 수 있는 폼 — 정기 · 정정 · 6-K. */
+    private static final Set<String> ROW_FORMS = Set.of("10-K", "10-Q", "20-F", "40-F", "10-K/A", "10-Q/A", "20-F/A", "40-F/A",
+            "6-K", "6-K/A", "10-KT");
+
     public static Set<String> denominatorCandidates(IssuerFacts cf) {
         // 분할 원장 없이 정해진다 — 후보를 가르는 확인(값마다의 단위 · 원장 선언 대체)은 그 공시 자기 표지만 본다.
         return standard().prepare(cf, accession -> null, List.of(), Set.of()).noInstance();

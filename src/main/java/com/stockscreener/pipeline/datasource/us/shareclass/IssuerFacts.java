@@ -22,11 +22,18 @@ public record IssuerFacts(Map<String, Filing> filings,
                           Map<Key, Double> declaredNumerator,
                           Map<Key, Double> proxyNumerator,
                           Map<String, Double> coverShares,
-                          Witnesses witnesses) {
+                          Witnesses witnesses,
+                          Numerators numerators) {
 
     public IssuerFacts(Map<String, Filing> filings, Map<Key, Double> weighted, Map<Key, Double> eps,
                        Map<Key, Double> declaredNumerator, Map<Key, Double> proxyNumerator, Map<String, Double> coverShares) {
-        this(filings, weighted, eps, declaredNumerator, proxyNumerator, coverShares, Witnesses.NONE);
+        this(filings, weighted, eps, declaredNumerator, proxyNumerator, coverShares, Witnesses.NONE, Numerators.NONE);
+    }
+
+    public IssuerFacts(Map<String, Filing> filings, Map<Key, Double> weighted, Map<Key, Double> eps,
+                       Map<Key, Double> declaredNumerator, Map<Key, Double> proxyNumerator, Map<String, Double> coverShares,
+                       Witnesses witnesses) {
+        this(filings, weighted, eps, declaredNumerator, proxyNumerator, coverShares, witnesses, Numerators.NONE);
     }
 
     /**
@@ -39,6 +46,19 @@ public record IssuerFacts(Map<String, Filing> filings,
     public record Witnesses(Map<Key, List<Double>> laterTags, Map<Key, Double> diluted, Map<Key, Double> proForma,
                             Map<Key, Double> epsDiluted, Map<Key, Double> dilutedNumerator, java.util.Set<Key> basicAndDilutedEps) {
         public static final Witnesses NONE = new Witnesses(Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), java.util.Set.of());
+    }
+
+    /**
+     * 보통주 귀속 이익을 정하는 재료(탐색 {@code PERSHARE-NUM-PLAN-1024.md} v2.1 · {@link CommonIncome}). 분모 판정은 이것을 안 읽는다.
+     * {@code totalEps}: 총 EPS(기본 · 기본겸희석 · LP 단위 기본)를 태그 순서 첫 값으로 — {@link #eps}는 계속영업 EPS가 섞인다
+     * ({@code putIfAbsent} · 280키). {@code continuingEps}: 계속영업 기본 EPS. {@code netIncome}: {@code NetIncomeLoss}만(ProfitLoss 아님).
+     * 배분 태그는 묶음마다 하나 — 우선주 배당(우선순위 첫 값) · 참가증권(총액, 없으면 미배분) · GP 배분 — 대체 태그를 더하지 않는다(AIG [8M, 8M]).
+     */
+    public record Numerators(Map<Key, Double> totalEps, Map<Key, Double> continuingEps, Map<Key, Double> netIncome,
+                             Map<Key, Double> profitLoss, Map<Key, Double> noncontrolling, Map<Key, Double> preferred,
+                             Map<Key, Double> participating, Map<Key, Double> generalPartner, Map<Key, Double> limitedPartners) {
+        public static final Numerators NONE = new Numerators(Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of(),
+                Map.of(), Map.of());
     }
 
     public record Filing(String form, LocalDate filed) {
@@ -121,7 +141,12 @@ public record IssuerFacts(Map<String, Filing> filings,
                 cover,
                 new Witnesses(later, pick(gaap, List.of(DILUTED), "shares"), pick(gaap, List.of(PRO_FORMA), "shares"),
                         pick(gaap, List.of(EPS_DILUTED), "USD/shares"), pick(gaap, List.of(DILUTED_NUMERATOR), "USD"),
-                        basicAndDiluted));
+                        basicAndDiluted),
+                new Numerators(pick(gaap, ClassFactReader.TOTAL_EPS, "USD/shares"), pick(gaap, ClassFactReader.CONTINUING_EPS, "USD/shares"),
+                        pick(gaap, List.of("NetIncomeLoss"), "USD"), pick(gaap, List.of("ProfitLoss"), "USD"),
+                        pick(gaap, List.of(ClassFactReader.NONCONTROLLING), "USD"), pick(gaap, ClassFactReader.PREFERRED_DIVIDENDS, "USD"),
+                        pick(gaap, ClassFactReader.PARTICIPATING, "USD"), pick(gaap, List.of(ClassFactReader.GENERAL_PARTNER), "USD"),
+                        pick(gaap, List.of(ClassFactReader.LIMITED_PARTNERS), "USD")));
     }
 
     /**
@@ -173,7 +198,7 @@ public record IssuerFacts(Map<String, Filing> filings,
             }
         }
         for (String tag : concat(WEIGHTED, WEIGHTED_CONFIRMED, ClassFactReader.EPS_TAGS, List.of(ClassFactReader.DECLARED_NUMERATOR), PROXY,
-                List.of(DILUTED, PRO_FORMA, EPS_DILUTED, EPS_BASIC_AND_DILUTED, DILUTED_NUMERATOR))) {
+                List.of(DILUTED, PRO_FORMA, EPS_DILUTED, EPS_BASIC_AND_DILUTED, DILUTED_NUMERATOR), ClassFactReader.NUMERATOR_MATERIAL)) {
             if (gaap.has(tag)) {
                 prunedGaap.set(tag, gaap.get(tag));
             }
@@ -193,12 +218,12 @@ public record IssuerFacts(Map<String, Filing> filings,
     public IssuerFacts withFilings(Map<String, Filing> extra) {
         Map<String, Filing> merged = new LinkedHashMap<>(filings);
         extra.forEach(merged::putIfAbsent);
-        return new IssuerFacts(merged, weighted, eps, declaredNumerator, proxyNumerator, coverShares, witnesses);
+        return new IssuerFacts(merged, weighted, eps, declaredNumerator, proxyNumerator, coverShares, witnesses, numerators);
     }
 
     /** 분모 값만 바꾼 사본(지금 경로 재료를 고친 판 · {@code IssuerTimeline}). */
     public IssuerFacts withWeighted(Map<Key, Double> replaced) {
-        return new IssuerFacts(filings, replaced, eps, declaredNumerator, proxyNumerator, coverShares, witnesses);
+        return new IssuerFacts(filings, replaced, eps, declaredNumerator, proxyNumerator, coverShares, witnesses, numerators);
     }
 
     /**

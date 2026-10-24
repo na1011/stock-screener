@@ -111,6 +111,9 @@ function label(row: FinancialPeriod): string {
                 <span v-if="row.discontinuedIncome" class="financials__yoy">
                   중단영업 {{ formatAmount(row.discontinuedIncome, row.currencyCode) }}
                 </span>
+                <span v-if="row.commonIncome != null" class="financials__yoy">
+                  보통주 귀속 {{ formatAmount(row.commonIncome, row.currencyCode) }}
+                </span>
               </td>
               <td v-if="showCashFlow" class="financials__num">
                 {{ formatAmount(row.operatingCashFlow, row.currencyCode) }}

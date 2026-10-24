@@ -113,6 +113,20 @@ public class IndicatorDataReader {
             """;
 
     /**
+     * 보통주 귀속 이익(주당 지표 분자 · 탐색 {@code PERSHARE-NUM-PLAN-1024.md} v2.1). <b>미국 관문이 켜졌을 때만 읽는다</b> — 표가 그 관문의
+     * 마이그레이션과 함께 생긴다. 붙일 때의 {@code report_code}가 지금 행과 같을 때만 — 판이 바뀌었는데 유도가 아직 안 돈 행은 옛 값 대신
+     * 「붙은 것 없음」(그 창 미표시)이다.
+     */
+    private static final String COMMON_COLUMNS = """
+            , (SELECT ci.common FROM financial_common_income ci WHERE ci.financial_statement_id = financial_statement.id
+                 AND ci.report_code = financial_statement.report_code) AS common_income
+            , (SELECT ci.basis FROM financial_common_income ci WHERE ci.financial_statement_id = financial_statement.id
+                 AND ci.report_code = financial_statement.report_code) AS common_basis
+            , (SELECT ci.branch FROM financial_common_income ci WHERE ci.financial_statement_id = financial_statement.id
+                 AND ci.report_code = financial_statement.report_code) AS common_branch
+            """;
+
+    /**
      * 재무를 어느 시점의 눈으로 볼 것인가(ADR-0071).
      *
      * <p>MUST: 호출부가 <b>반드시 고른다.</b> 기본값을 주거나 시점용 메서드를 옆에 따로 두면
@@ -197,6 +211,9 @@ public class IndicatorDataReader {
     private static final String SELECT_FINANCIALS_LATEST_DISCONTINUED =
             SELECT_FINANCIALS_LATEST_TEMPLATE.formatted(FINANCIAL_COLUMNS + DISCONTINUED_COLUMNS);
 
+    private static final String SELECT_FINANCIALS_LATEST_COMMON =
+            SELECT_FINANCIALS_LATEST_TEMPLATE.formatted(FINANCIAL_COLUMNS + DISCONTINUED_COLUMNS + COMMON_COLUMNS);
+
     /**
      * 그 시점까지 공시된 <b>판 이력 전부</b>를 읽는다({@link FinancialVisibility#KNOWN_ON}).
      *
@@ -233,6 +250,9 @@ public class IndicatorDataReader {
 
     private static final String SELECT_FINANCIALS_KNOWN_ON_DISCONTINUED =
             SELECT_FINANCIALS_KNOWN_ON_TEMPLATE.formatted(FINANCIAL_COLUMNS + DISCONTINUED_COLUMNS);
+
+    private static final String SELECT_FINANCIALS_KNOWN_ON_COMMON =
+            SELECT_FINANCIALS_KNOWN_ON_TEMPLATE.formatted(FINANCIAL_COLUMNS + DISCONTINUED_COLUMNS + COMMON_COLUMNS);
 
     private static final RowMapper<PriceBar> PRICE_BAR_MAPPER = (rs, rowNum) -> new PriceBar(
             rs.getObject("trade_date", LocalDate.class),
@@ -515,13 +535,15 @@ public class IndicatorDataReader {
         RowMapper<FinancialFigures> mapper = (rs, rowNum) -> mapFigures(rs, line, discontinued);
         return switch (visibility) {
             case LATEST -> jdbcTemplate.query(
-                    (discontinued ? SELECT_FINANCIALS_LATEST_DISCONTINUED : SELECT_FINANCIALS_LATEST)
+                    (line != null ? SELECT_FINANCIALS_LATEST_COMMON
+                            : discontinued ? SELECT_FINANCIALS_LATEST_DISCONTINUED : SELECT_FINANCIALS_LATEST)
                             .formatted(periodOperator),
                     mapper,
                     stockId, asOf, limit);
             // MUST: limit을 넘기지 않는다 — 이 갈래는 판 이력을 통째로 준다(위 javadoc).
             case KNOWN_ON -> jdbcTemplate.query(
-                    (discontinued ? SELECT_FINANCIALS_KNOWN_ON_DISCONTINUED : SELECT_FINANCIALS_KNOWN_ON)
+                    (line != null ? SELECT_FINANCIALS_KNOWN_ON_COMMON
+                            : discontinued ? SELECT_FINANCIALS_KNOWN_ON_DISCONTINUED : SELECT_FINANCIALS_KNOWN_ON)
                             .formatted(periodOperator),
                     mapper,
                     stockId, asOf, asOf);
@@ -592,6 +614,8 @@ public class IndicatorDataReader {
                 state, weighted,
                 discontinued ? rs.getBigDecimal("discontinued_income") : null,
                 discontinued ? rs.getBigDecimal("discontinued_income_controlling") : null,
-                discontinued ? rs.getBigDecimal("discontinued_rule") : null);
+                discontinued ? rs.getBigDecimal("discontinued_rule") : null,
+                line == null ? null : new CommonIncomeRead(rs.getBigDecimal("common_income"), rs.getString("common_basis"),
+                        rs.getString("common_branch")));
     }
 }

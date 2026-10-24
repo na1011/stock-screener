@@ -68,6 +68,8 @@ class FinancialFiguresFixtureTest {
                 args.add("KRW");
             } else if (type.isEnum()) {
                 args.add(type.getEnumConstants()[0]);
+            } else if (type == com.stockscreener.indicator.CommonIncomeRead.class) {
+                args.add(new com.stockscreener.indicator.CommonIncomeRead(BigDecimal.valueOf(seq), "T", "decl"));
             } else {
                 throw new AssertionError(
                         "새 컴포넌트 타입이다. 이 표본에 그 타입의 값을 더해라: " + type);

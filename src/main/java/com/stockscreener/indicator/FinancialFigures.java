@@ -28,7 +28,8 @@ import java.time.LocalDate;
  * 귀속분</b>이다. <b>어느 쪽을 쓸지는 짝이 정한다.</b>
  * <ul>
  *   <li><b>주당 지표는 {@code netIncomeControlling}</b> — K-IFRS 1033이 주당이익을 지배기업
- *       보통주 귀속 이익으로 정의하고, 분모인 발행주식수도 보통주만이다.
+ *       보통주 귀속 이익으로 정의하고, 분모인 발행주식수도 보통주만이다. 미국 관문 켬은 거기서 우선주 배당 · 참가증권 · GP
+ *       배분까지 뺀 <b>보통주 귀속 이익</b>({@link #common} · {@link #commonContinuingIncome} · ADR-0191)이다.
  *       {@code DIVIDEND_PAYOUT}·{@code EXEC_PAY_TO_NET_INCOME}처럼 <b>순이익이 분모</b>인
  *       것도 이쪽이다 — 배당과 임원보수를 받는 몫이 지배주주의 것이다.
  *   <li><b>분모가 연결 총량인 지표는 {@code netIncome}</b> — {@code ROA}(총자산)·
@@ -136,7 +137,13 @@ public record FinancialFigures(
          * 「안 읽음」과 「읽었는데 모름」을 두 금액 칸만으로는 못 가른다 — 앞을 모름으로 읽으면 국내 27종목(최신 TTM에 안 닿은
          * 행 84)이 통째로 미표시된다(2026-10-23 운영 SELECT).
          */
-        BigDecimal discontinuedRule
+        BigDecimal discontinuedRule,
+
+        /**
+         * <b>보통주 귀속 이익</b>(미국 관문 켬만 · {@link CommonIncomeRead}). {@code null}은 「이 규칙으로 안 읽었다」(관문 꺼짐 · 국내)
+         * — 그때 주당 지표 분자는 이 축이 생기기 전과 같다.
+         */
+        CommonIncomeRead common
 ) {
 
     /**
@@ -161,19 +168,73 @@ public record FinancialFigures(
      * (탐색 {@code F2B-PLAN-1023.md} 1b).
      */
     public BigDecimal continuingIncomeControlling() {
-        if (netIncomeControlling == null) {
+        return continuingOf(netIncomeControlling);
+    }
+
+    /** 지배 몫 기저 하나에서 지배 중단을 뺀다 — 갈래 넷(규칙 없음 · 지배 중단 있음 · 연결 중단 0 · 모름)이 지배 NI와 보통주 몫에 같다. */
+    private BigDecimal continuingOf(BigDecimal base) {
+        if (base == null) {
             return null;
         }
         if (discontinuedRule == null) {
-            return netIncomeControlling;
+            return base;
         }
         if (discontinuedIncomeControlling != null) {
-            return netIncomeControlling.subtract(discontinuedIncomeControlling);
+            return base.subtract(discontinuedIncomeControlling);
         }
         if (discontinuedIncome != null && discontinuedIncome.signum() == 0) {
-            return netIncomeControlling;
+            return base;
         }
         return null;
+    }
+
+    /**
+     * <b>주당 지표의 분자 — 보통주 귀속 계속영업 순이익</b>(탐색 {@code PERSHARE-NUM-PLAN-1024.md} v2.1). 미국 관문 켬 행은 보통주 몫에서
+     * 지배 중단을 빼고({@link #continuingIncomeControlling}과 같은 갈래), 배분 0이면 지배 계속영업 그대로, 계속영업 몫으로 지었으면 그 값,
+     * 못 정했으면 {@code null}이다. 그 밖 행은 {@link #continuingIncomeControlling} 그대로다.
+     *
+     * <p>원장의 주당순이익(ASC 260 · IAS 33)은 지배주주 순이익에서 우선주 배당 · 참가증권 · GP 배분을 뺀 몫이다 — 지배 NI를 보통주 수로
+     * 나누면 그 몫이 얹힌다(TPG 33% · MCHP 48% · 은행 5~9% · HPE · APG는 부호가 뒤집힌다).
+     */
+    public BigDecimal commonContinuingIncome() {
+        if (common == null || common.sameAsControlling()) {
+            return continuingIncomeControlling();
+        }
+        if (common.value() == null) {
+            return null;
+        }
+        return common.continuing() ? common.value() : continuingOf(common.value());
+    }
+
+    /**
+     * <b>보통주 귀속 순이익(중단 포함)</b> — 배당성향의 분모(미국 배당 총액은 보통주 DPS × 보통주 수다). 이 규칙으로 안 읽은 행은
+     * {@code null}을 내고 호출부가 지배 NI 갈래로 간다.
+     */
+    public BigDecimal commonNetIncome() {
+        if (common == null) {
+            return null;
+        }
+        if (common.sameAsControlling()) {
+            return netIncomeControlling;
+        }
+        if (common.value() == null) {
+            return null;
+        }
+        if (!common.continuing()) {
+            return common.value();
+        }
+        if (discontinuedRule == null) {
+            return common.value();
+        }
+        if (discontinuedIncomeControlling != null) {
+            return common.value().add(discontinuedIncomeControlling);
+        }
+        return discontinuedIncome != null && discontinuedIncome.signum() == 0 ? common.value() : null;
+    }
+
+    /** 이 행이 보통주 귀속 규칙으로 읽혔는가(미국 관문 켬). */
+    public boolean readsCommonIncome() {
+        return common != null;
     }
 
     /** 저장 문자열을 enum으로. NULL은 {@link ShareBasis#OK}다. */

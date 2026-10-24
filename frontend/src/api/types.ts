@@ -604,6 +604,8 @@ export interface FinancialPeriod {
   netIncomeYoy: number | null
   /** 순이익 중 중단영업 손익(F2b · ADR-0184). 그 시장의 관문이 켜진 판정 행만 값이 있다. */
   discontinuedIncome: number | null
+  /** 보통주 귀속 순이익(미국 관문 켬 · 원장이 우선주 · 참가증권 · GP 배분을 뺀 값으로 정한 행만). PER · EPS의 분자다. */
+  commonIncome: number | null
 }
 
 /** 화면이 반드시 함께 그려야 하는 고지. 서버가 문구를 소유한다. */

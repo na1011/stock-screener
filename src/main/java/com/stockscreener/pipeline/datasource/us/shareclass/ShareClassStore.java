@@ -212,6 +212,46 @@ public class ShareClassStore {
         return new int[]{written, removed};
     }
 
+    /** 종목의 재무 행 전부(전 판) — 보통주 귀속 이익을 붙일 재료. 값은 재무 행 id. */
+    public Map<Long, CommonIncomeRows.Row> financialRows(long stockId) {
+        Map<Long, CommonIncomeRows.Row> out = new LinkedHashMap<>();
+        jdbcTemplate.query("""
+                SELECT id, fiscal_year, fiscal_period, revision_no, period_start, period_end, published_at, report_code,
+                       net_income_controlling
+                FROM financial_statement WHERE stock_id = ? ORDER BY fiscal_year, fiscal_period, revision_no
+                """, rs -> {
+            out.put(rs.getLong("id"), new CommonIncomeRows.Row(rs.getInt("fiscal_year"), rs.getString("fiscal_period"),
+                    rs.getInt("revision_no"), rs.getObject("period_start", LocalDate.class), rs.getObject("period_end", LocalDate.class),
+                    rs.getObject("published_at", LocalDate.class), rs.getString("report_code"),
+                    rs.getBigDecimal("net_income_controlling")));
+        }, stockId);
+        return out;
+    }
+
+    /**
+     * 재무 행마다 보통주 귀속 이익을 갈아 넣는다 — 바뀐 행만 쓴다. 행이 지워지면 표가 같이 지운다(FK).
+     *
+     * @return 쓴 행 수
+     */
+    public int replaceCommonIncome(Map<Long, CommonIncomeRows.Resolved> rows) {
+        int written = 0;
+        for (Map.Entry<Long, CommonIncomeRows.Resolved> e : rows.entrySet()) {
+            CommonIncomeRows.Resolved r = e.getValue();
+            written += jdbcTemplate.update("""
+                    INSERT INTO financial_common_income (financial_statement_id, report_code, common, basis, branch, engine_version)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    ON CONFLICT (financial_statement_id) DO UPDATE SET report_code = EXCLUDED.report_code, common = EXCLUDED.common,
+                        basis = EXCLUDED.basis, branch = EXCLUDED.branch, engine_version = EXCLUDED.engine_version, derived_at = now()
+                    WHERE (financial_common_income.report_code, financial_common_income.common, financial_common_income.basis,
+                           financial_common_income.branch, financial_common_income.engine_version)
+                      IS DISTINCT FROM (EXCLUDED.report_code, EXCLUDED.common, EXCLUDED.basis, EXCLUDED.branch, EXCLUDED.engine_version)
+                    """, e.getKey(), r.row().reportCode() == null ? "" : r.row().reportCode(),
+                    r.common() == null ? null : r.common().setScale(2, java.math.RoundingMode.HALF_UP), r.basis().name(),
+                    r.branch(), IssuerTimeline.ENGINE_VERSION);
+        }
+        return written;
+    }
+
     /** 시장의 활성 줄마다 판정과 분할 원장 — 순위 판독기·보류가 한 번에 읽는다. 판정이 없는 줄은 키가 없다. */
     public Map<Long, ShareClassLine> lines(String marketCode) {
         Map<Long, List<ShareClassLine.Verdict>> verdicts = verdictsByStock(marketCode);

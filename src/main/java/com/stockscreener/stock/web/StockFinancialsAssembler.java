@@ -121,7 +121,8 @@ public class StockFinancialsAssembler {
                 unusable ? null : yoy(row, prior, StockReader.FinancialRow::revenue),
                 unusable ? null : yoy(row, prior, StockReader.FinancialRow::operatingIncome),
                 unusable ? null : yoy(row, prior, StockReader.FinancialRow::netIncome),
-                unusable ? null : row.discontinuedIncome());
+                unusable ? null : row.discontinuedIncome(),
+                unusable ? null : row.commonIncome());
     }
 
     /**

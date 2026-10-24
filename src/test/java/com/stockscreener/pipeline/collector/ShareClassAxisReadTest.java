@@ -114,6 +114,46 @@ class ShareClassAxisReadTest {
     }
 
     @Test
+    @DisplayName("유도기 — 재무 행마다 보통주 귀속 이익을 붙인다(선언 NIC · 판의 report_code를 함께) · 다시 돌리면 쓰는 행이 없다")
+    void deriverAttachesCommonIncomeToFinancialRows() {
+        long stockId = insertStock("CLS4");
+        String accn = "0000004343-25-000001";
+        store.saveInput(stockId, 4343, """
+                {"facts":{"us-gaap":{
+                  "_filings":{"units":{"filing":[{"accn":"%1$s","form":"10-Q","filed":"2025-05-01"}]}},
+                  "WeightedAverageNumberOfSharesOutstandingBasic":{"units":{"shares":[
+                    {"start":"2025-01-01","end":"2025-03-31","val":480000000,"accn":"%1$s","form":"10-Q","filed":"2025-05-01"}]}},
+                  "EarningsPerShareBasic":{"units":{"USD/shares":[
+                    {"start":"2025-01-01","end":"2025-03-31","val":1.88,"accn":"%1$s","form":"10-Q","filed":"2025-05-01"}]}},
+                  "NetIncomeLoss":{"units":{"USD":[
+                    {"start":"2025-01-01","end":"2025-03-31","val":960000000,"accn":"%1$s","form":"10-Q","filed":"2025-05-01"}]}},
+                  "NetIncomeLossAvailableToCommonStockholdersBasic":{"units":{"USD":[
+                    {"start":"2025-01-01","end":"2025-03-31","val":902400000,"accn":"%1$s","form":"10-Q","filed":"2025-05-01"}]}}},
+                  "dei":{"EntityCommonStockSharesOutstanding":{"units":{"shares":[
+                    {"end":"2025-04-20","val":481000000,"accn":"%1$s","form":"10-Q","filed":"2025-05-01"}]}}}}}
+                """.formatted(accn));
+        insertRow(stockId, "10-Q:" + accn, 2025, "Q1", LocalDate.of(2025, 3, 31), LocalDate.of(2025, 5, 1), "481000000", 0, true);
+        jdbcTemplate.update("UPDATE financial_statement SET net_income_controlling = 960000000 WHERE stock_id = ?", stockId);
+
+        deriver.derive("US");
+        Map<String, Object> c = jdbcTemplate.queryForMap("""
+                SELECT ci.report_code, ci.common, ci.basis, ci.branch, ci.derived_at FROM financial_common_income ci
+                JOIN financial_statement f ON f.id = ci.financial_statement_id WHERE f.stock_id = ?
+                """, stockId);
+        deriver.derive("US");
+        Object again = jdbcTemplate.queryForObject("""
+                SELECT ci.derived_at FROM financial_common_income ci
+                JOIN financial_statement f ON f.id = ci.financial_statement_id WHERE f.stock_id = ?
+                """, Object.class, stockId);
+
+        assertThat(c.get("branch")).isEqualTo("decl");
+        assertThat((BigDecimal) c.get("common")).isEqualByComparingTo("902400000");
+        assertThat(c.get("basis")).isEqualTo("T");
+        assertThat(c.get("report_code")).isEqualTo("10-Q:" + accn);
+        assertThat(again).as("같은 재료면 행을 안 건드린다").isEqualTo(c.get("derived_at"));
+    }
+
+    @Test
     @DisplayName("유도기 — 닫힌 행은 비운 표지가 아니라 되찾은 기호로 상장 클래스를 잇는다(ERIE 2026-07-30 10-Q 꼴)")
     void closedRowIsJudgedByItsSymbol() {
         long stockId = insertStock("CLSE~2026-08-01");

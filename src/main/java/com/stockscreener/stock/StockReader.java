@@ -173,13 +173,21 @@ public class StockReader {
     @Transactional(readOnly = true)
     public List<FinancialRow> financialsOf(long stockId, int limit) {
         boolean discontinued = false;
+        boolean us = false;
         if (usGate || krGate) {
             List<String> market = jdbcTemplate.queryForList(
                     "SELECT market_code FROM stock WHERE id = ?", String.class, stockId);
-            discontinued = !market.isEmpty()
-                    && ("US".equals(market.get(0)) ? usGate : krGate);
+            us = !market.isEmpty() && "US".equals(market.get(0));
+            discontinued = !market.isEmpty() && (us ? usGate : krGate);
         }
         boolean withDiscontinued = discontinued;
+        // 미국 관문 켬 — 보통주 귀속 순이익(탐색 PERSHARE-NUM-PLAN-1024.md)을 함께 읽는다. 원장이 값으로 정한 중단 포함 몫만(배분 0이면
+        // 순이익과 같아 안 그린다 · 계속영업 몫이면 순이익과 기저가 달라 안 그린다).
+        boolean withCommon = withDiscontinued && us;
+        String extra = (withDiscontinued ? ", discontinued_income, discontinued_rule" : "")
+                + (withCommon ? ", (SELECT ci.common FROM financial_common_income ci WHERE ci.financial_statement_id = "
+                        + "financial_statement.id AND ci.report_code = financial_statement.report_code AND ci.basis = 'T') AS common_income"
+                        : "");
         return jdbcTemplate.query("""
                 SELECT fiscal_year, fiscal_period, published_at, revision_no, report_code,
                        currency_code,
@@ -189,7 +197,7 @@ public class StockReader {
                 WHERE stock_id = ? AND is_latest
                 ORDER BY period_end DESC, fiscal_period DESC
                 LIMIT ?
-                """.formatted(withDiscontinued ? ", discontinued_income, discontinued_rule" : ""),
+                """.formatted(extra),
                 (rs, n) -> new FinancialRow(
                         rs.getInt("fiscal_year"),
                         rs.getString("fiscal_period"),
@@ -206,7 +214,8 @@ public class StockReader {
                         rs.getBigDecimal("total_equity"),
                         // 판정 규칙으로 읽은 행만 — 안 읽은 행의 null을 「중단영업 없음」으로 그리지 않는다(F2b).
                         withDiscontinued && rs.getObject("discontinued_rule") != null
-                                ? rs.getBigDecimal("discontinued_income") : null),
+                                ? rs.getBigDecimal("discontinued_income") : null,
+                        withCommon ? rs.getBigDecimal("common_income") : null),
                 stockId, limit);
     }
 
@@ -476,7 +485,7 @@ public class StockReader {
                                BigDecimal revenue, BigDecimal operatingIncome, BigDecimal netIncome,
                                BigDecimal operatingCashFlow, BigDecimal totalAssets,
                                BigDecimal totalLiabilities, BigDecimal totalEquity,
-                               BigDecimal discontinuedIncome) {
+                               BigDecimal discontinuedIncome, BigDecimal commonIncome) {
     }
 
     /** 업종 자체의 크기. 지표별 표본은 {@code _SECTOR_N}이 따로 답한다. */

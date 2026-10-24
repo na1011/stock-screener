@@ -2,6 +2,8 @@ package com.stockscreener.pipeline.collector;
 
 import com.stockscreener.pipeline.datasource.us.shareclass.ClassFactReader;
 import com.stockscreener.pipeline.datasource.us.shareclass.ClassFacts;
+import com.stockscreener.pipeline.datasource.us.shareclass.CommonIncome;
+import com.stockscreener.pipeline.datasource.us.shareclass.CommonIncomeRows;
 import com.stockscreener.pipeline.datasource.us.shareclass.IssuerFacts;
 import com.stockscreener.pipeline.datasource.us.shareclass.IssuerTimeline;
 import com.stockscreener.pipeline.datasource.us.shareclass.ShareClassStore;
@@ -15,6 +17,7 @@ import tools.jackson.databind.ObjectMapper;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -93,7 +96,27 @@ public class ShareClassDeriver {
             }
         }
         int[] replaced = store.replaceVerdicts(input.stockId(), input.cik(), rows);
+        commonIncome(input, cf, timeline, facts, judged);
         return new int[]{rows.size(), hidden, replaced[0], replaced[1]};
+    }
+
+    /**
+     * 재무 행마다 보통주 귀속 이익(주당 지표 분자 · 탐색 {@code PERSHARE-NUM-PLAN-1024.md} v2.1) — 판정과 같은 재료 · 같은 판정의 n으로
+     * 공시 × 기간 값을 정하고 행의 판에 맞춰 붙인다. 판정과 한 트랜잭션이라 둘이 갈린 채 남지 않는다.
+     */
+    private void commonIncome(ShareClassStore.Input input, IssuerFacts cf, IssuerTimeline timeline, Map<String, ClassFacts> facts,
+                              List<IssuerTimeline.Verdict> judged) {
+        Map<IssuerFacts.Key, CommonIncome.Value> keys =
+                timeline.commonIncomes(cf, cf.anchorCandidates(), facts::get, store.splits(input.stockId()), judged);
+        Map<Long, CommonIncomeRows.Row> rows = store.financialRows(input.stockId());
+        List<Long> ids = new ArrayList<>(rows.keySet());
+        List<CommonIncomeRows.Resolved> resolved =
+                CommonIncomeRows.resolve(new ArrayList<>(rows.values()), keys);
+        Map<Long, CommonIncomeRows.Resolved> byId = new LinkedHashMap<>();
+        for (int i = 0; i < ids.size(); i++) {
+            byId.put(ids.get(i), resolved.get(i));
+        }
+        store.replaceCommonIncome(byId);
     }
 
     static ShareClassStore.VerdictRow row(IssuerTimeline.Verdict v, IssuerFacts cf, ClassFacts facts) {

@@ -88,8 +88,11 @@ class ShareClassCollectorTest {
                 new ClassFacts.Period(LocalDate.of(2026, 4, 1), LocalDate.of(2026, 6, 30)));
         IssuerFacts.Key earlier = new IssuerFacts.Key("D2",
                 new ClassFacts.Period(LocalDate.of(2026, 1, 1), LocalDate.of(2026, 3, 31)));
-        IssuerFacts cf = new IssuerFacts(filings, Map.of(earlier, 992_000_000d), Map.of(), Map.of(),
-                Map.of(quarter, 450_000_000d), Map.of("D1", 992_674_071d, "D2", 992_068_697d));
+        // D2는 분자도 companyfacts로 선다(NI = EPS × 분모) — 분자 후보(ADR-0191)로 받히지 않게 해 이 시험이 분모 축만 잰다.
+        IssuerFacts cf = new IssuerFacts(filings, Map.of(earlier, 992_000_000d), Map.of(earlier, 2.00), Map.of(),
+                Map.of(quarter, 450_000_000d), Map.of("D1", 992_674_071d, "D2", 992_068_697d), IssuerFacts.Witnesses.NONE,
+                new IssuerFacts.Numerators(Map.of(earlier, 2.00), Map.of(), Map.of(quarter, 450_000_000d, earlier, 1_984_000_000d),
+                        Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of()));
 
         ShareClassCollector.Outcome outcome = new ShareClassCollector(client, store).fetchInstances(CIK, cf, "test");
 

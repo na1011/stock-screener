@@ -249,8 +249,8 @@ final class FinancialMath {
         }
 
         /**
-         * 그 기(期)의 <b>지배주주 귀속 12개월 계속영업 순이익</b>. 주당 지표(PER · EPS 계열)의 분자다. 창 단위 폴백은 기저마다
-         * 다르다 — {@link #sumControllingContinuingIncome} · {@link #controllingContinuingIncomeOf}.
+         * 그 기(期)의 <b>지배주주 귀속 12개월 계속영업 순이익</b>(미국 관문 켬은 <b>보통주 귀속</b> — ADR-0191). 주당 지표(PER · EPS
+         * 계열)의 분자다. 창 단위 폴백은 기저마다 다르다 — {@link #sumControllingContinuingIncome} · {@link #controllingContinuingIncomeOf}.
          */
         BigDecimal controllingTtm(int offset) {
             if (basis == PeriodBasis.QUARTERLY) {
@@ -402,6 +402,10 @@ final class FinancialMath {
      * 유지」도 아니다 — 그 오차가 연결 중단영업 안이라는 보장이 2,996칸 중 89.5%에서만 선다.
      */
     static BigDecimal sumControllingContinuingIncome(List<FinancialFigures> quarters, int offset) {
+        if (readsCommonIncome(quarters, offset)) {
+            // [보통주 몫 · 미국 관문 켬] 창 단위 연결 폴백을 안 탄다 — 연결 몫이 보통주 몫이라는 근거가 없다. 못 정한 분기가 있으면 비운다.
+            return sumFourQuarters(quarters, FinancialFigures::commonContinuingIncome, offset);
+        }
         BigDecimal controlling =
                 sumFourQuarters(quarters, FinancialFigures::netIncomeControlling, offset);
         if (controlling != null) {
@@ -415,9 +419,34 @@ final class FinancialMath {
         if (annual == null) {
             return null;
         }
+        if (annual.readsCommonIncome()) {
+            return annual.commonContinuingIncome();
+        }
         return annual.netIncomeControlling() != null
                 ? annual.continuingIncomeControlling()
                 : annual.continuingIncome();
+    }
+
+    /**
+     * 연간 한 행의 <b>보통주 귀속 순이익(중단 포함)</b> — {@code DIVIDEND_PAYOUT}의 분모. 미국 배당 총액이 보통주 DPS × 보통주 수라
+     * 분모도 보통주 몫이어야 짝이다(탐색 {@code PERSHARE-NUM-PLAN-1024.md}). 이 규칙으로 안 읽은 행(관문 꺼짐 · 국내 — 국내 총액은 우선주
+     * 배당을 포함한다)은 {@link #controllingNetIncomeOf} 그대로다.
+     */
+    static BigDecimal commonNetIncomeOf(FinancialFigures annual) {
+        if (annual != null && annual.readsCommonIncome()) {
+            return annual.commonNetIncome();
+        }
+        return controllingNetIncomeOf(annual);
+    }
+
+    /** 창의 네 분기 중 하나라도 보통주 귀속 규칙으로 읽혔는가 — 한 종목의 행은 다 같은 관문 상태라 사실상 전부 · 전무다. */
+    private static boolean readsCommonIncome(List<FinancialFigures> quarters, int offset) {
+        for (int i = offset; i < Math.min(quarters.size(), offset + 4); i++) {
+            if (quarters.get(i).readsCommonIncome()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

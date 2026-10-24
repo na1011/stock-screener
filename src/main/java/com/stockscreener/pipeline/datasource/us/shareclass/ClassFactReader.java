@@ -50,8 +50,11 @@ public final class ClassFactReader {
      * 5 — LP 단위(ADR-0187): LP 단위 가중평균을 LP 클래스 축에서도 받고(표지 클래스 구성원만), LP+GP 합계 단위를 다른 가중평균이 없는
      * 자리의 폴백으로 싣는다(SUN · GEL · 2026-10-23). 6 — 지금 경로 분모(ADR-0189): 축 하나만 단 가중평균을 {@link #DIMENSIONED} 칸에
      * 싣는다(재작성 · 연결 · 법인 축과 형 붙은 차원 제외 · BKR · CBSH · LYB · SJM · PAA는 축 맥락에만 싣는다 · 2026-10-24).
+     * 7 — 보통주 귀속 이익 재료({@link #NUMERATOR_MATERIAL} · 우선주 배당 · 참가증권 · GP · LP 배분 · LP 단위 EPS · 비지배)를 싣고, 총 EPS도
+     * {@link #DIMENSIONED} 칸에 싣는다 — 보충 · 앵커 공시는 companyfacts에 없어 인스턴스가 유일한 재료이고, EPS를 LP 클래스 축 보통 단위에만
+     * 싣는 발행사(PAA)가 있다(탐색 {@code PERSHARE-NUM-PLAN-1024.md} v2.1 · 2026-10-25). 판정은 그 칸의 가중평균만 읽는다.
      */
-    public static final int READER_VERSION = 6;
+    public static final int READER_VERSION = 7;
 
     public static final String SHARES_OUTSTANDING = "EntityCommonStockSharesOutstanding";
     public static final String TRADING_SYMBOL = "TradingSymbol";
@@ -77,6 +80,26 @@ public final class ClassFactReader {
     public static final List<String> EPS_TAGS = List.of("EarningsPerShareBasic", "EarningsPerShareBasicAndDiluted",
             "IncomeLossFromContinuingOperationsPerBasicShare");
     public static final String DECLARED_NUMERATOR = "NetIncomeLossAvailableToCommonStockholdersBasic";
+    /** 총 EPS — 기본 · 기본겸희석 · LP 단위 기본(LP 단위 EPS는 분모 판정의 EPS 목록 밖 · ADR-0187 §버린 대안). */
+    public static final List<String> TOTAL_EPS = List.of("EarningsPerShareBasic", "EarningsPerShareBasicAndDiluted",
+            "NetIncomeLossPerOutstandingLimitedPartnershipUnitBasicNetOfTax",
+            "NetIncomeLossPerOutstandingLimitedPartnershipUnitBasicAndDilutedNetOfTax",
+            "NetIncomeLossPerOutstandingLimitedPartnershipAndGeneralPartnershipUnitBasicAndDiluted");
+    public static final List<String> CONTINUING_EPS = List.of("IncomeLossFromContinuingOperationsPerBasicShare");
+    public static final List<String> PREFERRED_DIVIDENDS = List.of("PreferredStockDividendsAndOtherAdjustments",
+            "PreferredStockDividendsIncomeStatementImpact", "DividendsPreferredStock");
+    public static final List<String> PARTICIPATING = List.of("ParticipatingSecuritiesDistributedAndUndistributedEarningsLossBasic",
+            "UndistributedEarningsLossAllocatedToParticipatingSecuritiesBasic");
+    public static final String GENERAL_PARTNER = "NetIncomeLossAllocatedToGeneralPartners";
+    public static final String LIMITED_PARTNERS = "NetIncomeLossAllocatedToLimitedPartners";
+    public static final String NONCONTROLLING = "NetIncomeLossAttributableToNoncontrollingInterest";
+    /** 희석 EPS · 희석 가중평균 — 기본 EPS 없이 희석만 실은 공시의 배분 0 증인(POR 2025 Q1 10-Q). */
+    public static final String DILUTED_EPS = "EarningsPerShareDiluted";
+    public static final String DILUTED_WEIGHTED = "WeightedAverageNumberOfDilutedSharesOutstanding";
+    /** 보통주 귀속 이익 재료 태그 전부 — 가지치기 · 인스턴스 판독기가 같은 목록을 본다. */
+    public static final List<String> NUMERATOR_MATERIAL = java.util.stream.Stream.of(TOTAL_EPS, CONTINUING_EPS, PREFERRED_DIVIDENDS, PARTICIPATING,
+            List.of(GENERAL_PARTNER, LIMITED_PARTNERS, NONCONTROLLING, "NetIncomeLoss", "ProfitLoss", DILUTED_EPS, DILUTED_WEIGHTED))
+            .flatMap(List::stream).toList();
     public static final List<String> NUMERATOR_TAGS = List.of(DECLARED_NUMERATOR, "NetIncomeLoss", "ProfitLoss");
 
     private static final Set<String> COVER = Set.of(SHARES_OUTSTANDING, TRADING_SYMBOL, SECURITY_TITLE);
@@ -86,7 +109,7 @@ public final class ClassFactReader {
      */
     private static final Set<String> LISTING_COVER = Set.of(TRADING_SYMBOL, SECURITY_EXCHANGE, SECURITY_TITLE, DEPOSITORY_RATIO,
             SHARES_OUTSTANDING);
-    private static final Set<String> DURATION = Set.copyOf(concat(WEIGHTED_TAGS, EPS_TAGS, NUMERATOR_TAGS));
+    private static final Set<String> DURATION = Set.copyOf(concat(WEIGHTED_TAGS, EPS_TAGS, NUMERATOR_TAGS, NUMERATOR_MATERIAL));
     /** LP 축을 클래스 축으로 받는 개념 — LP 단위 가중평균과 그 합계 폴백뿐이다(법인 태그는 안 넓힌다 — REIT 운영 파트너십 단위). */
     private static final Set<String> LP_UNIT_TAGS = Set.copyOf(concat(List.of("WeightedAverageLimitedPartnershipUnitsOutstanding"),
             WEIGHTED_FALLBACK_TAGS));
@@ -241,7 +264,7 @@ public final class ClassFactReader {
             String local = raw.concept();
             String text = raw.text();
             String decimals = raw.decimals();
-            if (coverConcepts == COVER && WEIGHTED_TAGS.contains(local)
+            if (coverConcepts == COVER && (WEIGHTED_TAGS.contains(local) || TOTAL_EPS.contains(local))
                     && c.start() != null && c.end() != null && c.dims().size() == 1
                     && !OTHER_VERSION_AXES.contains(c.dims().keySet().iterator().next())
                     && !"typed".equals(c.dims().values().iterator().next())) {
