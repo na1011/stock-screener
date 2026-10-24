@@ -149,3 +149,30 @@
 | 밖 5 | ADR-0085 premise 침묵 · 분자 펜스 없음 | 2g |
 | 밖 6 | 관문 절차 | 2g |
 | 밖 따로 | CREX FY2023 행 공시일 2022-11-14(기말보다 앞) | 이 계획 밖 — 보고 |
+
+## 7. v2 반증 판정 (2026-10-24~25 · 안 「고쳐서 간다」 · 밖 「고쳐서 간다」) → v2.1
+
+v2.1은 2~3절을 아래로 고친다(뼈대 — 엔진 사다리 · 관문 뒤 · 새 표 — 는 그대로).
+
+**v2.1 저장 단위: 재무 행.** 유도(`ShareClassDeriver`)가 키 값(공시 × 기간 · 사다리)을 낸 뒤 그 종목의 **`financial_statement` 행마다**(전 판 · `uq_fs_revision` = 종목 · 연도 · 기간 · 개정) 보통주 몫을 정해 `financial_common_income(stock_id, fiscal_year, fiscal_period, revision_no, report_code, common, basis T|C, branch)`에 갈아 넣는다. 지표 · 재무 탭 · 배당 게이트가 같은 행 값을 읽는다(밖 7 — Q4를 두 번 구현하지 않는다).
+- 행 → 키: `(report_code 접수번호, 행 기간)` 키에 그 기간 손익이 있으면 그것, 없으면 같은 기간 키 중 공시일 ≤ 행 공시일의 최신(안 2 — ACA 2025 FY 행 = 2026 Q1 10-Q는 그 기간 손익 0팩트).
+- `ni` 갈래(배분 0)는 값 대신 표지만 — 읽을 때 **행 지배 NI**(어댑터가 mistag까지 고친 값)를 쓴다. 키의 NetIncomeLoss에서 배분을 빼지 않는다(안 1 · 4 — AMRX 2022 Q3 부호 · ES 이중 차감 · CAT · MA는 키에 NetIncomeLoss가 없다).
+- Q4 행: 그 10-K에 Q4 3개월 키가 있으면 그 키, 없으면 **FY 행 몫 − 어댑터가 쓴 세 분기 판**(`buildQ4`의 `vintageOf(Qi, FY 공시일)` = 공시일 ≤ FY 공시일인 최신 판 행)의 몫(안 8 — 819행이 뒤 판을 가진다).
+- 기저: 키 값이 계속영업 EPS에서 왔으면 `C`(지표가 그대로 계속영업 몫으로 · 중단을 다시 안 뺀다), 그 밖 `T`(F2b 네 갈래 `continuingIncomeControlling`의 기저만 바꿔 태운다 · 배당성향은 `T` 그대로, `C`면 + 지배 중단)(안 7 · 밖 7).
+
+**사다리 고침**
+- NI 폐합 후보: 키 `NetIncomeLoss` → 없으면 `ProfitLoss − NetIncomeLossAttributableToNoncontrollingInterest`(둘 다 그 키) — 없으면 폐합 안 함(안 1 · 10).
+- 갈래 2 태그는 묶음마다 하나: 우선주(`PreferredStockDividendsAndOtherAdjustments` → `PreferredStockDividendsIncomeStatementImpact` → `DividendsPreferredStock` 순 첫 값) · 참가증권(총액 S1 → 없으면 미배분 S2) · GP 배분(안 5 — AIG [8M, 8M] · ALB 11.584M × 2).
+- W: 그 공시 당기 + 지금 경로 판정이면 판정 n · 그 밖(비교열 · 연간 · 9개월)은 그 키의 가중평균이 표지와 **10배 자릿수**(|log10| < 1) 안일 때 · 표지가 없는 공시(6-K)는 `referenceCovers`(공시일 기준 중앙값)와(안 3 — ±12.7%는 비교열 481키 · 172종목을 버렸다 · 6-K AER · CAMT · DSGX · ICLR · TSEM).
+- EPS는 총 EPS 태그를 첫 태그 우선으로 따로 읽고, 계속영업 EPS는 그것이 없을 때만 · 기저 `C` 표지(안 6b · 7 — `IssuerFacts.eps`는 `putIfAbsent`라 계속영업이 섞인다 · 280키).
+- 클래스 합(갈래 6): 키 기간마다 인스턴스의 클래스 구성원 총 EPS × W(첫 태그 우선) · EPS 구성원이 없으면 축 없는 총 EPS × Σ W_m(안 6a · 6c — 앵커 비교열 89).
+- 인스턴스 재료: `ClassFactReader` DURATION에 우선주 · 참가증권 · GP · LP 배분 · LP 단위 EPS · `ProfitLoss` NCI 태그를 더하고 `IssuerFacts.prune` 허용 목록도 · `READER_VERSION` 6 → 7(안 9 — 지금은 인스턴스 키에서 갈래 3이 늘 참).
+
+**하류**
+- 배당 주식수 20% 게이트(`GovernanceFactDeriver.withClassAxisShares`)의 함의 분자를 관문 켬에서 행 보통주 몫(T)으로(밖 1 — HPE · VST 등 19종목 총액이 기각돼 앵커가 앞 해로 물러나 낡은 배당성향). 꺼짐 SQL은 그대로.
+- 문구(밖 4): 미표시 사유는 두 시장에 다 참인 말로 바꾼다(「주당순이익(EPS)이 0 이하」) — 미국 관문 jar 커밋. 설명의 「보통주 귀속」은 두 시장 분자가 다 고쳐진 뒤의 관문 jar 커밋.
+- 펜스(밖 8): 새 premise는 지표 출력으로 센다(재무 행은 있는데 PER · EPS_TTM이 함께 없는 관문 켬 미국 현 편입 수 ≤ 드라이런). ADR-0085 premise의 미국 몫은 보통주 몫으로 — 배당 게이트를 고친 뒤.
+- 드라이런 수용(밖 6): 프리셋 필수 조건(`EPS_CAGR_5Y` 린치 두 띠) 통과 집합 전후 diff · 창 넷(최신 · 직전 TTM · 20분기 전 · FY 2~6) · 숨김을 원인(NI 정의 · 키 출처 · W · 태그 · 클래스 합 · 계속영업 기저)으로 나눠 센다.
+- 관문 재고: 국내 표에 「주당 지표 분자 — 우선주 몫」 행(밖 3) · 미국 B 항목 「성장률 과거 끝점이 그날 최신보다 옛 공시를 고른다」(밖 5 — −1년 108/981 · −5년 175/893 · GS 3.1% · 관문 켬 · 꺼짐 둘 다 · 이 계획 밖).
+
+**국내(밖 2)**: v2 5절의 「묻지 않는다」를 거둔다. ADR-0098 §배경 · §결과가 「네이버와 12% 차이는 우선주 분모 하나로 설명된다 — 결함이 아니다」라 적었고 사용자는 그 설명 위에서 골랐다. 고친 분자로는 삼성전자 EPS 약 22,262(계산 · 안 잼) 대 네이버 22,292 — 12%는 우리 분자의 결함이었다. 승인 설명이 거짓이므로 사용자에게 다시 묻는다. 미국 일은 기다리지 않는다.
