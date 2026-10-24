@@ -72,6 +72,8 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
     private final SecFilingClient.Backoff backoff;
     /** 클래스 축 재료 받기 — 관문 설정이 켜졌을 때만 부른다. 시험 생성자는 {@code null}(받지 않는다). */
     private final ShareClassCollector shareClass;
+    /** companyfacts 404를 빈 facts로 받아도 되는가(관문 뒤 · ADR-0190). 시험 생성자는 {@link CompanyFactsHistory#NONE}. */
+    private final CompanyFactsHistory history;
 
     /**
      * MUST — {@code @Autowired}를 유지한다. 생성자가 둘이면 Spring이 어느 쪽을 쓸지 정하지
@@ -85,10 +87,11 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
                                     SecFilingSupplement supplement,
                                     ShareClassCollector shareClass,
                                     DepositaryCoverCollector depositary,
+                                    CompanyFactsHistory history,
                                     @Value("${stockscreener.gate.us}") boolean usGate) {
         this(clientFactory, properties, rateLimiter, cikCache,
                 properties.getSecEdgar().getBaseUrl(), usGate, supplement, SecFilingClient.Backoff.standard(), shareClass,
-                depositary);
+                depositary, history);
     }
 
     /** MockWebServer 테스트 전용 — base URL만 바꿔 끼운다. 관문 설정은 꺼진 채이고 보충하지 않는다. */
@@ -108,8 +111,20 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
                              String baseUrl,
                              boolean usGate,
                              FilingSupplementer supplementer) {
+        this(clientFactory, properties, rateLimiter, cikCache, baseUrl, usGate, supplementer, CompanyFactsHistory.NONE);
+    }
+
+    /** 시험 전용 — companyfacts 이력 판정을 끼운다(ADR-0190). */
+    SecEdgarFinancialAdapter(ExternalApiClientFactory clientFactory,
+                             DataSourceProperties properties,
+                             RateLimiter rateLimiter,
+                             SecTickerCikCache cikCache,
+                             String baseUrl,
+                             boolean usGate,
+                             FilingSupplementer supplementer,
+                             CompanyFactsHistory history) {
         this(clientFactory, properties, rateLimiter, cikCache, baseUrl, usGate, supplementer,
-                new SecFilingClient.Backoff(SecFilingClient.Backoff.STANDARD_MILLIS, millis -> { }), null, null);
+                new SecFilingClient.Backoff(SecFilingClient.Backoff.STANDARD_MILLIS, millis -> { }), null, null, history);
     }
 
     SecEdgarFinancialAdapter(ExternalApiClientFactory clientFactory,
@@ -121,7 +136,8 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
                              FilingSupplementer supplementer,
                              SecFilingClient.Backoff backoff,
                              ShareClassCollector shareClass,
-                             DepositaryCoverCollector depositary) {
+                             DepositaryCoverCollector depositary,
+                             CompanyFactsHistory history) {
         DataSourceProperties.Source source = properties.getSecEdgar();
         this.client = clientFactory.create(source, baseUrl, SecEdgarHeaders.of(source));
         this.rateLimiter = rateLimiter;
@@ -132,6 +148,7 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
         this.backoff = backoff;
         this.shareClass = shareClass;
         this.depositary = depositary;
+        this.history = history;
     }
 
     @Override
@@ -163,7 +180,17 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
 
         String context = "companyfacts %s %s".formatted(
                 security.ticker(), SecTickerCikCache.padded(cik.get()));
-        JsonNode facts = fetchFacts(cik.get(), context);
+        ResponseEntity<String> response = factsResponse(cik.get(), context);
+        JsonNode facts;
+        if (response.getStatusCode().value() == 404 && usGate && history.supplementOnly(security.stockId(), cik.get())) {
+            // companyfacts가 그 발행사를 아직 안 지었다 — 공시 인스턴스는 재무를 준다(MAKO · SCZM · TGE 40-F/20-F · 2026-10-24 실측).
+            // 「200인데 facts가 빔」(AUGO · AERO)과 같은 갈래로 공시 보충에 넘긴다. companyfacts 이력이 있는 종목의 404는 그대로
+            // NOT_FOUND다 — 일시 사건이나 등록인 교체를 빈 트리로 이으면 클래스 축 재료 · 부재 표 · 보충 판이 덮인다(ADR-0190).
+            log.info("companyfacts 404 — 빈 트리로 공시 보충에 넘긴다. {}", context);
+            facts = tools.jackson.databind.node.JsonNodeFactory.instance.objectNode();
+        } else {
+            facts = SecEdgarResponse.requireFacts(response.getStatusCode(), response.getBody(), context);
+        }
         if (!(facts instanceof ObjectNode tree)) {
             throw new DataSourceException(DataSourceException.Kind.MALFORMED, SecEdgarResponse.SOURCE_NAME,
                     "facts가 객체가 아니다. " + context);
@@ -256,14 +283,18 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
     }
 
     private JsonNode fetchFacts(long cik, String context) throws DataSourceException {
+        ResponseEntity<String> response = factsResponse(cik, context);
+        return SecEdgarResponse.requireFacts(response.getStatusCode(), response.getBody(), context);
+    }
+
+    private ResponseEntity<String> factsResponse(long cik, String context) throws DataSourceException {
         // MUST: CIK를 10자리 zero-padding한다. 안 하면 404이고, 개발가이드가 그것을
         // 404의 최다 원인으로 적었다. 실측에서도 CIK320193.json이 404였다.
-        ResponseEntity<String> response = SecFilingClient.fetch(rateLimiter, backoff, () -> client.get()
+        return SecFilingClient.fetch(rateLimiter, backoff, () -> client.get()
                         .uri("/api/xbrl/companyfacts/{cik}.json", SecTickerCikCache.padded(cik))
                         .retrieve()
                         .toEntity(String.class),
                 received -> SecEdgarResponse.unreadableJson(received.getBody()), context);
-        return SecEdgarResponse.requireFacts(response.getStatusCode(), response.getBody(), context);
     }
 
     /**

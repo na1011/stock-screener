@@ -106,6 +106,11 @@ class SecFilingSupplementCacheLiveTest {
             }
             String padded = SecTickerCikCache.padded(cik.get());
             byte[] facts = get(data, dataBackoff, "/api/xbrl/companyfacts/" + padded + ".json", null, JSON);
+            if (facts == null && "on".equals(System.getenv("SUPP_EMPTY_ON_404"))) {
+                // 관문 켬 어댑터가 companyfacts 404를 빈 트리로 받아 보충으로 잇는 것을 재현한다(ADR-0190 드라이런).
+                facts = ("{\"cik\":" + cik.get() + ",\"facts\":{}}").getBytes(StandardCharsets.UTF_8);
+                report.append(ticker).append("\tcompanyfacts-empty-substituted\n");
+            }
             if (facts == null) {
                 report.append(ticker).append("\tcompanyfacts-failed\n");
                 continue;

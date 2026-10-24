@@ -603,6 +603,34 @@ class SecEdgarFinancialAdapterTest {
     }
 
     @Test
+    @DisplayName("관문 켬 · 보충만으로 쌓인 종목의 companyfacts 404는 빈 트리로 공시 보충에 넘긴다(ADR-0190) — 꺼짐 · companyfacts 이력은 NOT_FOUND")
+    void notFoundGoesToTheSupplementOnlyBehindTheGateWithoutCompanyFactsHistory() throws Exception {
+        java.util.List<Long> supplemented = new java.util.ArrayList<>();
+        FilingSupplementer recording = (cik, facts, from, context) -> {
+            assertThat(facts.isEmpty()).as("빈 트리").isTrue();
+            supplemented.add(cik);
+            return SecFilingSupplement.Outcome.none();
+        };
+
+        enqueue(200, fixture("tickers.json"));
+        enqueue(404, "<?xml version=\"1.0\"?><Error><Code>NoSuchKey</Code></Error>");
+        assertThat(adapter(true, recording, (stockId, cik) -> true).fetchReports(FIX, FROM).reports()).isEmpty();
+        assertThat(supplemented).hasSize(1);
+
+        enqueue(200, fixture("tickers.json"));
+        enqueue(404, "<?xml version=\"1.0\"?><Error><Code>NoSuchKey</Code></Error>");
+        assertThatThrownBy(() -> adapter(true, recording, (stockId, cik) -> false).fetchReports(FIX, FROM))
+                .as("companyfacts 이력이 있는 종목 — 일시 404 · 등록인 교체를 빈 트리로 잇지 않는다")
+                .hasFieldOrPropertyWithValue("kind", DataSourceException.Kind.NOT_FOUND);
+
+        enqueue(200, fixture("tickers.json"));
+        enqueue(404, "<?xml version=\"1.0\"?><Error><Code>NoSuchKey</Code></Error>");
+        assertThatThrownBy(() -> adapter(false, recording, (stockId, cik) -> true).fetchReports(FIX, FROM))
+                .as("관문 꺼짐은 그대로다").hasFieldOrPropertyWithValue("kind", DataSourceException.Kind.NOT_FOUND);
+        assertThat(supplemented).as("이력 있음 · 꺼짐은 보충까지 안 간다").hasSize(1);
+    }
+
+    @Test
     @DisplayName("403을 AUTH로 접지 않는다 — 접으면 스로틀 한 번이 배치 전체를 죽인다")
     void doesNotEscalateForbiddenToAuth() {
         enqueue(200, fixture("tickers.json"));
@@ -732,6 +760,15 @@ class SecEdgarFinancialAdapterTest {
         TokenBucketRateLimiter limiter = new TokenBucketRateLimiter("sec-edgar", 0, 0);
         return new SecEdgarFinancialAdapter(factory, properties, limiter,
                 new SecTickerCikCache(factory, properties, limiter, baseUrl(), 1), baseUrl());
+    }
+
+    private SecEdgarFinancialAdapter adapter(boolean usGate, FilingSupplementer supplementer, CompanyFactsHistory history) {
+        DataSourceProperties properties = new DataSourceProperties();
+        properties.getSecEdgar().setApiKey("Test Runner test@example.com");
+        ExternalApiClientFactory factory = new ExternalApiClientFactory();
+        TokenBucketRateLimiter limiter = new TokenBucketRateLimiter("sec-edgar", 0, 0);
+        return new SecEdgarFinancialAdapter(factory, properties, limiter,
+                new SecTickerCikCache(factory, properties, limiter, baseUrl(), 1), baseUrl(), usGate, supplementer, history);
     }
 
     private String baseUrl() {
