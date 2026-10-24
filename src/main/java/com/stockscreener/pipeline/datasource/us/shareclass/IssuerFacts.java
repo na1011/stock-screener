@@ -21,7 +21,25 @@ public record IssuerFacts(Map<String, Filing> filings,
                           Map<Key, Double> eps,
                           Map<Key, Double> declaredNumerator,
                           Map<Key, Double> proxyNumerator,
-                          Map<String, Double> coverShares) {
+                          Map<String, Double> coverShares,
+                          Witnesses witnesses) {
+
+    public IssuerFacts(Map<String, Filing> filings, Map<Key, Double> weighted, Map<Key, Double> eps,
+                       Map<Key, Double> declaredNumerator, Map<Key, Double> proxyNumerator, Map<String, Double> coverShares) {
+        this(filings, weighted, eps, declaredNumerator, proxyNumerator, coverShares, Witnesses.NONE);
+    }
+
+    /**
+     * 지금 경로 분모를 확인 · 대신하는 재료(ADR-0189). {@code laterTags}: 같은 (공시, 기간)에 태그 순서 뒤에 실린 가중평균 값 —
+     * 앞 태그 값이 단위 오태깅이면 다음 값을 본다(AMCR {@code WeightedAverageNumberOfSharesIssuedBasic}). {@code diluted}: 희석
+     * 가중평균 — 원장이 기본 = 희석을 선언한 기간만 쓴다. {@code proForma}: {@code WeightedAverageBasicSharesOutstandingProForma} —
+     * 그 기간의 기본 EPS와 엄격히 닫힐 때만 쓴다(VTRS). {@code basicAndDilutedEps}: EPS가 {@code EarningsPerShareBasicAndDiluted}로 실린
+     * 기간. {@code epsDiluted} · {@code dilutedNumerator}: 희석 EPS와 희석 분자.
+     */
+    public record Witnesses(Map<Key, List<Double>> laterTags, Map<Key, Double> diluted, Map<Key, Double> proForma,
+                            Map<Key, Double> epsDiluted, Map<Key, Double> dilutedNumerator, java.util.Set<Key> basicAndDilutedEps) {
+        public static final Witnesses NONE = new Witnesses(Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), java.util.Set.of());
+    }
 
     public record Filing(String form, LocalDate filed) {
     }
@@ -37,13 +55,18 @@ public record IssuerFacts(Map<String, Filing> filings,
             "WeightedAverageNumberOfShareOutstandingBasicAndDiluted");
     /**
      * 판독기 목록({@link ClassFactReader#WEIGHTED_TAGS})에서 위 둘 밖의 태그 — 그 공시의 축 없는 표지 주식수로 확인될 때만 받는다
-     * (|log10(가중평균 ÷ 표지)| ≤ {@link IssuerTimeline#TAU_COVER}). companyfacts에는 축이 없어 그 태그가 무엇을 셌는지 모른다 —
+     * (|log10(가중평균 ÷ 표지)| ≤ {@link IssuerTimeline#COVER_WITNESS_LOG}). companyfacts에는 축이 없어 그 태그가 무엇을 셌는지 모른다 —
      * REG의 축 없는 LP 단위는 운영 파트너십의 외부 조합원 단위(표지의 0.5%)이고 NRP · VANI는 천 단위로 잘못 실었다(2026-10-23
      * 탐색 {@code LP-UNIT-PLAN-1023.md} 반증). 확인 안 되면 비운다 — 틀린 n보다 값 없음이다.
      */
     private static final List<String> WEIGHTED_CONFIRMED = ClassFactReader.WEIGHTED_TAGS.stream()
             .filter(t -> !WEIGHTED.contains(t)).toList();
     private static final List<String> PROXY = List.of("NetIncomeLoss", "ProfitLoss");
+    static final String DILUTED = "WeightedAverageNumberOfDilutedSharesOutstanding";
+    static final String PRO_FORMA = "WeightedAverageBasicSharesOutstandingProForma";
+    static final String EPS_DILUTED = "EarningsPerShareDiluted";
+    static final String EPS_BASIC_AND_DILUTED = "EarningsPerShareBasicAndDiluted";
+    static final String DILUTED_NUMERATOR = "NetIncomeLossAvailableToCommonStockholdersDiluted";
     /** 가지친 트리에서 공시 목록을 싣는 자리 — us-gaap 개념 이름과 안 겹친다(밑줄로 시작하는 개념 없음). */
     private static final String FILINGS = "_filings";
 
@@ -68,16 +91,56 @@ public record IssuerFacts(Map<String, Filing> filings,
         Map<Key, Double> weighted = pick(gaap, WEIGHTED, "shares");
         pick(gaap, WEIGHTED_CONFIRMED, "shares").forEach((k, v) -> {
             Double c = cover.get(k.accession());
-            if (c != null && c > 0 && v > 0 && Math.abs(Math.log10(v / c)) <= IssuerTimeline.TAU_COVER) {
+            if (c != null && c > 0 && v > 0 && Math.abs(Math.log10(v / c)) <= IssuerTimeline.COVER_WITNESS_LOG) {
                 weighted.putIfAbsent(k, v);
             }
         });
+        Map<Key, List<Double>> later = new LinkedHashMap<>();
+        for (String tag : WEIGHTED) {
+            for (JsonNode x : gaap.path(tag).path("units").path("shares")) {
+                if (x.has("start")) {
+                    Key k = new Key(x.path("accn").asString(), new ClassFacts.Period(
+                            LocalDate.parse(x.path("start").asString()), LocalDate.parse(x.path("end").asString())));
+                    double v = x.path("val").asDouble();
+                    List<Double> seen = later.computeIfAbsent(k, z -> new java.util.ArrayList<>());
+                    if (!seen.contains(v)) {
+                        seen.add(v);
+                    }
+                }
+            }
+        }
+        later.replaceAll((k, v) -> v.size() > 1 ? List.copyOf(v.subList(1, v.size())) : List.of());
+        later.values().removeIf(List::isEmpty);
+        java.util.Set<Key> basicAndDiluted = new java.util.HashSet<>(pick(gaap, List.of(EPS_BASIC_AND_DILUTED), "USD/shares").keySet());
+        basicAndDiluted.removeAll(pick(gaap, List.of("EarningsPerShareBasic"), "USD/shares").keySet());
         return new IssuerFacts(filings,
                 weighted,
                 pick(gaap, ClassFactReader.EPS_TAGS, "USD/shares"),
                 pick(gaap, List.of(ClassFactReader.DECLARED_NUMERATOR), "USD"),
                 pick(gaap, PROXY, "USD"),
-                cover);
+                cover,
+                new Witnesses(later, pick(gaap, List.of(DILUTED), "shares"), pick(gaap, List.of(PRO_FORMA), "shares"),
+                        pick(gaap, List.of(EPS_DILUTED), "USD/shares"), pick(gaap, List.of(DILUTED_NUMERATOR), "USD"),
+                        basicAndDiluted));
+    }
+
+    /**
+     * 그 공시의 당기 기말 — 판정 재료의 기간 사실 중 제출일 이하에서 가장 늦은 기말(ADR-0189). 지금 경로 분모는 이 기말의 기간만 받는다 —
+     * 당기 값이 없으면 같은 공시의 전년 비교열이 「최신」이 되어 그 공시의 n으로 나갔다(VTRS 10-K 2024 · 2025 · CHRD 2021 · EXE · VAL).
+     */
+    public LocalDate currentEnd(String accession) {
+        Filing filing = filings.get(accession);
+        LocalDate best = null;
+        for (Map<Key, Double> m : List.of(weighted, eps, declaredNumerator, proxyNumerator, witnesses.diluted(),
+                witnesses.proForma())) {
+            for (Key k : m.keySet()) {
+                if (k.accession().equals(accession) && (filing == null || !k.period().end().isAfter(filing.filed()))
+                        && (best == null || k.period().end().isAfter(best))) {
+                    best = k.period().end();
+                }
+            }
+        }
+        return best;
     }
 
     /**
@@ -109,7 +172,8 @@ public record IssuerFacts(Map<String, Filing> filings,
                 }
             }
         }
-        for (String tag : concat(WEIGHTED, WEIGHTED_CONFIRMED, ClassFactReader.EPS_TAGS, List.of(ClassFactReader.DECLARED_NUMERATOR), PROXY)) {
+        for (String tag : concat(WEIGHTED, WEIGHTED_CONFIRMED, ClassFactReader.EPS_TAGS, List.of(ClassFactReader.DECLARED_NUMERATOR), PROXY,
+                List.of(DILUTED, PRO_FORMA, EPS_DILUTED, EPS_BASIC_AND_DILUTED, DILUTED_NUMERATOR))) {
             if (gaap.has(tag)) {
                 prunedGaap.set(tag, gaap.get(tag));
             }
@@ -129,7 +193,12 @@ public record IssuerFacts(Map<String, Filing> filings,
     public IssuerFacts withFilings(Map<String, Filing> extra) {
         Map<String, Filing> merged = new LinkedHashMap<>(filings);
         extra.forEach(merged::putIfAbsent);
-        return new IssuerFacts(merged, weighted, eps, declaredNumerator, proxyNumerator, coverShares);
+        return new IssuerFacts(merged, weighted, eps, declaredNumerator, proxyNumerator, coverShares, witnesses);
+    }
+
+    /** 분모 값만 바꾼 사본(지금 경로 재료를 고친 판 · {@code IssuerTimeline}). */
+    public IssuerFacts withWeighted(Map<Key, Double> replaced) {
+        return new IssuerFacts(filings, replaced, eps, declaredNumerator, proxyNumerator, coverShares, witnesses);
     }
 
     /**

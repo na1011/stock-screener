@@ -184,7 +184,7 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
         // 싣는 발행사(TRI · VALE · BIP)의 주식수를 영영 못 읽고, 섞인 us-gaap 팩트가 앵커를 받은 IFRS 발행사(VALE · WFG)는 그 뒤
         // IFRS 공시가 「미판정 = 숨김」에 걸린다(ADR-0182).
         com.stockscreener.pipeline.datasource.us.shareclass.IssuerFacts classInput =
-                usGate && shareClass != null ? shareClass.saveInput(security, cik.get(), frame.facts()) : null;
+                usGate && shareClass != null ? shareClass.saveInput(security, cik.get(), frame.shareClassFacts()) : null;
 
         // companyfacts가 빠뜨린 정기 공시를 그 공시의 인스턴스로 채운다(ADR-0173). 실패는 종목을 세우지 않고 판 보호로 낸다.
         SecFilingSupplement.Outcome supplement = supplementer.supplement(cik.get(), tree, fromFiscalYear, context, usGate);

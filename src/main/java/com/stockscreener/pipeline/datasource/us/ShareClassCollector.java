@@ -83,7 +83,7 @@ public class ShareClassCollector {
     }
 
     /**
-     * 앵커 후보 공시의 인스턴스를 받는다 — 공시 보충 <b>뒤</b>에 부른다. 보충이 같은 실행에서 실은 정기 공시(companyfacts가 빠뜨린 것)도
+     * 앵커 후보 공시와 지금 경로 분모 후보 공시({@code IssuerTimeline.denominatorCandidates} · ADR-0189)의 인스턴스를 받는다 — 공시 보충 <b>뒤</b>에 부른다. 보충이 같은 실행에서 실은 정기 공시(companyfacts가 빠뜨린 것)도
      * 앵커 후보라서다(앞에 부르면 그 공시는 다음 받기까지 판정 없이 숨는다).
      */
     public Outcome fetchInstances(long cik, IssuerFacts companyFacts, String context) throws DataSourceException {
@@ -94,7 +94,10 @@ public class ShareClassCollector {
         List<String> failed = new ArrayList<>();
         List<DataSourceException.Kind> unresolved = new ArrayList<>();
         DataSourceException limited = null;
-        for (String accession : cf.anchorCandidates()) {
+        java.util.Set<String> targetsOf = new java.util.LinkedHashSet<>(cf.anchorCandidates());
+        // 지금 경로 분모 후보(ADR-0189) — companyfacts만으로 당기 분모가 안 서는 축 없는 표지 공시. 유도가 같은 함수를 부른다.
+        targetsOf.addAll(com.stockscreener.pipeline.datasource.us.shareclass.IssuerTimeline.denominatorCandidates(cf));
+        for (String accession : targetsOf) {
             IssuerFacts.Filing filing = cf.filings().get(accession);
             targets++;
             ShareClassStore.FactRow row = stored.get(accession);

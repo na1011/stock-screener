@@ -15,7 +15,7 @@ applies_to:
 
 - **앵커 경로(인스턴스)**: `ClassFactReader`가 LP 단위 가중평균(`WeightedAverageLimitedPartnershipUnitsOutstanding`)을 LP 클래스 축 `LimitedPartnersCapitalAccountByClassAxis`에서도 받는다. 조건은 그 구성원이 같은 공시 표지(`dei:EntityCommonStockSharesOutstanding`)의 클래스 구성원인 것이다.
 - **LP+GP 합계 단위**(`WeightedAverageNumberOfLimitedPartnershipAndGeneralPartnershipUnitOutstandingBasicAndDiluted` · `WeightedAverageLimitedPartnershipAndGeneralPartnershipUnitsOutstandingBasic`)는 같은 (구성원, 기간)에 다른 가중평균이 없을 때만 싣는다.
-- **지금 경로(companyfacts · d 판정의 분모 n)**: 기본 · 기본겸희석 두 태그 밖의 판독기 목록 태그(`…SharesIssuedBasic` · LP 단위 · LP+GP)를 그 공시의 축 없는 표지 주식수로 확인될 때만 받는다(|log10(n ÷ 표지)| ≤ `IssuerTimeline.TAU_COVER`).
+- **지금 경로(companyfacts · d 판정의 분모 n)**: 기본 · 기본겸희석 두 태그 밖의 판독기 목록 태그(`…SharesIssuedBasic` · LP 단위 · LP+GP)를 그 공시의 축 없는 표지 주식수로 확인될 때만 받는다(|log10(n ÷ 표지)| ≤ `IssuerTimeline.COVER_WITNESS_LOG` 0.052 — 비율로 약 12.7% · 정직한 쌍의 p97.8 · ADR-0189).
 - 판독기 판 `READER_VERSION` 4 → 5. 관문 뒤 클래스 축 엔진만 바뀐다. 관문 꺼짐은 이 경로를 안 부른다.
 
 설계 · 실측 · 반증의 정본은 탐색 브랜치 `explore/s-vintage-coherence`의 `explore/financial-sync/LP-UNIT-PLAN-1023.md`다. v1을 두 렌즈로 반증받았고 둘 다 「고쳐서 간다」였다. 고친 판이 v1.1이다.

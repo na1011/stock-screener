@@ -1,0 +1,132 @@
+---
+id: ADR-0189
+status: 채택됨
+date: 2026-10-24
+applies_to:
+  - "src/main/java/com/stockscreener/pipeline/datasource/us/shareclass/IssuerTimeline.java"
+  - "src/main/java/com/stockscreener/pipeline/datasource/us/shareclass/IssuerFacts.java"
+  - "src/main/java/com/stockscreener/pipeline/datasource/us/shareclass/ClassFactReader.java"
+  - "src/main/java/com/stockscreener/pipeline/datasource/us/ShareClassCollector.java"
+  - "src/main/java/com/stockscreener/pipeline/datasource/us/TaxonomyFrame.java"
+---
+
+# ADR-0189. 미국 지금 경로 EPS 분모 n을 원장대로 읽는다(관문 뒤)
+
+## 결정
+
+관문 켬에서 주식수 비 지표 셋(`SHARES_GROWTH_3Y` · `EPS_GROWTH_TTM_YOY` · `EPS_CAGR_5Y`)의 두 끝은 그 공시의 EPS 분모 n이다(ADR-0179). 지금 경로는 축 없는 표지가 있는 정기 공시(판정 `d`)와 표지가 클래스에 없는 보충 공시(`cur`)를 말한다. 이 지금 경로의 n을 companyfacts의 축 없는 값만으로 읽던 것을, 아래 순서로 원장에 끝까지 묻게 한다. 전부 `stockscreener.gate.us` 뒤다.
+
+1. **당기 기간만 n이다.** 기준은 `IssuerFacts.currentEnd`다(판정 재료의 기간 사실 중 제출일 이하에서 가장 늦은 기말). 그 기말 ±3일의 기간만 받는다.
+2. **값마다 단위를 확인한다.** EPS 폐합이 거짓이고 그 공시 표지와 자릿수(10배)도 어긋나면 아래 순서로 본다.
+   - 같은 기간의 다음 태그 값
+   - ×10^±3·±6 중 폐합과 자릿수를 함께 맞추는 것이 하나뿐일 때 그 값
+   - 둘 다 없으면 0(값 없음)
+   
+   폐합이 참이거나 불명이면 값을 그대로 둔다.
+3. **원장이 선언한 대체를 쓴다.** 둘 중 하나일 때 그 값을 n으로 받는다.
+   - 기본 = 희석을 선언한 기간의 희석 가중평균. 선언은 EPS를 「기본 및 희석」 태그로만 실었거나, 기본 · 희석 EPS가 같고 두 분자가 다르지 않은 것이다.
+   - 기본 EPS와 엄격히 닫히는 `…ProForma`.
+4. **그래도 없으면 인스턴스를 받는다(2020-01-01 뒤).**
+   - 축 없는 값이 있으면 그것이다.
+   - 없으면 축 하나짜리에서 0 아닌 값이 하나일 때만 받는다. 받는 증인은 축의 뜻으로 가른다.
+     - 뜻이 같은 축(클래스 · LP 클래스 · 조합원 종류 · EPS 표시 · EPS 방법 · 계속/중단영업)은 폐합 또는 표지 증인이다.
+     - 그 밖 축은 인스턴스 선언 정밀도의 엄격 폐합이다.
+   - 모두 기준 표지와 자릿수가 맞아야 한다.
+   - 받기(`ShareClassCollector`)와 유도는 같은 함수 `IssuerTimeline.denominatorCandidates`를 부른다.
+5. **10-K Q4.** 입력 중 「섰다」(폐합 참 + 그 10-Q 자기 표지와 자릿수)가 아닌 것이 끼면 출력을 확인한다. 기준 표지 증인 또는 그해 마지막 3개월 n과의 변화가 간격별 τ 안이어야 한다. 0 · null 입력은 「없음」이다.
+6. **16주 1분기(100~115일)도 그 10-Q의 분기다.**
+7. **IFRS**: 클래스 축 입력의 틀(`TaxonomyFrame.Result.shareClassFacts`)에만 `WeightedAverageShares`를 기본 가중평균 이름으로 싣는다.
+
+엔진 판 `IssuerTimeline.ENGINE_VERSION`은 3 → 4, 판독기 판 `ClassFactReader.READER_VERSION`은 5 → 6이다.
+
+설계 · 실측 · 반증의 정본은 탐색 브랜치 `explore/s-vintage-coherence`의 `explore/financial-sync/D-DENOM-PLAN-1024.md`다. v1을 두 렌즈로 반증받아 둘 다 「고쳐서 간다」였고, 지적을 재서 닫은 것이 v1.1(§7 · §8)이다.
+
+## 왜
+
+- **원장이 축 맥락으로만 준 n은 가짜 한계였다.** companyfacts는 차원 맥락을 버린다. 그래서 BKR · KKR(클래스 축 구성원 하나) · CBSH(EPS 표시 축) · LYB(계속/중단영업 축) · SJM(EPS 방법 축) · PAA · PAGP(LP 클래스 축)의 2024-09 뒤 n이 전부 비었다. 지표 셋은 값이 없었다.
+  - 인스턴스 309/309에 물었다(10-24).
+- **Q4 입력 검사는 선언 정밀도 없이 반 센트 × n으로 쟀다.** 설계(V4 §1c)는 「원장이 밝힌 분자면 선언 정밀도」였는데 companyfacts에는 `decimals`가 없다.
+  - 9개월 누계가 있는데 실패한 337 중 253은 검사를 빼고 낸 Q4가 표지와 직전 분기 둘 다와 맞았다.
+  - 예: ABT FY2025는 9개월 순이익이 47억(1억 단위 반올림)이다.
+- **단위가 틀린 n을 확인 없이 받았다.** 앵커 경로에는 단위 복원이 있다.
+  - 2020 뒤 10-Q d n 18,630칸 중 두 증인이 다 어긋나는 것이 127칸이었고, 거의 전부 단위 오태깅이었다(MCD 711 · BRKR 147 · BYD · CYTK · COP).
+- **같은 공시의 전년 비교열이 n으로 나갔다.** 예: CHRD 2021 10-K는 회생 전 FY2019 315M으로 나갔다(표지 20M). VAL · EXE · VTRS · WFRD도 같다.
+- **보충 공시와 IFRS 발행사의 n이 늘 비었다.** 이유는 둘이다.
+  - 보충 공시는 companyfacts에 열쇠가 없다.
+  - IFRS는 틀의 별칭표에 가중평균이 없다.
+
+## 규칙
+
+- MUST NOT: 단위 확인이 고칠 수 없는 값의 기간 열쇠를 지우지 않는다. 0으로 둔다 — 지우면 같은 공시의 전년 비교열이 최신으로 올라온다(COHR 2020-05-11).
+- MUST NOT: 폐합을 물을 수 없을 때 값을 지우지 않는다. 표지를 단위 오태깅한 공시가 있다(CRM 2011 133.9 · PNR 2011 ×1000 · AA 2019-05 · 07 ×10^6).
+- MUST: Q4 입력의 「섰다」에는 그 10-Q 자기 표지와의 자릿수를 함께 요구한다. n과 EPS가 서로 반대로 틀리면 폐합만 맞는다(COHR 2020-05 9개월 82,615 · EPS −1430 → FY2020 Q4 340.9M).
+- MUST NOT: Q4를 늘 출력 확인하지 않는다. 빠르게 느는 발행사의 정직한 Q4 205칸이 지워졌다(AAOI · ACHR · ADI). 정직한 Q4 ÷ 직전 분기 n의 꼬리는 분할 · 발행이다.
+- MUST: 기준 표지는 그 공시와 앞 정기 공시 넷(분할 반영)의 표지 중앙값이다. 미래 공시는 안 본다.
+  - 이력에 정한 기준값을 넣은 사슬은 앞 시기의 틀린 표지(AIZ 2009 ×1000)를 끝까지 끌고 가 정직한 n 1,048칸을 지웠다.
+  - 이 기준 표지는 Q4 · 인스턴스 · 원장 선언 대체의 확인에만 쓴다.
+- MUST: 표지 증인 문턱은 `COVER_WITNESS_LOG`(|log10| 0.052 · 비율로 약 12.7%)다.
+  - 정직한 쌍(2020 뒤 d 10-Q 18,488)의 p97.8이다.
+  - 앵커 엔진의 `TAU_COVER`(비율 p95 5.2%)와 다른 문턱이다. ADR-0187은 이 값을 τ_c라 적고 log10에 썼다 — 값은 그대로이고 이름이 갈렸다.
+  - 비율 5.2%로 바꾸면 IEP · WES · DT · CROX의 정직한 n이 지워졌다.
+- MUST: 판독기의 지금 경로 칸(`ClassFactReader.DIMENSIONED`)에는 재작성 · 연결실체 · 법인 축과 형 붙은 차원을 안 싣는다. 앵커 판정이 읽는 개념 칸은 바꾸지 않는다.
+- MUST: 클래스 축 입력의 IFRS 가중평균 별칭은 `shareClassFacts`에만 둔다. 재무 열 사다리(`SecEdgarColumn` 주식수 폴백)가 같은 태그를 읽는다 — ADR-0182가 IFRS 주식수 폴백을 버린 근거(표지와 10배 넘게 갈리는 쌍 22/636)는 그 사다리에 선다.
+- MUST: 후보인데 인스턴스가 없으면 판정 갈래를 `d-noinst`로 남긴다. 받기 실패는 앵커와 같은 `FAILED` 행이고 미해결 판정에 잡힌다.
+
+## 버린 대안
+
+| 대안 | 기각 근거 |
+|---|---|
+| 아무 축이나 축 하나짜리를 표지로 확인해 받음 | 기업인수 · 법인 · 특수관계자 축이 다른 실체의 수일 수 있다. 그 밖 축은 그 공시의 EPS · 분자와 선언 정밀도로 닫힐 때만 받는다(SSD 기업인수 축은 EPS 대사표 자체의 값이라 닫힌다 · 0.01%) |
+| 분자 끝자리 0으로 정밀도를 추정해 Q4 입력 폐합만 고침 | 252 중 111만 닫힌다. 2계층법 146은 여전히 버려진다 |
+| 희석 분모를 늘 기본 분모로 | 다른 개념이다. 이익이 나는데 희석만 싣는 LSTR은 가를 수 없다 |
+| 여러 클래스의 합 | SPAC 상환/비상환 클래스는 합병 뒤 회사와 다른 주식이다(ALIT 표지의 0.52 · AUR 0.19 · JOBY 0.14). HESM 연간 56 · 177은 단위 오태깅이다 |
+| 첫 10-K의 Q4 = 연간 | 원장이 그해 분기 분모를 안 준다(FDXF는 상장 전 가정의 수를 3년 같게 실었다) |
+| Q4를 늘 출력 확인 | 위 §규칙 — 정직한 Q4 205칸 |
+| 기준 표지 사슬(앞 기준값에서 10배 넘으면 갈음) | 위 §규칙 — AA · AIZ |
+| 표지 증인을 `TAU_COVER`(비율 5.2%)로 | 위 §규칙 — 정직한 꼬리를 버리고 막을 실패는 어느 문턱으로도 갈린다 |
+
+## 결과
+
+**드라이런(0콜 스윕 · 2026-10-24 · `SecShareClassSweepTest`)**
+
+입력과 기준선:
+- 종목: `.factcache` 1,217과 IFRS USD 130, 합 1,347종목
+- 운영 입력 틀(`SHARE_CLASS_FRAME`)
+- 보충 공시: 운영 `sec_filing_supplement`의 정기 공시 103
+- 인스턴스: d 후보 442 · 앵커 236 · 보충 103(받은 날 10-24 · 실패 0)
+- 기준선: `main` 엔진, 같은 입력(`SHARE_CLASS_FRAME=plain`)
+
+| | 기준선 | 켬 |
+|---|---|---|
+| 2020-09 뒤 d n 없음 | 1,163칸 · 335종목 | **187칸 · 96종목** |
+| 지표 창(2024-09 뒤) 현 편입 n 없음 | 195 · 102 | **25 · 17** |
+| 2024-09 뒤 n 전부 없음 현 편입 | 9(BKR · CBSH · FDXF · KKR · LLYVK · LYB · PAA · PAGP · SJM) | **2(FDXF · LLYVK — 원장에 그 기간 분모가 없음)** |
+| 앵커(T) 판정 | — | 보충 `cur` 96칸 채움 · 그 밖 변화 0 |
+
+- d 판정: 채움 1,586(409종목) · 값 변화 368(단위 복원) · 지움 62.
+- 지움 62의 갈래:
+  - 단위가 틀린 옛 값
+  - 전년 비교열이 n이던 자리
+  - 폐합 불명 입력으로 확인이 안 선 Q4(AMRX · BMNR · PRAX · TDG · CRC 회생 · COHR 반대 오류)
+- 재무 행 0콜 스윕(`SecEdgarFactsSweepTest` 1,271종목)은 꺼짐 · 켬 모두 `main`과 md5가 같다(`40f2b377…` · `653bf5e4…`). 이 결정은 클래스 축 판정에만 닿는다.
+- 남은 187의 갈래는 원장 쪽이다.
+  - 첫 10-K라 그해 분기가 없음
+  - 인스턴스에 기본 분모 없음(희석만 · 그 기간 주식 없음 · 자사 확장 태그)
+  - SPAC 클래스 값 갈림
+  - 표지 증인 밖
+
+**시험**
+- `CurrentPathDenominatorTest` 13건(실제 공시 13사례)과 `ShareClassCollectorTest` 1건을 더했다.
+- 대조군 12개는 규칙 하나씩 되돌린 판이다. 인스턴스 · Q4 출력 확인 · 16주 · 단위 복원 · 반대 오류 · 폐합 불명 · 원장 선언 · 당기 기간 · 보충 · IFRS 별칭 · 받기 · 판독기 축 제외가 모두 붉다.
+
+**재지 않았다**
+- 지표 값 수준의 칸 수는 재지 않았다. 판정(분모) 수준까지만 쟀다.
+- 관문 날 모집단(편입 + 후보 + 과거)의 받기 수도 재지 않았다. `.factcache` 기준 d 후보는 442다.
+- 앵커 경로(`DenominatorJudge`) 기간 창의 16주 분기는 재지 않았다. KR · ACI · CAVA · PRMB는 전부 d였다.
+- 표본 밖 앵커 중 바뀐 d n이 prevN으로 닿는 3건 · 2종목(SOUN · UCTT · 현 편입 0 · 반증자 실측)은 관문 날 대조한다.
+
+## 검증
+
+- `./gradlew test --tests '*CurrentPathDenominatorTest' --tests '*ShareClassCollectorTest' --tests '*ClassFactReaderTest' --tests '*LpUnitClassFactsTest'`
+- 저장 재료 스윕: `SHARE_CLASS_DIR=<재료> SHARE_CLASS_FRAME=on SHARE_CLASS_SUPP=<보충 목록> ./gradlew test --tests '*SecShareClassSweepTest' --rerun-tasks`. 기준선은 `main`에서 `SHARE_CLASS_FRAME=plain`으로 돈다.
+- 이 결정은 운영 자동 검증 대상이 아니다. 관문 뒤 경로다.

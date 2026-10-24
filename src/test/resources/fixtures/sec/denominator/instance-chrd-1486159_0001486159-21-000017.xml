@@ -1,0 +1,292 @@
+<?xml version='1.0' encoding='utf-8'?>
+<xbrl xmlns="http://www.xbrl.org/2003/instance" xmlns:dei="http://xbrl.sec.gov/dei/2020-01-31" xmlns:link="http://www.xbrl.org/2003/linkbase" xmlns:us-gaap="http://fasb.org/us-gaap/2020-01-31" xmlns:xbrldi="http://xbrl.org/2006/xbrldi" xmlns:xlink="http://www.w3.org/1999/xlink" xml:lang="en-US">
+    <link:schemaRef xlink:href="oas-20201231.xsd" xlink:type="simple" />
+    <context id="i9b6da4d039d9462a9a39418b31afe3e6_D20200101-20201231">
+        <entity>
+            <identifier scheme="http://www.sec.gov/CIK">0001486159</identifier>
+        </entity>
+        <period>
+            <startDate>2020-01-01</startDate>
+            <endDate>2020-12-31</endDate>
+        </period>
+    </context>
+    <context id="idc1ff3494b6c47b18410a45adad55df4_I20210228">
+        <entity>
+            <identifier scheme="http://www.sec.gov/CIK">0001486159</identifier>
+        </entity>
+        <period>
+            <instant>2021-02-28</instant>
+        </period>
+    </context>
+    <context id="ic14de94f77fd43429b50386799a6b28e_D20201120-20201231">
+        <entity>
+            <identifier scheme="http://www.sec.gov/CIK">0001486159</identifier>
+        </entity>
+        <period>
+            <startDate>2020-11-20</startDate>
+            <endDate>2020-12-31</endDate>
+        </period>
+    </context>
+    <context id="ie2d44cef2d0a4f59b99b0fe07f2e3834_D20200101-20201119">
+        <entity>
+            <identifier scheme="http://www.sec.gov/CIK">0001486159</identifier>
+        </entity>
+        <period>
+            <startDate>2020-01-01</startDate>
+            <endDate>2020-11-19</endDate>
+        </period>
+    </context>
+    <context id="i5403747bd8574a48a9ccc0ea61f04365_D20190101-20191231">
+        <entity>
+            <identifier scheme="http://www.sec.gov/CIK">0001486159</identifier>
+        </entity>
+        <period>
+            <startDate>2019-01-01</startDate>
+            <endDate>2019-12-31</endDate>
+        </period>
+    </context>
+    <context id="ie9d4f3c8b0ae4a0e923aca21c2c976b2_D20180101-20181231">
+        <entity>
+            <identifier scheme="http://www.sec.gov/CIK">0001486159</identifier>
+        </entity>
+        <period>
+            <startDate>2018-01-01</startDate>
+            <endDate>2018-12-31</endDate>
+        </period>
+    </context>
+    <context id="i2552bf2f0b534e64be589fe042cfc162_D20180101-20181231">
+        <entity>
+            <identifier scheme="http://www.sec.gov/CIK">0001486159</identifier>
+            <segment>
+                <xbrldi:explicitMember dimension="us-gaap:StatementEquityComponentsAxis">us-gaap:NoncontrollingInterestMember</xbrldi:explicitMember>
+            </segment>
+        </entity>
+        <period>
+            <startDate>2018-01-01</startDate>
+            <endDate>2018-12-31</endDate>
+        </period>
+    </context>
+    <context id="id9b14020671b4354b86caec3015aab53_D20180101-20181231">
+        <entity>
+            <identifier scheme="http://www.sec.gov/CIK">0001486159</identifier>
+            <segment>
+                <xbrldi:explicitMember dimension="us-gaap:StatementEquityComponentsAxis">us-gaap:RetainedEarningsMember</xbrldi:explicitMember>
+            </segment>
+        </entity>
+        <period>
+            <startDate>2018-01-01</startDate>
+            <endDate>2018-12-31</endDate>
+        </period>
+    </context>
+    <context id="iad9e8763a36d49a1b3a6b9472fdc3057_D20190101-20191231">
+        <entity>
+            <identifier scheme="http://www.sec.gov/CIK">0001486159</identifier>
+            <segment>
+                <xbrldi:explicitMember dimension="us-gaap:StatementEquityComponentsAxis">us-gaap:NoncontrollingInterestMember</xbrldi:explicitMember>
+            </segment>
+        </entity>
+        <period>
+            <startDate>2019-01-01</startDate>
+            <endDate>2019-12-31</endDate>
+        </period>
+    </context>
+    <context id="i5beb77a92f0d4a5babca734a89f9333f_D20190101-20191231">
+        <entity>
+            <identifier scheme="http://www.sec.gov/CIK">0001486159</identifier>
+            <segment>
+                <xbrldi:explicitMember dimension="us-gaap:StatementEquityComponentsAxis">us-gaap:RetainedEarningsMember</xbrldi:explicitMember>
+            </segment>
+        </entity>
+        <period>
+            <startDate>2019-01-01</startDate>
+            <endDate>2019-12-31</endDate>
+        </period>
+    </context>
+    <context id="i841b542a99694ebc87d716e81603bd13_D20200101-20201119">
+        <entity>
+            <identifier scheme="http://www.sec.gov/CIK">0001486159</identifier>
+            <segment>
+                <xbrldi:explicitMember dimension="us-gaap:StatementEquityComponentsAxis">us-gaap:NoncontrollingInterestMember</xbrldi:explicitMember>
+            </segment>
+        </entity>
+        <period>
+            <startDate>2020-01-01</startDate>
+            <endDate>2020-11-19</endDate>
+        </period>
+    </context>
+    <context id="ib603a126fbb1471e90469c3a65cd4f5f_D20200101-20201119">
+        <entity>
+            <identifier scheme="http://www.sec.gov/CIK">0001486159</identifier>
+            <segment>
+                <xbrldi:explicitMember dimension="us-gaap:StatementEquityComponentsAxis">us-gaap:RetainedEarningsMember</xbrldi:explicitMember>
+            </segment>
+        </entity>
+        <period>
+            <startDate>2020-01-01</startDate>
+            <endDate>2020-11-19</endDate>
+        </period>
+    </context>
+    <context id="iad00d5cdd90347dfaa3926c722549b9d_D20201120-20201231">
+        <entity>
+            <identifier scheme="http://www.sec.gov/CIK">0001486159</identifier>
+            <segment>
+                <xbrldi:explicitMember dimension="us-gaap:StatementEquityComponentsAxis">us-gaap:NoncontrollingInterestMember</xbrldi:explicitMember>
+            </segment>
+        </entity>
+        <period>
+            <startDate>2020-11-20</startDate>
+            <endDate>2020-12-31</endDate>
+        </period>
+    </context>
+    <context id="i32f240c86e084c21ae27095812c8655e_D20201120-20201231">
+        <entity>
+            <identifier scheme="http://www.sec.gov/CIK">0001486159</identifier>
+            <segment>
+                <xbrldi:explicitMember dimension="us-gaap:StatementEquityComponentsAxis">us-gaap:RetainedEarningsMember</xbrldi:explicitMember>
+            </segment>
+        </entity>
+        <period>
+            <startDate>2020-11-20</startDate>
+            <endDate>2020-12-31</endDate>
+        </period>
+    </context>
+    <unit id="usd">
+        <measure>iso4217:USD</measure>
+    </unit>
+    <unit id="shares">
+        <measure>shares</measure>
+    </unit>
+    <unit id="usdPerShare">
+        <divide>
+            <unitNumerator>
+                <measure>iso4217:USD</measure>
+            </unitNumerator>
+            <unitDenominator>
+                <measure>shares</measure>
+            </unitDenominator>
+        </divide>
+    </unit>
+    <unit id="number">
+        <measure>pure</measure>
+    </unit>
+    <unit id="usdPerBbl">
+        <divide>
+            <unitNumerator>
+                <measure>iso4217:USD</measure>
+            </unitNumerator>
+            <unitDenominator>
+                <measure>utr:bbl</measure>
+            </unitDenominator>
+        </divide>
+    </unit>
+    <unit id="usdPerMMcf">
+        <divide>
+            <unitNumerator>
+                <measure>iso4217:USD</measure>
+            </unitNumerator>
+            <unitDenominator>
+                <measure>utr:MMcf</measure>
+            </unitDenominator>
+        </divide>
+    </unit>
+    <unit id="counterparty">
+        <measure>oas:counterparty</measure>
+    </unit>
+    <unit id="mmbbls">
+        <measure>utr:MMBbls</measure>
+    </unit>
+    <unit id="bbl">
+        <measure>utr:bbl</measure>
+    </unit>
+    <unit id="mmbtu">
+        <measure>utr:MMBTU</measure>
+    </unit>
+    <unit id="acre">
+        <measure>utr:acre</measure>
+    </unit>
+    <unit id="day">
+        <measure>oas:day</measure>
+    </unit>
+    <unit id="segment">
+        <measure>oas:Segment</measure>
+    </unit>
+    <unit id="ft3">
+        <measure>utr:ft3</measure>
+    </unit>
+    <unit id="mbbls">
+        <measure>utr:MBbls</measure>
+    </unit>
+    <unit id="mmcf">
+        <measure>utr:MMcf</measure>
+    </unit>
+    <unit id="mboe">
+        <measure>utr:MBoe</measure>
+    </unit>
+    <unit id="mmboe">
+        <measure>utr:MMBoe</measure>
+    </unit>
+    <unit id="usdPerMMBTU">
+        <divide>
+            <unitNumerator>
+                <measure>iso4217:USD</measure>
+            </unitNumerator>
+            <unitDenominator>
+                <measure>utr:MMBTU</measure>
+            </unitDenominator>
+        </divide>
+    </unit>
+    <dei:DocumentType contextRef="i9b6da4d039d9462a9a39418b31afe3e6_D20200101-20201231" id="id3VybDovL2RvY3MudjEvZG9jOjRjNjBkZTE0ZDY5NjRkMWE5MjY5MWM4OTBlMjcwYmVmL3NlYzo0YzYwZGUxNGQ2OTY0ZDFhOTI2OTFjODkwZTI3MGJlZl8xL2ZyYWc6OGYxNzlmZTAwNTc2NGNkNGI1NjFlODRkZGZiM2IzNjYvdGV4dHJlZ2lvbjo4ZjE3OWZlMDA1NzY0Y2Q0YjU2MWU4NGRkZmIzYjM2Nl8yOTY3_0243c62d-89f7-4ecd-bfb4-0c8758d19a08">10-K</dei:DocumentType>
+    <dei:DocumentType contextRef="i9b6da4d039d9462a9a39418b31afe3e6_D20200101-20201231" id="id3VybDovL2RvY3MudjEvZG9jOjRjNjBkZTE0ZDY5NjRkMWE5MjY5MWM4OTBlMjcwYmVmL3NlYzo0YzYwZGUxNGQ2OTY0ZDFhOTI2OTFjODkwZTI3MGJlZl8xL2ZyYWc6OGYxNzlmZTAwNTc2NGNkNGI1NjFlODRkZGZiM2IzNjYvdGV4dHJlZ2lvbjo4ZjE3OWZlMDA1NzY0Y2Q0YjU2MWU4NGRkZmIzYjM2Nl8yOTY3_ddc92df2-e302-4821-946b-0311de9d8cda">10-K</dei:DocumentType>
+    <dei:Security12bTitle contextRef="i9b6da4d039d9462a9a39418b31afe3e6_D20200101-20201231" id="id3VybDovL2RvY3MudjEvZG9jOjRjNjBkZTE0ZDY5NjRkMWE5MjY5MWM4OTBlMjcwYmVmL3NlYzo0YzYwZGUxNGQ2OTY0ZDFhOTI2OTFjODkwZTI3MGJlZl8xL2ZyYWc6OGYxNzlmZTAwNTc2NGNkNGI1NjFlODRkZGZiM2IzNjYvdGFibGU6MGQ0NWY5YWU1ZGFiNGY0MmE3MjY3NDJmM2FiZDEzYzYvdGFibGVyYW5nZTowZDQ1ZjlhZTVkYWI0ZjQyYTcyNjc0MmYzYWJkMTNjNl8xLTAtMS0xLTAvdGV4dHJlZ2lvbjpkNTcwZGFkZjI2OWY0MGQwYWEwN2M4NDNhYzJjNzg4Ml80_653f41d8-7a85-4ca2-8ed0-35b24953ab6c">Common Stock</dei:Security12bTitle>
+    <dei:TradingSymbol contextRef="i9b6da4d039d9462a9a39418b31afe3e6_D20200101-20201231" id="id3VybDovL2RvY3MudjEvZG9jOjRjNjBkZTE0ZDY5NjRkMWE5MjY5MWM4OTBlMjcwYmVmL3NlYzo0YzYwZGUxNGQ2OTY0ZDFhOTI2OTFjODkwZTI3MGJlZl8xL2ZyYWc6OGYxNzlmZTAwNTc2NGNkNGI1NjFlODRkZGZiM2IzNjYvdGFibGU6MGQ0NWY5YWU1ZGFiNGY0MmE3MjY3NDJmM2FiZDEzYzYvdGFibGVyYW5nZTowZDQ1ZjlhZTVkYWI0ZjQyYTcyNjc0MmYzYWJkMTNjNl8xLTItMS0xLTA_02b9c57a-8226-4b56-9237-b4a9838e8f4b">OAS</dei:TradingSymbol>
+    <dei:EntityCommonStockSharesOutstanding contextRef="idc1ff3494b6c47b18410a45adad55df4_I20210228" decimals="INF" id="id3VybDovL2RvY3MudjEvZG9jOjRjNjBkZTE0ZDY5NjRkMWE5MjY5MWM4OTBlMjcwYmVmL3NlYzo0YzYwZGUxNGQ2OTY0ZDFhOTI2OTFjODkwZTI3MGJlZl8xL2ZyYWc6OGYxNzlmZTAwNTc2NGNkNGI1NjFlODRkZGZiM2IzNjYvdGV4dHJlZ2lvbjo4ZjE3OWZlMDA1NzY0Y2Q0YjU2MWU4NGRkZmIzYjM2Nl8yNjEy_c3911a13-e418-497e-9f95-c2d0e3a6ea30" unitRef="shares">20093083</dei:EntityCommonStockSharesOutstanding>
+    <us-gaap:ProfitLoss contextRef="ic14de94f77fd43429b50386799a6b28e_D20201120-20201231" decimals="-3" id="id3VybDovL2RvY3MudjEvZG9jOjRjNjBkZTE0ZDY5NjRkMWE5MjY5MWM4OTBlMjcwYmVmL3NlYzo0YzYwZGUxNGQ2OTY0ZDFhOTI2OTFjODkwZTI3MGJlZl84OC9mcmFnOmE0NzE5ZDRkYTA2NzRiOGNhZTVjZDAxYzg3NzQwZTQ1L3RhYmxlOjg4MmVhZjYzZjRmMzRlMDBhYjc3YjI3MTZkZjM4NGJmL3RhYmxlcmFuZ2U6ODgyZWFmNjNmNGYzNGUwMGFiNzdiMjcxNmRmMzg0YmZfMzMtMS0xLTEtNDI3MA_9813064c-e2bd-4a79-93d6-57d91db35864" unitRef="usd">-45962000</us-gaap:ProfitLoss>
+    <us-gaap:ProfitLoss contextRef="ie2d44cef2d0a4f59b99b0fe07f2e3834_D20200101-20201119" decimals="-3" id="id3VybDovL2RvY3MudjEvZG9jOjRjNjBkZTE0ZDY5NjRkMWE5MjY5MWM4OTBlMjcwYmVmL3NlYzo0YzYwZGUxNGQ2OTY0ZDFhOTI2OTFjODkwZTI3MGJlZl84OC9mcmFnOmE0NzE5ZDRkYTA2NzRiOGNhZTVjZDAxYzg3NzQwZTQ1L3RhYmxlOjg4MmVhZjYzZjRmMzRlMDBhYjc3YjI3MTZkZjM4NGJmL3RhYmxlcmFuZ2U6ODgyZWFmNjNmNGYzNGUwMGFiNzdiMjcxNmRmMzg0YmZfMzMtMS0xLTEtMA_51040536-703b-49da-bd5b-dacba5c363b7" unitRef="usd">-3724611000</us-gaap:ProfitLoss>
+    <us-gaap:ProfitLoss contextRef="i5403747bd8574a48a9ccc0ea61f04365_D20190101-20191231" decimals="-3" id="id3VybDovL2RvY3MudjEvZG9jOjRjNjBkZTE0ZDY5NjRkMWE5MjY5MWM4OTBlMjcwYmVmL3NlYzo0YzYwZGUxNGQ2OTY0ZDFhOTI2OTFjODkwZTI3MGJlZl84OC9mcmFnOmE0NzE5ZDRkYTA2NzRiOGNhZTVjZDAxYzg3NzQwZTQ1L3RhYmxlOjg4MmVhZjYzZjRmMzRlMDBhYjc3YjI3MTZkZjM4NGJmL3RhYmxlcmFuZ2U6ODgyZWFmNjNmNGYzNGUwMGFiNzdiMjcxNmRmMzg0YmZfMzMtMy0xLTEtMA_2364126e-a381-49a7-b487-ece18054f757" unitRef="usd">-90647000</us-gaap:ProfitLoss>
+    <us-gaap:ProfitLoss contextRef="i5403747bd8574a48a9ccc0ea61f04365_D20190101-20191231" decimals="-3" id="id3VybDovL2RvY3MudjEvZG9jOjRjNjBkZTE0ZDY5NjRkMWE5MjY5MWM4OTBlMjcwYmVmL3NlYzo0YzYwZGUxNGQ2OTY0ZDFhOTI2OTFjODkwZTI3MGJlZl84OC9mcmFnOmE0NzE5ZDRkYTA2NzRiOGNhZTVjZDAxYzg3NzQwZTQ1L3RhYmxlOjg4MmVhZjYzZjRmMzRlMDBhYjc3YjI3MTZkZjM4NGJmL3RhYmxlcmFuZ2U6ODgyZWFmNjNmNGYzNGUwMGFiNzdiMjcxNmRmMzg0YmZfMzMtMy0xLTEtMA_381fcfb1-86c0-42c9-8feb-1a94dc843046" unitRef="usd">-90647000</us-gaap:ProfitLoss>
+    <us-gaap:ProfitLoss contextRef="ie9d4f3c8b0ae4a0e923aca21c2c976b2_D20180101-20181231" decimals="-3" id="id3VybDovL2RvY3MudjEvZG9jOjRjNjBkZTE0ZDY5NjRkMWE5MjY5MWM4OTBlMjcwYmVmL3NlYzo0YzYwZGUxNGQ2OTY0ZDFhOTI2OTFjODkwZTI3MGJlZl84OC9mcmFnOmE0NzE5ZDRkYTA2NzRiOGNhZTVjZDAxYzg3NzQwZTQ1L3RhYmxlOjg4MmVhZjYzZjRmMzRlMDBhYjc3YjI3MTZkZjM4NGJmL3RhYmxlcmFuZ2U6ODgyZWFmNjNmNGYzNGUwMGFiNzdiMjcxNmRmMzg0YmZfMzMtNS0xLTEtMA_7a847879-e179-4e47-a2c7-bd8a3d83e9ed" unitRef="usd">-19500000</us-gaap:ProfitLoss>
+    <us-gaap:NetIncomeLossAttributableToNoncontrollingInterest contextRef="ic14de94f77fd43429b50386799a6b28e_D20201120-20201231" decimals="-3" id="id3VybDovL2RvY3MudjEvZG9jOjRjNjBkZTE0ZDY5NjRkMWE5MjY5MWM4OTBlMjcwYmVmL3NlYzo0YzYwZGUxNGQ2OTY0ZDFhOTI2OTFjODkwZTI3MGJlZl84OC9mcmFnOmE0NzE5ZDRkYTA2NzRiOGNhZTVjZDAxYzg3NzQwZTQ1L3RhYmxlOjg4MmVhZjYzZjRmMzRlMDBhYjc3YjI3MTZkZjM4NGJmL3RhYmxlcmFuZ2U6ODgyZWFmNjNmNGYzNGUwMGFiNzdiMjcxNmRmMzg0YmZfMzQtMS0xLTEtNDI3MA_9a5ce8ee-c1ca-4787-a025-31830d1e91a2" unitRef="usd">3950000</us-gaap:NetIncomeLossAttributableToNoncontrollingInterest>
+    <us-gaap:NetIncomeLossAttributableToNoncontrollingInterest contextRef="ie2d44cef2d0a4f59b99b0fe07f2e3834_D20200101-20201119" decimals="-3" id="id3VybDovL2RvY3MudjEvZG9jOjRjNjBkZTE0ZDY5NjRkMWE5MjY5MWM4OTBlMjcwYmVmL3NlYzo0YzYwZGUxNGQ2OTY0ZDFhOTI2OTFjODkwZTI3MGJlZl84OC9mcmFnOmE0NzE5ZDRkYTA2NzRiOGNhZTVjZDAxYzg3NzQwZTQ1L3RhYmxlOjg4MmVhZjYzZjRmMzRlMDBhYjc3YjI3MTZkZjM4NGJmL3RhYmxlcmFuZ2U6ODgyZWFmNjNmNGYzNGUwMGFiNzdiMjcxNmRmMzg0YmZfMzQtMS0xLTEtMA_02a24eae-0aa6-40d9-b22b-87373865e4ba" unitRef="usd">-84283000</us-gaap:NetIncomeLossAttributableToNoncontrollingInterest>
+    <us-gaap:NetIncomeLossAttributableToNoncontrollingInterest contextRef="i5403747bd8574a48a9ccc0ea61f04365_D20190101-20191231" decimals="-3" id="id3VybDovL2RvY3MudjEvZG9jOjRjNjBkZTE0ZDY5NjRkMWE5MjY5MWM4OTBlMjcwYmVmL3NlYzo0YzYwZGUxNGQ2OTY0ZDFhOTI2OTFjODkwZTI3MGJlZl84OC9mcmFnOmE0NzE5ZDRkYTA2NzRiOGNhZTVjZDAxYzg3NzQwZTQ1L3RhYmxlOjg4MmVhZjYzZjRmMzRlMDBhYjc3YjI3MTZkZjM4NGJmL3RhYmxlcmFuZ2U6ODgyZWFmNjNmNGYzNGUwMGFiNzdiMjcxNmRmMzg0YmZfMzQtMy0xLTEtMA_fdf4d699-f788-4d2b-9309-f0f92ceb375b" unitRef="usd">37596000</us-gaap:NetIncomeLossAttributableToNoncontrollingInterest>
+    <us-gaap:NetIncomeLossAttributableToNoncontrollingInterest contextRef="ie9d4f3c8b0ae4a0e923aca21c2c976b2_D20180101-20181231" decimals="-3" id="id3VybDovL2RvY3MudjEvZG9jOjRjNjBkZTE0ZDY5NjRkMWE5MjY5MWM4OTBlMjcwYmVmL3NlYzo0YzYwZGUxNGQ2OTY0ZDFhOTI2OTFjODkwZTI3MGJlZl84OC9mcmFnOmE0NzE5ZDRkYTA2NzRiOGNhZTVjZDAxYzg3NzQwZTQ1L3RhYmxlOjg4MmVhZjYzZjRmMzRlMDBhYjc3YjI3MTZkZjM4NGJmL3RhYmxlcmFuZ2U6ODgyZWFmNjNmNGYzNGUwMGFiNzdiMjcxNmRmMzg0YmZfMzQtNS0xLTEtMA_5850c931-92ba-4594-bb58-dd0b5587a722" unitRef="usd">15796000</us-gaap:NetIncomeLossAttributableToNoncontrollingInterest>
+    <us-gaap:NetIncomeLoss contextRef="ic14de94f77fd43429b50386799a6b28e_D20201120-20201231" decimals="-3" id="id3VybDovL2RvY3MudjEvZG9jOjRjNjBkZTE0ZDY5NjRkMWE5MjY5MWM4OTBlMjcwYmVmL3NlYzo0YzYwZGUxNGQ2OTY0ZDFhOTI2OTFjODkwZTI3MGJlZl84OC9mcmFnOmE0NzE5ZDRkYTA2NzRiOGNhZTVjZDAxYzg3NzQwZTQ1L3RhYmxlOjg4MmVhZjYzZjRmMzRlMDBhYjc3YjI3MTZkZjM4NGJmL3RhYmxlcmFuZ2U6ODgyZWFmNjNmNGYzNGUwMGFiNzdiMjcxNmRmMzg0YmZfMzUtMS0xLTEtNDI3MA_c6cad800-f9a2-45ae-9301-1eeae546eaec" unitRef="usd">-49912000</us-gaap:NetIncomeLoss>
+    <us-gaap:NetIncomeLoss contextRef="ie2d44cef2d0a4f59b99b0fe07f2e3834_D20200101-20201119" decimals="-3" id="id3VybDovL2RvY3MudjEvZG9jOjRjNjBkZTE0ZDY5NjRkMWE5MjY5MWM4OTBlMjcwYmVmL3NlYzo0YzYwZGUxNGQ2OTY0ZDFhOTI2OTFjODkwZTI3MGJlZl84OC9mcmFnOmE0NzE5ZDRkYTA2NzRiOGNhZTVjZDAxYzg3NzQwZTQ1L3RhYmxlOjg4MmVhZjYzZjRmMzRlMDBhYjc3YjI3MTZkZjM4NGJmL3RhYmxlcmFuZ2U6ODgyZWFmNjNmNGYzNGUwMGFiNzdiMjcxNmRmMzg0YmZfMzUtMS0xLTEtMA_74085983-5b45-471b-8eba-7191e6d863fb" unitRef="usd">-3640328000</us-gaap:NetIncomeLoss>
+    <us-gaap:NetIncomeLoss contextRef="i5403747bd8574a48a9ccc0ea61f04365_D20190101-20191231" decimals="-3" id="id3VybDovL2RvY3MudjEvZG9jOjRjNjBkZTE0ZDY5NjRkMWE5MjY5MWM4OTBlMjcwYmVmL3NlYzo0YzYwZGUxNGQ2OTY0ZDFhOTI2OTFjODkwZTI3MGJlZl84OC9mcmFnOmE0NzE5ZDRkYTA2NzRiOGNhZTVjZDAxYzg3NzQwZTQ1L3RhYmxlOjg4MmVhZjYzZjRmMzRlMDBhYjc3YjI3MTZkZjM4NGJmL3RhYmxlcmFuZ2U6ODgyZWFmNjNmNGYzNGUwMGFiNzdiMjcxNmRmMzg0YmZfMzUtMy0xLTEtMA_abb3d272-dde7-42e3-ae90-732c0393d6d6" unitRef="usd">-128243000</us-gaap:NetIncomeLoss>
+    <us-gaap:NetIncomeLoss contextRef="ie9d4f3c8b0ae4a0e923aca21c2c976b2_D20180101-20181231" decimals="-3" id="id3VybDovL2RvY3MudjEvZG9jOjRjNjBkZTE0ZDY5NjRkMWE5MjY5MWM4OTBlMjcwYmVmL3NlYzo0YzYwZGUxNGQ2OTY0ZDFhOTI2OTFjODkwZTI3MGJlZl84OC9mcmFnOmE0NzE5ZDRkYTA2NzRiOGNhZTVjZDAxYzg3NzQwZTQ1L3RhYmxlOjg4MmVhZjYzZjRmMzRlMDBhYjc3YjI3MTZkZjM4NGJmL3RhYmxlcmFuZ2U6ODgyZWFmNjNmNGYzNGUwMGFiNzdiMjcxNmRmMzg0YmZfMzUtNS0xLTEtMA_0c599acd-6ffd-4043-b0c7-1752f346cfe4" unitRef="usd">-35296000</us-gaap:NetIncomeLoss>
+    <us-gaap:EarningsPerShareBasic contextRef="ic14de94f77fd43429b50386799a6b28e_D20201120-20201231" decimals="2" id="id3VybDovL2RvY3MudjEvZG9jOjRjNjBkZTE0ZDY5NjRkMWE5MjY5MWM4OTBlMjcwYmVmL3NlYzo0YzYwZGUxNGQ2OTY0ZDFhOTI2OTFjODkwZTI3MGJlZl84OC9mcmFnOmE0NzE5ZDRkYTA2NzRiOGNhZTVjZDAxYzg3NzQwZTQ1L3RhYmxlOjg4MmVhZjYzZjRmMzRlMDBhYjc3YjI3MTZkZjM4NGJmL3RhYmxlcmFuZ2U6ODgyZWFmNjNmNGYzNGUwMGFiNzdiMjcxNmRmMzg0YmZfMzctMS0xLTEtNDI3MA_2b57b8a9-2907-415d-9c8f-3d1e94192584" unitRef="usdPerShare">-2.50</us-gaap:EarningsPerShareBasic>
+    <us-gaap:EarningsPerShareBasic contextRef="ie2d44cef2d0a4f59b99b0fe07f2e3834_D20200101-20201119" decimals="2" id="id3VybDovL2RvY3MudjEvZG9jOjRjNjBkZTE0ZDY5NjRkMWE5MjY5MWM4OTBlMjcwYmVmL3NlYzo0YzYwZGUxNGQ2OTY0ZDFhOTI2OTFjODkwZTI3MGJlZl84OC9mcmFnOmE0NzE5ZDRkYTA2NzRiOGNhZTVjZDAxYzg3NzQwZTQ1L3RhYmxlOjg4MmVhZjYzZjRmMzRlMDBhYjc3YjI3MTZkZjM4NGJmL3RhYmxlcmFuZ2U6ODgyZWFmNjNmNGYzNGUwMGFiNzdiMjcxNmRmMzg0YmZfMzctMS0xLTEtMA_5c5e6d04-bdd6-4f4e-9b81-969067ef22d9" unitRef="usdPerShare">-11.46</us-gaap:EarningsPerShareBasic>
+    <us-gaap:EarningsPerShareBasic contextRef="i5403747bd8574a48a9ccc0ea61f04365_D20190101-20191231" decimals="2" id="id3VybDovL2RvY3MudjEvZG9jOjRjNjBkZTE0ZDY5NjRkMWE5MjY5MWM4OTBlMjcwYmVmL3NlYzo0YzYwZGUxNGQ2OTY0ZDFhOTI2OTFjODkwZTI3MGJlZl84OC9mcmFnOmE0NzE5ZDRkYTA2NzRiOGNhZTVjZDAxYzg3NzQwZTQ1L3RhYmxlOjg4MmVhZjYzZjRmMzRlMDBhYjc3YjI3MTZkZjM4NGJmL3RhYmxlcmFuZ2U6ODgyZWFmNjNmNGYzNGUwMGFiNzdiMjcxNmRmMzg0YmZfMzctMy0xLTEtMA_e109adb3-1bf0-4b19-a2f7-82b6ce983e8b" unitRef="usdPerShare">-0.41</us-gaap:EarningsPerShareBasic>
+    <us-gaap:EarningsPerShareBasic contextRef="ie9d4f3c8b0ae4a0e923aca21c2c976b2_D20180101-20181231" decimals="2" id="id3VybDovL2RvY3MudjEvZG9jOjRjNjBkZTE0ZDY5NjRkMWE5MjY5MWM4OTBlMjcwYmVmL3NlYzo0YzYwZGUxNGQ2OTY0ZDFhOTI2OTFjODkwZTI3MGJlZl84OC9mcmFnOmE0NzE5ZDRkYTA2NzRiOGNhZTVjZDAxYzg3NzQwZTQ1L3RhYmxlOjg4MmVhZjYzZjRmMzRlMDBhYjc3YjI3MTZkZjM4NGJmL3RhYmxlcmFuZ2U6ODgyZWFmNjNmNGYzNGUwMGFiNzdiMjcxNmRmMzg0YmZfMzctNS0xLTEtMA_e43e79fa-e15f-43af-865c-81be619d134b" unitRef="usdPerShare">-0.11</us-gaap:EarningsPerShareBasic>
+    <us-gaap:EarningsPerShareDiluted contextRef="ic14de94f77fd43429b50386799a6b28e_D20201120-20201231" decimals="2" id="id3VybDovL2RvY3MudjEvZG9jOjRjNjBkZTE0ZDY5NjRkMWE5MjY5MWM4OTBlMjcwYmVmL3NlYzo0YzYwZGUxNGQ2OTY0ZDFhOTI2OTFjODkwZTI3MGJlZl84OC9mcmFnOmE0NzE5ZDRkYTA2NzRiOGNhZTVjZDAxYzg3NzQwZTQ1L3RhYmxlOjg4MmVhZjYzZjRmMzRlMDBhYjc3YjI3MTZkZjM4NGJmL3RhYmxlcmFuZ2U6ODgyZWFmNjNmNGYzNGUwMGFiNzdiMjcxNmRmMzg0YmZfMzgtMS0xLTEtNDI3MA_a08d5442-976a-4b07-a7d7-9bb4b987089a" unitRef="usdPerShare">-2.50</us-gaap:EarningsPerShareDiluted>
+    <us-gaap:EarningsPerShareDiluted contextRef="ie2d44cef2d0a4f59b99b0fe07f2e3834_D20200101-20201119" decimals="2" id="id3VybDovL2RvY3MudjEvZG9jOjRjNjBkZTE0ZDY5NjRkMWE5MjY5MWM4OTBlMjcwYmVmL3NlYzo0YzYwZGUxNGQ2OTY0ZDFhOTI2OTFjODkwZTI3MGJlZl84OC9mcmFnOmE0NzE5ZDRkYTA2NzRiOGNhZTVjZDAxYzg3NzQwZTQ1L3RhYmxlOjg4MmVhZjYzZjRmMzRlMDBhYjc3YjI3MTZkZjM4NGJmL3RhYmxlcmFuZ2U6ODgyZWFmNjNmNGYzNGUwMGFiNzdiMjcxNmRmMzg0YmZfMzgtMS0xLTEtMA_642de8f8-4ced-40c5-8cfd-717d364aab84" unitRef="usdPerShare">-11.46</us-gaap:EarningsPerShareDiluted>
+    <us-gaap:EarningsPerShareDiluted contextRef="i5403747bd8574a48a9ccc0ea61f04365_D20190101-20191231" decimals="2" id="id3VybDovL2RvY3MudjEvZG9jOjRjNjBkZTE0ZDY5NjRkMWE5MjY5MWM4OTBlMjcwYmVmL3NlYzo0YzYwZGUxNGQ2OTY0ZDFhOTI2OTFjODkwZTI3MGJlZl84OC9mcmFnOmE0NzE5ZDRkYTA2NzRiOGNhZTVjZDAxYzg3NzQwZTQ1L3RhYmxlOjg4MmVhZjYzZjRmMzRlMDBhYjc3YjI3MTZkZjM4NGJmL3RhYmxlcmFuZ2U6ODgyZWFmNjNmNGYzNGUwMGFiNzdiMjcxNmRmMzg0YmZfMzgtMy0xLTEtMA_06468b2f-157f-49b0-9bb1-658022181872" unitRef="usdPerShare">-0.41</us-gaap:EarningsPerShareDiluted>
+    <us-gaap:EarningsPerShareDiluted contextRef="ie9d4f3c8b0ae4a0e923aca21c2c976b2_D20180101-20181231" decimals="2" id="id3VybDovL2RvY3MudjEvZG9jOjRjNjBkZTE0ZDY5NjRkMWE5MjY5MWM4OTBlMjcwYmVmL3NlYzo0YzYwZGUxNGQ2OTY0ZDFhOTI2OTFjODkwZTI3MGJlZl84OC9mcmFnOmE0NzE5ZDRkYTA2NzRiOGNhZTVjZDAxYzg3NzQwZTQ1L3RhYmxlOjg4MmVhZjYzZjRmMzRlMDBhYjc3YjI3MTZkZjM4NGJmL3RhYmxlcmFuZ2U6ODgyZWFmNjNmNGYzNGUwMGFiNzdiMjcxNmRmMzg0YmZfMzgtNS0xLTEtMA_863565ad-b96c-4359-96de-30b918b6a902" unitRef="usdPerShare">-0.11</us-gaap:EarningsPerShareDiluted>
+    <us-gaap:WeightedAverageNumberOfSharesOutstandingBasic contextRef="ic14de94f77fd43429b50386799a6b28e_D20201120-20201231" decimals="-3" id="id3VybDovL2RvY3MudjEvZG9jOjRjNjBkZTE0ZDY5NjRkMWE5MjY5MWM4OTBlMjcwYmVmL3NlYzo0YzYwZGUxNGQ2OTY0ZDFhOTI2OTFjODkwZTI3MGJlZl84OC9mcmFnOmE0NzE5ZDRkYTA2NzRiOGNhZTVjZDAxYzg3NzQwZTQ1L3RhYmxlOjg4MmVhZjYzZjRmMzRlMDBhYjc3YjI3MTZkZjM4NGJmL3RhYmxlcmFuZ2U6ODgyZWFmNjNmNGYzNGUwMGFiNzdiMjcxNmRmMzg0YmZfNDAtMS0xLTEtNDI3Mg_625f3c5a-9b33-4ce0-a033-121b5b0265ea" unitRef="shares">19991000</us-gaap:WeightedAverageNumberOfSharesOutstandingBasic>
+    <us-gaap:WeightedAverageNumberOfSharesOutstandingBasic contextRef="ie2d44cef2d0a4f59b99b0fe07f2e3834_D20200101-20201119" decimals="-3" id="id3VybDovL2RvY3MudjEvZG9jOjRjNjBkZTE0ZDY5NjRkMWE5MjY5MWM4OTBlMjcwYmVmL3NlYzo0YzYwZGUxNGQ2OTY0ZDFhOTI2OTFjODkwZTI3MGJlZl84OC9mcmFnOmE0NzE5ZDRkYTA2NzRiOGNhZTVjZDAxYzg3NzQwZTQ1L3RhYmxlOjg4MmVhZjYzZjRmMzRlMDBhYjc3YjI3MTZkZjM4NGJmL3RhYmxlcmFuZ2U6ODgyZWFmNjNmNGYzNGUwMGFiNzdiMjcxNmRmMzg0YmZfNDAtMS0xLTEtMA_87adfd4f-9c59-4df2-b216-2e7f044a4def" unitRef="shares">317644000</us-gaap:WeightedAverageNumberOfSharesOutstandingBasic>
+    <us-gaap:WeightedAverageNumberOfSharesOutstandingBasic contextRef="i5403747bd8574a48a9ccc0ea61f04365_D20190101-20191231" decimals="-3" id="id3VybDovL2RvY3MudjEvZG9jOjRjNjBkZTE0ZDY5NjRkMWE5MjY5MWM4OTBlMjcwYmVmL3NlYzo0YzYwZGUxNGQ2OTY0ZDFhOTI2OTFjODkwZTI3MGJlZl84OC9mcmFnOmE0NzE5ZDRkYTA2NzRiOGNhZTVjZDAxYzg3NzQwZTQ1L3RhYmxlOjg4MmVhZjYzZjRmMzRlMDBhYjc3YjI3MTZkZjM4NGJmL3RhYmxlcmFuZ2U6ODgyZWFmNjNmNGYzNGUwMGFiNzdiMjcxNmRmMzg0YmZfNDAtMy0xLTEtMA_e9c52e5a-1bdc-496e-8140-0ef6698cb889" unitRef="shares">315002000</us-gaap:WeightedAverageNumberOfSharesOutstandingBasic>
+    <us-gaap:WeightedAverageNumberOfSharesOutstandingBasic contextRef="ie9d4f3c8b0ae4a0e923aca21c2c976b2_D20180101-20181231" decimals="-3" id="id3VybDovL2RvY3MudjEvZG9jOjRjNjBkZTE0ZDY5NjRkMWE5MjY5MWM4OTBlMjcwYmVmL3NlYzo0YzYwZGUxNGQ2OTY0ZDFhOTI2OTFjODkwZTI3MGJlZl84OC9mcmFnOmE0NzE5ZDRkYTA2NzRiOGNhZTVjZDAxYzg3NzQwZTQ1L3RhYmxlOjg4MmVhZjYzZjRmMzRlMDBhYjc3YjI3MTZkZjM4NGJmL3RhYmxlcmFuZ2U6ODgyZWFmNjNmNGYzNGUwMGFiNzdiMjcxNmRmMzg0YmZfNDAtNS0xLTEtMA_36540237-75cd-4a19-a340-010c4de35a65" unitRef="shares">307480000</us-gaap:WeightedAverageNumberOfSharesOutstandingBasic>
+    <us-gaap:WeightedAverageNumberOfDilutedSharesOutstanding contextRef="ic14de94f77fd43429b50386799a6b28e_D20201120-20201231" decimals="-3" id="id3VybDovL2RvY3MudjEvZG9jOjRjNjBkZTE0ZDY5NjRkMWE5MjY5MWM4OTBlMjcwYmVmL3NlYzo0YzYwZGUxNGQ2OTY0ZDFhOTI2OTFjODkwZTI3MGJlZl84OC9mcmFnOmE0NzE5ZDRkYTA2NzRiOGNhZTVjZDAxYzg3NzQwZTQ1L3RhYmxlOjg4MmVhZjYzZjRmMzRlMDBhYjc3YjI3MTZkZjM4NGJmL3RhYmxlcmFuZ2U6ODgyZWFmNjNmNGYzNGUwMGFiNzdiMjcxNmRmMzg0YmZfNDEtMS0xLTEtNDI3Mg_987b75a9-1b5f-4c9b-8aee-1962d176d8a3" unitRef="shares">19991000</us-gaap:WeightedAverageNumberOfDilutedSharesOutstanding>
+    <us-gaap:WeightedAverageNumberOfDilutedSharesOutstanding contextRef="ie2d44cef2d0a4f59b99b0fe07f2e3834_D20200101-20201119" decimals="-3" id="id3VybDovL2RvY3MudjEvZG9jOjRjNjBkZTE0ZDY5NjRkMWE5MjY5MWM4OTBlMjcwYmVmL3NlYzo0YzYwZGUxNGQ2OTY0ZDFhOTI2OTFjODkwZTI3MGJlZl84OC9mcmFnOmE0NzE5ZDRkYTA2NzRiOGNhZTVjZDAxYzg3NzQwZTQ1L3RhYmxlOjg4MmVhZjYzZjRmMzRlMDBhYjc3YjI3MTZkZjM4NGJmL3RhYmxlcmFuZ2U6ODgyZWFmNjNmNGYzNGUwMGFiNzdiMjcxNmRmMzg0YmZfNDEtMS0xLTEtMA_3347cd57-6cf7-456d-969d-a61eb1814572" unitRef="shares">317644000</us-gaap:WeightedAverageNumberOfDilutedSharesOutstanding>
+    <us-gaap:WeightedAverageNumberOfDilutedSharesOutstanding contextRef="i5403747bd8574a48a9ccc0ea61f04365_D20190101-20191231" decimals="-3" id="id3VybDovL2RvY3MudjEvZG9jOjRjNjBkZTE0ZDY5NjRkMWE5MjY5MWM4OTBlMjcwYmVmL3NlYzo0YzYwZGUxNGQ2OTY0ZDFhOTI2OTFjODkwZTI3MGJlZl84OC9mcmFnOmE0NzE5ZDRkYTA2NzRiOGNhZTVjZDAxYzg3NzQwZTQ1L3RhYmxlOjg4MmVhZjYzZjRmMzRlMDBhYjc3YjI3MTZkZjM4NGJmL3RhYmxlcmFuZ2U6ODgyZWFmNjNmNGYzNGUwMGFiNzdiMjcxNmRmMzg0YmZfNDEtMy0xLTEtMA_2bbdecba-97fe-44d6-b2f5-32dbcc56e097" unitRef="shares">315002000</us-gaap:WeightedAverageNumberOfDilutedSharesOutstanding>
+    <us-gaap:WeightedAverageNumberOfDilutedSharesOutstanding contextRef="ie9d4f3c8b0ae4a0e923aca21c2c976b2_D20180101-20181231" decimals="-3" id="id3VybDovL2RvY3MudjEvZG9jOjRjNjBkZTE0ZDY5NjRkMWE5MjY5MWM4OTBlMjcwYmVmL3NlYzo0YzYwZGUxNGQ2OTY0ZDFhOTI2OTFjODkwZTI3MGJlZl84OC9mcmFnOmE0NzE5ZDRkYTA2NzRiOGNhZTVjZDAxYzg3NzQwZTQ1L3RhYmxlOjg4MmVhZjYzZjRmMzRlMDBhYjc3YjI3MTZkZjM4NGJmL3RhYmxlcmFuZ2U6ODgyZWFmNjNmNGYzNGUwMGFiNzdiMjcxNmRmMzg0YmZfNDEtNS0xLTEtMA_86cff13c-40e5-4d4f-bb73-0ba039246bbd" unitRef="shares">307480000</us-gaap:WeightedAverageNumberOfDilutedSharesOutstanding>
+    <us-gaap:ProfitLoss contextRef="id9b14020671b4354b86caec3015aab53_D20180101-20181231" decimals="-3" id="id3VybDovL2RvY3MudjEvZG9jOjRjNjBkZTE0ZDY5NjRkMWE5MjY5MWM4OTBlMjcwYmVmL3NlYzo0YzYwZGUxNGQ2OTY0ZDFhOTI2OTFjODkwZTI3MGJlZl85MS9mcmFnOjkxMjBiNjg4ZjY4NjRiZDU4ZDFkZTg1YzVmYTg4OTA4L3RhYmxlOmU0NTNkMzIxZTZjYTQ4MzU4ZGQzZjJlYzJjZWJiODdlL3RhYmxlcmFuZ2U6ZTQ1M2QzMjFlNmNhNDgzNThkZDNmMmVjMmNlYmI4N2VfMTMtMTEtMS0xLTA_453d46a3-08b7-411e-9e57-70eb2490d260" unitRef="usd">-35296000</us-gaap:ProfitLoss>
+    <us-gaap:ProfitLoss contextRef="i2552bf2f0b534e64be589fe042cfc162_D20180101-20181231" decimals="-3" id="id3VybDovL2RvY3MudjEvZG9jOjRjNjBkZTE0ZDY5NjRkMWE5MjY5MWM4OTBlMjcwYmVmL3NlYzo0YzYwZGUxNGQ2OTY0ZDFhOTI2OTFjODkwZTI3MGJlZl85MS9mcmFnOjkxMjBiNjg4ZjY4NjRiZDU4ZDFkZTg1YzVmYTg4OTA4L3RhYmxlOmU0NTNkMzIxZTZjYTQ4MzU4ZGQzZjJlYzJjZWJiODdlL3RhYmxlcmFuZ2U6ZTQ1M2QzMjFlNmNhNDgzNThkZDNmMmVjMmNlYmI4N2VfMTMtMTMtMS0xLTA_c0b7e28d-b1ab-41d9-a44c-092691c95cf7" unitRef="usd">15796000</us-gaap:ProfitLoss>
+    <us-gaap:ProfitLoss contextRef="ie9d4f3c8b0ae4a0e923aca21c2c976b2_D20180101-20181231" decimals="-3" id="id3VybDovL2RvY3MudjEvZG9jOjRjNjBkZTE0ZDY5NjRkMWE5MjY5MWM4OTBlMjcwYmVmL3NlYzo0YzYwZGUxNGQ2OTY0ZDFhOTI2OTFjODkwZTI3MGJlZl85MS9mcmFnOjkxMjBiNjg4ZjY4NjRiZDU4ZDFkZTg1YzVmYTg4OTA4L3RhYmxlOmU0NTNkMzIxZTZjYTQ4MzU4ZGQzZjJlYzJjZWJiODdlL3RhYmxlcmFuZ2U6ZTQ1M2QzMjFlNmNhNDgzNThkZDNmMmVjMmNlYmI4N2VfMTMtMTUtMS0xLTA_a36631d0-ad73-4078-9163-f20376a692e0" unitRef="usd">-19500000</us-gaap:ProfitLoss>
+    <us-gaap:ProfitLoss contextRef="i5beb77a92f0d4a5babca734a89f9333f_D20190101-20191231" decimals="-3" id="id3VybDovL2RvY3MudjEvZG9jOjRjNjBkZTE0ZDY5NjRkMWE5MjY5MWM4OTBlMjcwYmVmL3NlYzo0YzYwZGUxNGQ2OTY0ZDFhOTI2OTFjODkwZTI3MGJlZl85MS9mcmFnOjkxMjBiNjg4ZjY4NjRiZDU4ZDFkZTg1YzVmYTg4OTA4L3RhYmxlOmU0NTNkMzIxZTZjYTQ4MzU4ZGQzZjJlYzJjZWJiODdlL3RhYmxlcmFuZ2U6ZTQ1M2QzMjFlNmNhNDgzNThkZDNmMmVjMmNlYmI4N2VfMjMtMTEtMS0xLTI3OTM_0173dc1b-919b-4b19-9419-7a689aae079f" unitRef="usd">-128243000</us-gaap:ProfitLoss>
+    <us-gaap:ProfitLoss contextRef="iad9e8763a36d49a1b3a6b9472fdc3057_D20190101-20191231" decimals="-3" id="id3VybDovL2RvY3MudjEvZG9jOjRjNjBkZTE0ZDY5NjRkMWE5MjY5MWM4OTBlMjcwYmVmL3NlYzo0YzYwZGUxNGQ2OTY0ZDFhOTI2OTFjODkwZTI3MGJlZl85MS9mcmFnOjkxMjBiNjg4ZjY4NjRiZDU4ZDFkZTg1YzVmYTg4OTA4L3RhYmxlOmU0NTNkMzIxZTZjYTQ4MzU4ZGQzZjJlYzJjZWJiODdlL3RhYmxlcmFuZ2U6ZTQ1M2QzMjFlNmNhNDgzNThkZDNmMmVjMmNlYmI4N2VfMjMtMTMtMS0xLTI3OTM_a1d8eed8-252f-49c0-90ca-e055f11e1ce4" unitRef="usd">37596000</us-gaap:ProfitLoss>
+    <us-gaap:ProfitLoss contextRef="i5403747bd8574a48a9ccc0ea61f04365_D20190101-20191231" decimals="-3" id="id3VybDovL2RvY3MudjEvZG9jOjRjNjBkZTE0ZDY5NjRkMWE5MjY5MWM4OTBlMjcwYmVmL3NlYzo0YzYwZGUxNGQ2OTY0ZDFhOTI2OTFjODkwZTI3MGJlZl85MS9mcmFnOjkxMjBiNjg4ZjY4NjRiZDU4ZDFkZTg1YzVmYTg4OTA4L3RhYmxlOmU0NTNkMzIxZTZjYTQ4MzU4ZGQzZjJlYzJjZWJiODdlL3RhYmxlcmFuZ2U6ZTQ1M2QzMjFlNmNhNDgzNThkZDNmMmVjMmNlYmI4N2VfMjEtMTUtMS0xLTQxNzE_1b469c50-13b5-4f36-ad96-a956e681a810" unitRef="usd">-90647000</us-gaap:ProfitLoss>
+    <us-gaap:ProfitLoss contextRef="ib603a126fbb1471e90469c3a65cd4f5f_D20200101-20201119" decimals="-3" id="id3VybDovL2RvY3MudjEvZG9jOjRjNjBkZTE0ZDY5NjRkMWE5MjY5MWM4OTBlMjcwYmVmL3NlYzo0YzYwZGUxNGQ2OTY0ZDFhOTI2OTFjODkwZTI3MGJlZl85MS9mcmFnOjkxMjBiNjg4ZjY4NjRiZDU4ZDFkZTg1YzVmYTg4OTA4L3RhYmxlOmU0NTNkMzIxZTZjYTQ4MzU4ZGQzZjJlYzJjZWJiODdlL3RhYmxlcmFuZ2U6ZTQ1M2QzMjFlNmNhNDgzNThkZDNmMmVjMmNlYmI4N2VfMzEtMTEtMS0xLTA_8243f8f6-c424-4705-aecd-2c52b5b36e7d" unitRef="usd">-3640328000</us-gaap:ProfitLoss>
+    <us-gaap:ProfitLoss contextRef="i841b542a99694ebc87d716e81603bd13_D20200101-20201119" decimals="-3" id="id3VybDovL2RvY3MudjEvZG9jOjRjNjBkZTE0ZDY5NjRkMWE5MjY5MWM4OTBlMjcwYmVmL3NlYzo0YzYwZGUxNGQ2OTY0ZDFhOTI2OTFjODkwZTI3MGJlZl85MS9mcmFnOjkxMjBiNjg4ZjY4NjRiZDU4ZDFkZTg1YzVmYTg4OTA4L3RhYmxlOmU0NTNkMzIxZTZjYTQ4MzU4ZGQzZjJlYzJjZWJiODdlL3RhYmxlcmFuZ2U6ZTQ1M2QzMjFlNmNhNDgzNThkZDNmMmVjMmNlYmI4N2VfMzEtMTMtMS0xLTA_833eed51-bd16-427b-82f2-37659093cd8d" unitRef="usd">-84283000</us-gaap:ProfitLoss>
+    <us-gaap:ProfitLoss contextRef="ie2d44cef2d0a4f59b99b0fe07f2e3834_D20200101-20201119" decimals="-3" id="id3VybDovL2RvY3MudjEvZG9jOjRjNjBkZTE0ZDY5NjRkMWE5MjY5MWM4OTBlMjcwYmVmL3NlYzo0YzYwZGUxNGQ2OTY0ZDFhOTI2OTFjODkwZTI3MGJlZl85MS9mcmFnOjkxMjBiNjg4ZjY4NjRiZDU4ZDFkZTg1YzVmYTg4OTA4L3RhYmxlOmU0NTNkMzIxZTZjYTQ4MzU4ZGQzZjJlYzJjZWJiODdlL3RhYmxlcmFuZ2U6ZTQ1M2QzMjFlNmNhNDgzNThkZDNmMmVjMmNlYmI4N2VfMzEtMTUtMS0xLTA_2a9cef47-5b91-48b5-b2b8-d3a81cb654ee" unitRef="usd">-3724611000</us-gaap:ProfitLoss>
+    <us-gaap:ProfitLoss contextRef="i32f240c86e084c21ae27095812c8655e_D20201120-20201231" decimals="-3" id="id3VybDovL2RvY3MudjEvZG9jOjRjNjBkZTE0ZDY5NjRkMWE5MjY5MWM4OTBlMjcwYmVmL3NlYzo0YzYwZGUxNGQ2OTY0ZDFhOTI2OTFjODkwZTI3MGJlZl85MS9mcmFnOjkxMjBiNjg4ZjY4NjRiZDU4ZDFkZTg1YzVmYTg4OTA4L3RhYmxlOmU0NTNkMzIxZTZjYTQ4MzU4ZGQzZjJlYzJjZWJiODdlL3RhYmxlcmFuZ2U6ZTQ1M2QzMjFlNmNhNDgzNThkZDNmMmVjMmNlYmI4N2VfNDAtMTEtMS0xLTMxNzA0_58c20aa2-9978-4b44-b26b-f05697a1e4dd" unitRef="usd">-49912000</us-gaap:ProfitLoss>
+    <us-gaap:ProfitLoss contextRef="iad00d5cdd90347dfaa3926c722549b9d_D20201120-20201231" decimals="-3" id="id3VybDovL2RvY3MudjEvZG9jOjRjNjBkZTE0ZDY5NjRkMWE5MjY5MWM4OTBlMjcwYmVmL3NlYzo0YzYwZGUxNGQ2OTY0ZDFhOTI2OTFjODkwZTI3MGJlZl85MS9mcmFnOjkxMjBiNjg4ZjY4NjRiZDU4ZDFkZTg1YzVmYTg4OTA4L3RhYmxlOmU0NTNkMzIxZTZjYTQ4MzU4ZGQzZjJlYzJjZWJiODdlL3RhYmxlcmFuZ2U6ZTQ1M2QzMjFlNmNhNDgzNThkZDNmMmVjMmNlYmI4N2VfNDAtMTMtMS0xLTMxNzA0_b96f24db-c77b-4df0-bd30-7dad8a49e84d" unitRef="usd">3950000</us-gaap:ProfitLoss>
+    <us-gaap:ProfitLoss contextRef="ic14de94f77fd43429b50386799a6b28e_D20201120-20201231" decimals="-3" id="id3VybDovL2RvY3MudjEvZG9jOjRjNjBkZTE0ZDY5NjRkMWE5MjY5MWM4OTBlMjcwYmVmL3NlYzo0YzYwZGUxNGQ2OTY0ZDFhOTI2OTFjODkwZTI3MGJlZl85MS9mcmFnOjkxMjBiNjg4ZjY4NjRiZDU4ZDFkZTg1YzVmYTg4OTA4L3RhYmxlOmU0NTNkMzIxZTZjYTQ4MzU4ZGQzZjJlYzJjZWJiODdlL3RhYmxlcmFuZ2U6ZTQ1M2QzMjFlNmNhNDgzNThkZDNmMmVjMmNlYmI4N2VfNDAtMTUtMS0xLTMzNzg_c625b87f-12fd-4265-80fa-87f5f340f569" unitRef="usd">-45962000</us-gaap:ProfitLoss>
+    <us-gaap:ProfitLoss contextRef="ic14de94f77fd43429b50386799a6b28e_D20201120-20201231" decimals="-3" id="id3VybDovL2RvY3MudjEvZG9jOjRjNjBkZTE0ZDY5NjRkMWE5MjY5MWM4OTBlMjcwYmVmL3NlYzo0YzYwZGUxNGQ2OTY0ZDFhOTI2OTFjODkwZTI3MGJlZl85NC9mcmFnOjIxZmQ0ZjQ3OWI1NjQwNTU5MWJhNjQyYzE3OTRkZTFmL3RhYmxlOmFlZTJkZWYxOTljZTQ0YWViNzJmYmJiNzJiNDViZmQ3L3RhYmxlcmFuZ2U6YWVlMmRlZjE5OWNlNDRhZWI3MmZiYmI3MmI0NWJmZDdfNS0xLTEtMS00MzA3_3611b789-c602-419e-a022-5dff91e9c6c1" unitRef="usd">-45962000</us-gaap:ProfitLoss>
+    <us-gaap:ProfitLoss contextRef="ie2d44cef2d0a4f59b99b0fe07f2e3834_D20200101-20201119" decimals="-3" id="id3VybDovL2RvY3MudjEvZG9jOjRjNjBkZTE0ZDY5NjRkMWE5MjY5MWM4OTBlMjcwYmVmL3NlYzo0YzYwZGUxNGQ2OTY0ZDFhOTI2OTFjODkwZTI3MGJlZl85NC9mcmFnOjIxZmQ0ZjQ3OWI1NjQwNTU5MWJhNjQyYzE3OTRkZTFmL3RhYmxlOmFlZTJkZWYxOTljZTQ0YWViNzJmYmJiNzJiNDViZmQ3L3RhYmxlcmFuZ2U6YWVlMmRlZjE5OWNlNDRhZWI3MmZiYmI3MmI0NWJmZDdfNS0xLTEtMS0w_236452da-d935-4b80-b46f-aaa353e8d6a6" unitRef="usd">-3724611000</us-gaap:ProfitLoss>
+    <us-gaap:ProfitLoss contextRef="i5403747bd8574a48a9ccc0ea61f04365_D20190101-20191231" decimals="-3" id="id3VybDovL2RvY3MudjEvZG9jOjRjNjBkZTE0ZDY5NjRkMWE5MjY5MWM4OTBlMjcwYmVmL3NlYzo0YzYwZGUxNGQ2OTY0ZDFhOTI2OTFjODkwZTI3MGJlZl85NC9mcmFnOjIxZmQ0ZjQ3OWI1NjQwNTU5MWJhNjQyYzE3OTRkZTFmL3RhYmxlOmFlZTJkZWYxOTljZTQ0YWViNzJmYmJiNzJiNDViZmQ3L3RhYmxlcmFuZ2U6YWVlMmRlZjE5OWNlNDRhZWI3MmZiYmI3MmI0NWJmZDdfNS0zLTEtMS0w_59e4d4df-0e8e-42a0-a624-c4c84a9b8f15" unitRef="usd">-90647000</us-gaap:ProfitLoss>
+    <us-gaap:ProfitLoss contextRef="ie9d4f3c8b0ae4a0e923aca21c2c976b2_D20180101-20181231" decimals="-3" id="id3VybDovL2RvY3MudjEvZG9jOjRjNjBkZTE0ZDY5NjRkMWE5MjY5MWM4OTBlMjcwYmVmL3NlYzo0YzYwZGUxNGQ2OTY0ZDFhOTI2OTFjODkwZTI3MGJlZl85NC9mcmFnOjIxZmQ0ZjQ3OWI1NjQwNTU5MWJhNjQyYzE3OTRkZTFmL3RhYmxlOmFlZTJkZWYxOTljZTQ0YWViNzJmYmJiNzJiNDViZmQ3L3RhYmxlcmFuZ2U6YWVlMmRlZjE5OWNlNDRhZWI3MmZiYmI3MmI0NWJmZDdfNS01LTEtMS0w_f619bcc7-cfaa-458b-8dc5-b62c85edbc1d" unitRef="usd">-19500000</us-gaap:ProfitLoss>
+    <us-gaap:WeightedAverageNumberOfShareOutstandingBasicAndDiluted contextRef="ic14de94f77fd43429b50386799a6b28e_D20201120-20201231" decimals="-3" id="id3VybDovL2RvY3MudjEvZG9jOjRjNjBkZTE0ZDY5NjRkMWE5MjY5MWM4OTBlMjcwYmVmL3NlYzo0YzYwZGUxNGQ2OTY0ZDFhOTI2OTFjODkwZTI3MGJlZl8xNzgvZnJhZzo3ZjZmMDBjODU3ZGY0M2Y0ODkxMWQ5MTE4NjdhZGJhOS90YWJsZTpkZjlmNjZjY2JmOGQ0NzkwOGU3NzUzMTkxZTBkNDBhMS90YWJsZXJhbmdlOmRmOWY2NmNjYmY4ZDQ3OTA4ZTc3NTMxOTFlMGQ0MGExXzUtMS0xLTEtMjY4NDg_4080f71c-c3a3-4545-8132-bd5ef24ef95a" unitRef="shares">19991000</us-gaap:WeightedAverageNumberOfShareOutstandingBasicAndDiluted>
+    <us-gaap:WeightedAverageNumberOfShareOutstandingBasicAndDiluted contextRef="ie2d44cef2d0a4f59b99b0fe07f2e3834_D20200101-20201119" decimals="-3" id="id3VybDovL2RvY3MudjEvZG9jOjRjNjBkZTE0ZDY5NjRkMWE5MjY5MWM4OTBlMjcwYmVmL3NlYzo0YzYwZGUxNGQ2OTY0ZDFhOTI2OTFjODkwZTI3MGJlZl8xNzgvZnJhZzo3ZjZmMDBjODU3ZGY0M2Y0ODkxMWQ5MTE4NjdhZGJhOS90YWJsZTpkZjlmNjZjY2JmOGQ0NzkwOGU3NzUzMTkxZTBkNDBhMS90YWJsZXJhbmdlOmRmOWY2NmNjYmY4ZDQ3OTA4ZTc3NTMxOTFlMGQ0MGExXzQtMS0xLTEtMA_bab4890e-6f1e-4c16-a986-349867187c53" unitRef="shares">317644000</us-gaap:WeightedAverageNumberOfShareOutstandingBasicAndDiluted>
+    <us-gaap:WeightedAverageNumberOfShareOutstandingBasicAndDiluted contextRef="i5403747bd8574a48a9ccc0ea61f04365_D20190101-20191231" decimals="-3" id="id3VybDovL2RvY3MudjEvZG9jOjRjNjBkZTE0ZDY5NjRkMWE5MjY5MWM4OTBlMjcwYmVmL3NlYzo0YzYwZGUxNGQ2OTY0ZDFhOTI2OTFjODkwZTI3MGJlZl8xNzgvZnJhZzo3ZjZmMDBjODU3ZGY0M2Y0ODkxMWQ5MTE4NjdhZGJhOS90YWJsZTpkZjlmNjZjY2JmOGQ0NzkwOGU3NzUzMTkxZTBkNDBhMS90YWJsZXJhbmdlOmRmOWY2NmNjYmY4ZDQ3OTA4ZTc3NTMxOTFlMGQ0MGExXzQtMy0xLTEtMA_bff6581e-fd13-4425-9894-4309670f2a6a" unitRef="shares">315002000</us-gaap:WeightedAverageNumberOfShareOutstandingBasicAndDiluted>
+    <us-gaap:WeightedAverageNumberOfShareOutstandingBasicAndDiluted contextRef="ie9d4f3c8b0ae4a0e923aca21c2c976b2_D20180101-20181231" decimals="-3" id="id3VybDovL2RvY3MudjEvZG9jOjRjNjBkZTE0ZDY5NjRkMWE5MjY5MWM4OTBlMjcwYmVmL3NlYzo0YzYwZGUxNGQ2OTY0ZDFhOTI2OTFjODkwZTI3MGJlZl8xNzgvZnJhZzo3ZjZmMDBjODU3ZGY0M2Y0ODkxMWQ5MTE4NjdhZGJhOS90YWJsZTpkZjlmNjZjY2JmOGQ0NzkwOGU3NzUzMTkxZTBkNDBhMS90YWJsZXJhbmdlOmRmOWY2NmNjYmY4ZDQ3OTA4ZTc3NTMxOTFlMGQ0MGExXzQtNS0xLTEtMA_473ef459-ca03-4a2d-9391-732c6c4e34a1" unitRef="shares">307480000</us-gaap:WeightedAverageNumberOfShareOutstandingBasicAndDiluted>
+    </xbrl>

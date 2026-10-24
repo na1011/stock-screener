@@ -1,6 +1,7 @@
 package com.stockscreener.pipeline.datasource.us;
 
 import com.stockscreener.pipeline.datasource.DataSourceException;
+import com.stockscreener.pipeline.datasource.us.shareclass.ClassFacts;
 import com.stockscreener.pipeline.datasource.us.shareclass.IssuerFacts;
 import com.stockscreener.pipeline.datasource.us.shareclass.ShareClassStore;
 import org.junit.jupiter.api.DisplayName;
@@ -69,6 +70,30 @@ class ShareClassCollectorTest {
         assertThat(outcome.failed()).containsExactly("A2", "A3");
         assertThat(outcome.unresolved()).containsExactly(DataSourceException.Kind.TRANSIENT,
                 DataSourceException.Kind.TRANSIENT);
+    }
+
+    @Test
+    @DisplayName("축 없는 표지가 있는데 companyfacts에 당기 분모가 없는 공시도 받는다(ADR-0189) — 대조군: 당기 분모가 있으면 안 받는다")
+    void currentPathDenominatorCandidatesAreFetched() throws Exception {
+        SecFilingClient client = mock(SecFilingClient.class);
+        ShareClassStore store = mock(ShareClassStore.class);
+        when(store.supplementedFilings(CIK)).thenReturn(Map.of());
+        when(store.factRows(CIK)).thenReturn(Map.of());
+        when(client.folder(anyLong(), anyString())).thenThrow(new DataSourceException(
+                DataSourceException.Kind.TRANSIENT, "sec-edgar", "502"));
+        Map<String, IssuerFacts.Filing> filings = new LinkedHashMap<>();
+        filings.put("D1", new IssuerFacts.Filing("10-Q", LocalDate.of(2026, 7, 27)));
+        filings.put("D2", new IssuerFacts.Filing("10-Q", LocalDate.of(2026, 4, 24)));
+        IssuerFacts.Key quarter = new IssuerFacts.Key("D1",
+                new ClassFacts.Period(LocalDate.of(2026, 4, 1), LocalDate.of(2026, 6, 30)));
+        IssuerFacts.Key earlier = new IssuerFacts.Key("D2",
+                new ClassFacts.Period(LocalDate.of(2026, 1, 1), LocalDate.of(2026, 3, 31)));
+        IssuerFacts cf = new IssuerFacts(filings, Map.of(earlier, 992_000_000d), Map.of(), Map.of(),
+                Map.of(quarter, 450_000_000d), Map.of("D1", 992_674_071d, "D2", 992_068_697d));
+
+        ShareClassCollector.Outcome outcome = new ShareClassCollector(client, store).fetchInstances(CIK, cf, "test");
+
+        assertThat(outcome.failed()).as("D1은 순이익만 있고 분모가 축 맥락에만 있다(BKR 꼴) · D2는 분모가 있다").containsExactly("D1");
     }
 
     /** 표지 주식수 없는 2020-09 뒤 10-Q들 — 전부 앵커 후보다. */

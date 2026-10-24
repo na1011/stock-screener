@@ -41,7 +41,7 @@ import java.util.Set;
  * <p><b>MUST NOT: {@code FinanceCosts}를 이자비용으로 싣지 않는다.</b> 은행형 영업이익 재료이고 리스 이자 · 충당부채 할인 상각까지
  * 담는다. 은행 재료 넷이 IFRS에 표준 개념으로 없어 그 갈래는 어차피 안 켜진다.
  */
-final class TaxonomyFrame {
+public final class TaxonomyFrame {
 
     static final String US_GAAP = "us-gaap";
     static final String IFRS = "ifrs-full";
@@ -129,7 +129,23 @@ final class TaxonomyFrame {
      * @param latestAnnualCurrency  남은 연차 공시 중 가장 늦게 낸 것의 표시 통화(연차 공시가 없으면 null)
      * @param droppedAccessions     전환의 다리가 끊겨 버린 옛 기준 공시
      */
-    record Result(ObjectNode facts, String latestAnnualCurrency, Set<String> droppedAccessions) {
+    /**
+     * @param shareClassFacts 클래스 축 판정 재료용 사본 — {@code facts}에 IFRS 기본 가중평균({@code WeightedAverageShares})을
+     *                        {@code WeightedAverageNumberOfSharesOutstandingBasic} 이름으로 더 싣는다(ADR-0189). 재무 열 사다리
+     *                        ({@code SecEdgarColumn} 주식수 폴백)는 {@code facts}를 읽으므로 이 별칭을 못 본다 — ADR-0182가 IFRS 주식수
+     *                        폴백을 버린 근거(표지와 10배 넘게 갈리는 쌍 22/636)는 그 사다리에 선다. 지금 경로 EPS 분모는 단위 확인을 탄다.
+     */
+    record Result(ObjectNode facts, String latestAnnualCurrency, Set<String> droppedAccessions, ObjectNode shareClassFacts) {
+    }
+
+    /** 클래스 축 판정 재료의 틀 — {@link Result#shareClassFacts()}(스윕 도구가 운영 입력과 같은 재료를 짓는 입구). */
+    public static ObjectNode shareClassFacts(JsonNode facts) {
+        return of(facts).shareClassFacts();
+    }
+
+    /** 틀만 지난 재료(IFRS 가중평균 별칭 없음) — 스윕 도구가 고치기 전 입력을 짓는 입구. */
+    public static ObjectNode framedFacts(JsonNode facts) {
+        return of(facts).facts();
     }
 
     private record Filing(String form, LocalDate filed) {
@@ -190,7 +206,13 @@ final class TaxonomyFrame {
             }
             copy(concept, gaap, alias.usGaap(), IFRS, taxonomyOf, currencyOf, dropped, alias, ifrsConcepts);
         }
-        return new Result(out, latestAnnualCurrency(filings, currencyOf, dropped), Collections.unmodifiableSet(dropped));
+        ObjectNode shareClass = out.deepCopy();
+        JsonNode weighted = facts.path(IFRS).path("WeightedAverageShares");
+        if (!weighted.isMissingNode()) {
+            copy(weighted, (ObjectNode) shareClass.path(US_GAAP), "WeightedAverageNumberOfSharesOutstandingBasic", IFRS, taxonomyOf,
+                    currencyOf, dropped, null, null);
+        }
+        return new Result(out, latestAnnualCurrency(filings, currencyOf, dropped), Collections.unmodifiableSet(dropped), shareClass);
     }
 
     /** {@code source}의 팩트 중 그 공시의 기준이 {@code taxonomy}이고 단위가 표시 통화에 맞는 것을 {@code gaap[name]}에 싣는다. */

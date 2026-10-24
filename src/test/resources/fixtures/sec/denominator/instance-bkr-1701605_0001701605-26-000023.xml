@@ -1,0 +1,383 @@
+<?xml version='1.0' encoding='utf-8'?>
+<xbrl xmlns="http://www.xbrl.org/2003/instance" xmlns:dei="http://xbrl.sec.gov/dei/2026" xmlns:link="http://www.xbrl.org/2003/linkbase" xmlns:us-gaap="http://fasb.org/us-gaap/2026" xmlns:xbrldi="http://xbrl.org/2006/xbrldi" xmlns:xlink="http://www.w3.org/1999/xlink" xml:lang="en-US">
+    <link:schemaRef xlink:href="bkr-20260630.xsd" xlink:type="simple" />
+    <context id="c-1">
+        <entity>
+            <identifier scheme="http://www.sec.gov/CIK">0001701605</identifier>
+        </entity>
+        <period>
+            <startDate>2026-01-01</startDate>
+            <endDate>2026-06-30</endDate>
+        </period>
+    </context>
+    <context id="c-2">
+        <entity>
+            <identifier scheme="http://www.sec.gov/CIK">0001701605</identifier>
+            <segment>
+                <xbrldi:explicitMember dimension="us-gaap:LongtermDebtTypeAxis">bkr:A3.226SeniorNotesDue2030OfBakerHughesHoldingsLLCAndBakerHughesCoObligorInc.Member</xbrldi:explicitMember>
+            </segment>
+        </entity>
+        <period>
+            <startDate>2026-01-01</startDate>
+            <endDate>2026-06-30</endDate>
+        </period>
+    </context>
+    <context id="c-3">
+        <entity>
+            <identifier scheme="http://www.sec.gov/CIK">0001701605</identifier>
+            <segment>
+                <xbrldi:explicitMember dimension="us-gaap:LongtermDebtTypeAxis">bkr:A3.812SeniorNotesDue2034OfBakerHughesHoldingsLLCAndBakerHughesCoObligorInc.Member</xbrldi:explicitMember>
+            </segment>
+        </entity>
+        <period>
+            <startDate>2026-01-01</startDate>
+            <endDate>2026-06-30</endDate>
+        </period>
+    </context>
+    <context id="c-4">
+        <entity>
+            <identifier scheme="http://www.sec.gov/CIK">0001701605</identifier>
+            <segment>
+                <xbrldi:explicitMember dimension="us-gaap:LongtermDebtTypeAxis">bkr:A4.193SeniorNotesDue2038OfBakerHughesHoldingsLLCAndBakerHughesCoObligorInc.Member</xbrldi:explicitMember>
+            </segment>
+        </entity>
+        <period>
+            <startDate>2026-01-01</startDate>
+            <endDate>2026-06-30</endDate>
+        </period>
+    </context>
+    <context id="c-5">
+        <entity>
+            <identifier scheme="http://www.sec.gov/CIK">0001701605</identifier>
+            <segment>
+                <xbrldi:explicitMember dimension="us-gaap:LongtermDebtTypeAxis">bkr:A5.125SeniorNotesDue2040OfBakerHughesHoldingsLLCAndBakerHughesCoObligorInc.Member</xbrldi:explicitMember>
+            </segment>
+        </entity>
+        <period>
+            <startDate>2026-01-01</startDate>
+            <endDate>2026-06-30</endDate>
+        </period>
+    </context>
+    <context id="c-6">
+        <entity>
+            <identifier scheme="http://www.sec.gov/CIK">0001701605</identifier>
+            <segment>
+                <xbrldi:explicitMember dimension="us-gaap:LongtermDebtTypeAxis">bkr:A4.737SeniorNotesDue2046OfBakerHughesHoldingsLLCAndBakerHughesCoObligorInc.Member</xbrldi:explicitMember>
+            </segment>
+        </entity>
+        <period>
+            <startDate>2026-01-01</startDate>
+            <endDate>2026-06-30</endDate>
+        </period>
+    </context>
+    <context id="c-7">
+        <entity>
+            <identifier scheme="http://www.sec.gov/CIK">0001701605</identifier>
+        </entity>
+        <period>
+            <instant>2026-07-23</instant>
+        </period>
+    </context>
+    <context id="c-16">
+        <entity>
+            <identifier scheme="http://www.sec.gov/CIK">0001701605</identifier>
+        </entity>
+        <period>
+            <startDate>2026-04-01</startDate>
+            <endDate>2026-06-30</endDate>
+        </period>
+    </context>
+    <context id="c-17">
+        <entity>
+            <identifier scheme="http://www.sec.gov/CIK">0001701605</identifier>
+        </entity>
+        <period>
+            <startDate>2025-04-01</startDate>
+            <endDate>2025-06-30</endDate>
+        </period>
+    </context>
+    <context id="c-18">
+        <entity>
+            <identifier scheme="http://www.sec.gov/CIK">0001701605</identifier>
+        </entity>
+        <period>
+            <startDate>2025-01-01</startDate>
+            <endDate>2025-06-30</endDate>
+        </period>
+    </context>
+    <context id="c-19">
+        <entity>
+            <identifier scheme="http://www.sec.gov/CIK">0001701605</identifier>
+            <segment>
+                <xbrldi:explicitMember dimension="us-gaap:StatementClassOfStockAxis">us-gaap:CommonClassAMember</xbrldi:explicitMember>
+            </segment>
+        </entity>
+        <period>
+            <startDate>2026-04-01</startDate>
+            <endDate>2026-06-30</endDate>
+        </period>
+    </context>
+    <context id="c-20">
+        <entity>
+            <identifier scheme="http://www.sec.gov/CIK">0001701605</identifier>
+            <segment>
+                <xbrldi:explicitMember dimension="us-gaap:StatementClassOfStockAxis">us-gaap:CommonClassAMember</xbrldi:explicitMember>
+            </segment>
+        </entity>
+        <period>
+            <startDate>2025-04-01</startDate>
+            <endDate>2025-06-30</endDate>
+        </period>
+    </context>
+    <context id="c-21">
+        <entity>
+            <identifier scheme="http://www.sec.gov/CIK">0001701605</identifier>
+            <segment>
+                <xbrldi:explicitMember dimension="us-gaap:StatementClassOfStockAxis">us-gaap:CommonClassAMember</xbrldi:explicitMember>
+            </segment>
+        </entity>
+        <period>
+            <startDate>2026-01-01</startDate>
+            <endDate>2026-06-30</endDate>
+        </period>
+    </context>
+    <context id="c-22">
+        <entity>
+            <identifier scheme="http://www.sec.gov/CIK">0001701605</identifier>
+            <segment>
+                <xbrldi:explicitMember dimension="us-gaap:StatementClassOfStockAxis">us-gaap:CommonClassAMember</xbrldi:explicitMember>
+            </segment>
+        </entity>
+        <period>
+            <startDate>2025-01-01</startDate>
+            <endDate>2025-06-30</endDate>
+        </period>
+    </context>
+    <context id="c-32">
+        <entity>
+            <identifier scheme="http://www.sec.gov/CIK">0001701605</identifier>
+            <segment>
+                <xbrldi:explicitMember dimension="us-gaap:StatementEquityComponentsAxis">us-gaap:RetainedEarningsMember</xbrldi:explicitMember>
+            </segment>
+        </entity>
+        <period>
+            <startDate>2026-01-01</startDate>
+            <endDate>2026-06-30</endDate>
+        </period>
+    </context>
+    <context id="c-33">
+        <entity>
+            <identifier scheme="http://www.sec.gov/CIK">0001701605</identifier>
+            <segment>
+                <xbrldi:explicitMember dimension="us-gaap:StatementEquityComponentsAxis">us-gaap:NoncontrollingInterestMember</xbrldi:explicitMember>
+            </segment>
+        </entity>
+        <period>
+            <startDate>2026-01-01</startDate>
+            <endDate>2026-06-30</endDate>
+        </period>
+    </context>
+    <context id="c-47">
+        <entity>
+            <identifier scheme="http://www.sec.gov/CIK">0001701605</identifier>
+            <segment>
+                <xbrldi:explicitMember dimension="us-gaap:StatementEquityComponentsAxis">us-gaap:RetainedEarningsMember</xbrldi:explicitMember>
+            </segment>
+        </entity>
+        <period>
+            <startDate>2026-04-01</startDate>
+            <endDate>2026-06-30</endDate>
+        </period>
+    </context>
+    <context id="c-48">
+        <entity>
+            <identifier scheme="http://www.sec.gov/CIK">0001701605</identifier>
+            <segment>
+                <xbrldi:explicitMember dimension="us-gaap:StatementEquityComponentsAxis">us-gaap:NoncontrollingInterestMember</xbrldi:explicitMember>
+            </segment>
+        </entity>
+        <period>
+            <startDate>2026-04-01</startDate>
+            <endDate>2026-06-30</endDate>
+        </period>
+    </context>
+    <context id="c-57">
+        <entity>
+            <identifier scheme="http://www.sec.gov/CIK">0001701605</identifier>
+            <segment>
+                <xbrldi:explicitMember dimension="us-gaap:StatementEquityComponentsAxis">us-gaap:RetainedEarningsMember</xbrldi:explicitMember>
+            </segment>
+        </entity>
+        <period>
+            <startDate>2025-01-01</startDate>
+            <endDate>2025-06-30</endDate>
+        </period>
+    </context>
+    <context id="c-58">
+        <entity>
+            <identifier scheme="http://www.sec.gov/CIK">0001701605</identifier>
+            <segment>
+                <xbrldi:explicitMember dimension="us-gaap:StatementEquityComponentsAxis">us-gaap:NoncontrollingInterestMember</xbrldi:explicitMember>
+            </segment>
+        </entity>
+        <period>
+            <startDate>2025-01-01</startDate>
+            <endDate>2025-06-30</endDate>
+        </period>
+    </context>
+    <context id="c-73">
+        <entity>
+            <identifier scheme="http://www.sec.gov/CIK">0001701605</identifier>
+            <segment>
+                <xbrldi:explicitMember dimension="us-gaap:StatementEquityComponentsAxis">us-gaap:RetainedEarningsMember</xbrldi:explicitMember>
+            </segment>
+        </entity>
+        <period>
+            <startDate>2025-04-01</startDate>
+            <endDate>2025-06-30</endDate>
+        </period>
+    </context>
+    <context id="c-74">
+        <entity>
+            <identifier scheme="http://www.sec.gov/CIK">0001701605</identifier>
+            <segment>
+                <xbrldi:explicitMember dimension="us-gaap:StatementEquityComponentsAxis">us-gaap:NoncontrollingInterestMember</xbrldi:explicitMember>
+            </segment>
+        </entity>
+        <period>
+            <startDate>2025-04-01</startDate>
+            <endDate>2025-06-30</endDate>
+        </period>
+    </context>
+    <unit id="shares">
+        <measure>shares</measure>
+    </unit>
+    <unit id="usd">
+        <measure>iso4217:USD</measure>
+    </unit>
+    <unit id="usdPerShare">
+        <divide>
+            <unitNumerator>
+                <measure>iso4217:USD</measure>
+            </unitNumerator>
+            <unitDenominator>
+                <measure>shares</measure>
+            </unitDenominator>
+        </divide>
+    </unit>
+    <unit id="number">
+        <measure>pure</measure>
+    </unit>
+    <unit id="eur">
+        <measure>iso4217:EUR</measure>
+    </unit>
+    <unit id="reportingunit">
+        <measure>bkr:reportingUnit</measure>
+    </unit>
+    <unit id="segment">
+        <measure>bkr:segment</measure>
+    </unit>
+    <unit id="productline">
+        <measure>bkr:productLine</measure>
+    </unit>
+    <dei:DocumentType contextRef="c-1" id="f-1">10-Q</dei:DocumentType>
+    <dei:Security12bTitle contextRef="c-1" id="f-16">Class A Common Stock, par value $0.0001 per share</dei:Security12bTitle>
+    <dei:TradingSymbol contextRef="c-1" id="f-17">BKR</dei:TradingSymbol>
+    <dei:Security12bTitle contextRef="c-2" id="f-19">3.226% Senior Notes due 2030 of Baker Hughes Holdings LLC and Baker Hughes Co-Obligor, Inc.</dei:Security12bTitle>
+    <dei:TradingSymbol contextRef="c-2" id="f-20">BKR30</dei:TradingSymbol>
+    <dei:Security12bTitle contextRef="c-3" id="f-22">3.812% Senior Notes due 2034 of Baker Hughes Holdings LLC and Baker Hughes Co-Obligor, Inc.</dei:Security12bTitle>
+    <dei:TradingSymbol contextRef="c-3" id="f-23">BKR34</dei:TradingSymbol>
+    <dei:Security12bTitle contextRef="c-4" id="f-25">4.193% Senior Notes due 2038 of Baker Hughes Holdings LLC and Baker Hughes Co-Obligor, Inc.</dei:Security12bTitle>
+    <dei:TradingSymbol contextRef="c-4" id="f-26">BKR38</dei:TradingSymbol>
+    <dei:Security12bTitle contextRef="c-5" id="f-28">5.125% Senior Notes due 2040 of Baker Hughes Holdings LLC and Baker Hughes Co-Obligor, Inc.</dei:Security12bTitle>
+    <dei:TradingSymbol contextRef="c-5" id="f-29">BKR40</dei:TradingSymbol>
+    <dei:Security12bTitle contextRef="c-6" id="f-31">4.737% Senior Notes due 2046 of Baker Hughes Holdings LLC and Baker Hughes Co-Obligor, Inc.</dei:Security12bTitle>
+    <dei:TradingSymbol contextRef="c-6" id="f-32">BKR46</dei:TradingSymbol>
+    <dei:EntityCommonStockSharesOutstanding contextRef="c-7" decimals="INF" id="f-40" unitRef="shares">992674071</dei:EntityCommonStockSharesOutstanding>
+    <us-gaap:ProfitLoss contextRef="c-16" decimals="-6" id="f-94" unitRef="usd">682000000</us-gaap:ProfitLoss>
+    <us-gaap:ProfitLoss contextRef="c-17" decimals="-6" id="f-95" unitRef="usd">711000000</us-gaap:ProfitLoss>
+    <us-gaap:ProfitLoss contextRef="c-1" decimals="-6" id="f-96" unitRef="usd">1620000000</us-gaap:ProfitLoss>
+    <us-gaap:ProfitLoss contextRef="c-18" decimals="-6" id="f-97" unitRef="usd">1120000000</us-gaap:ProfitLoss>
+    <us-gaap:NetIncomeLossAttributableToNoncontrollingInterest contextRef="c-16" decimals="-6" id="f-98" unitRef="usd">1000000</us-gaap:NetIncomeLossAttributableToNoncontrollingInterest>
+    <us-gaap:NetIncomeLossAttributableToNoncontrollingInterest contextRef="c-17" decimals="-6" id="f-99" unitRef="usd">10000000</us-gaap:NetIncomeLossAttributableToNoncontrollingInterest>
+    <us-gaap:NetIncomeLossAttributableToNoncontrollingInterest contextRef="c-1" decimals="-6" id="f-100" unitRef="usd">9000000</us-gaap:NetIncomeLossAttributableToNoncontrollingInterest>
+    <us-gaap:NetIncomeLossAttributableToNoncontrollingInterest contextRef="c-18" decimals="-6" id="f-101" unitRef="usd">17000000</us-gaap:NetIncomeLossAttributableToNoncontrollingInterest>
+    <us-gaap:NetIncomeLoss contextRef="c-16" decimals="-6" id="f-102" unitRef="usd">681000000</us-gaap:NetIncomeLoss>
+    <us-gaap:NetIncomeLoss contextRef="c-17" decimals="-6" id="f-103" unitRef="usd">701000000</us-gaap:NetIncomeLoss>
+    <us-gaap:NetIncomeLoss contextRef="c-1" decimals="-6" id="f-104" unitRef="usd">1611000000</us-gaap:NetIncomeLoss>
+    <us-gaap:NetIncomeLoss contextRef="c-18" decimals="-6" id="f-105" unitRef="usd">1103000000</us-gaap:NetIncomeLoss>
+    <us-gaap:EarningsPerShareBasic contextRef="c-19" decimals="2" id="f-106" unitRef="usdPerShare">0.69</us-gaap:EarningsPerShareBasic>
+    <us-gaap:EarningsPerShareBasic contextRef="c-20" decimals="2" id="f-107" unitRef="usdPerShare">0.71</us-gaap:EarningsPerShareBasic>
+    <us-gaap:EarningsPerShareBasic contextRef="c-21" decimals="2" id="f-108" unitRef="usdPerShare">1.63</us-gaap:EarningsPerShareBasic>
+    <us-gaap:EarningsPerShareBasic contextRef="c-22" decimals="2" id="f-109" unitRef="usdPerShare">1.11</us-gaap:EarningsPerShareBasic>
+    <us-gaap:EarningsPerShareDiluted contextRef="c-19" decimals="2" id="f-110" unitRef="usdPerShare">0.68</us-gaap:EarningsPerShareDiluted>
+    <us-gaap:EarningsPerShareDiluted contextRef="c-20" decimals="2" id="f-111" unitRef="usdPerShare">0.71</us-gaap:EarningsPerShareDiluted>
+    <us-gaap:EarningsPerShareDiluted contextRef="c-21" decimals="2" id="f-112" unitRef="usdPerShare">1.62</us-gaap:EarningsPerShareDiluted>
+    <us-gaap:EarningsPerShareDiluted contextRef="c-22" decimals="2" id="f-113" unitRef="usdPerShare">1.11</us-gaap:EarningsPerShareDiluted>
+    <us-gaap:ProfitLoss contextRef="c-16" decimals="-6" id="f-118" unitRef="usd">682000000</us-gaap:ProfitLoss>
+    <us-gaap:ProfitLoss contextRef="c-17" decimals="-6" id="f-119" unitRef="usd">711000000</us-gaap:ProfitLoss>
+    <us-gaap:ProfitLoss contextRef="c-1" decimals="-6" id="f-120" unitRef="usd">1620000000</us-gaap:ProfitLoss>
+    <us-gaap:ProfitLoss contextRef="c-18" decimals="-6" id="f-121" unitRef="usd">1120000000</us-gaap:ProfitLoss>
+    <us-gaap:NetIncomeLossAttributableToNoncontrollingInterest contextRef="c-16" decimals="-6" id="f-122" unitRef="usd">1000000</us-gaap:NetIncomeLossAttributableToNoncontrollingInterest>
+    <us-gaap:NetIncomeLossAttributableToNoncontrollingInterest contextRef="c-17" decimals="-6" id="f-123" unitRef="usd">10000000</us-gaap:NetIncomeLossAttributableToNoncontrollingInterest>
+    <us-gaap:NetIncomeLossAttributableToNoncontrollingInterest contextRef="c-1" decimals="-6" id="f-124" unitRef="usd">9000000</us-gaap:NetIncomeLossAttributableToNoncontrollingInterest>
+    <us-gaap:NetIncomeLossAttributableToNoncontrollingInterest contextRef="c-18" decimals="-6" id="f-125" unitRef="usd">17000000</us-gaap:NetIncomeLossAttributableToNoncontrollingInterest>
+    <us-gaap:NetIncomeLoss contextRef="c-16" decimals="-6" id="f-126" unitRef="usd">681000000</us-gaap:NetIncomeLoss>
+    <us-gaap:NetIncomeLoss contextRef="c-17" decimals="-6" id="f-127" unitRef="usd">701000000</us-gaap:NetIncomeLoss>
+    <us-gaap:NetIncomeLoss contextRef="c-1" decimals="-6" id="f-128" unitRef="usd">1611000000</us-gaap:NetIncomeLoss>
+    <us-gaap:NetIncomeLoss contextRef="c-18" decimals="-6" id="f-129" unitRef="usd">1103000000</us-gaap:NetIncomeLoss>
+    <us-gaap:ProfitLoss contextRef="c-32" decimals="-6" id="f-240" unitRef="usd">1611000000</us-gaap:ProfitLoss>
+    <us-gaap:ProfitLoss contextRef="c-33" decimals="-6" id="f-241" unitRef="usd">9000000</us-gaap:ProfitLoss>
+    <us-gaap:ProfitLoss contextRef="c-1" decimals="-6" id="f-242" unitRef="usd">1620000000</us-gaap:ProfitLoss>
+    <us-gaap:ProfitLoss contextRef="c-47" decimals="-6" id="f-266" unitRef="usd">681000000</us-gaap:ProfitLoss>
+    <us-gaap:ProfitLoss contextRef="c-48" decimals="-6" id="f-267" unitRef="usd">1000000</us-gaap:ProfitLoss>
+    <us-gaap:ProfitLoss contextRef="c-16" decimals="-6" id="f-268" unitRef="usd">682000000</us-gaap:ProfitLoss>
+    <us-gaap:ProfitLoss contextRef="c-57" decimals="-6" id="f-291" unitRef="usd">1103000000</us-gaap:ProfitLoss>
+    <us-gaap:ProfitLoss contextRef="c-58" decimals="-6" id="f-292" unitRef="usd">17000000</us-gaap:ProfitLoss>
+    <us-gaap:ProfitLoss contextRef="c-18" decimals="-6" id="f-293" unitRef="usd">1120000000</us-gaap:ProfitLoss>
+    <us-gaap:ProfitLoss contextRef="c-73" decimals="-6" id="f-319" unitRef="usd">701000000</us-gaap:ProfitLoss>
+    <us-gaap:ProfitLoss contextRef="c-74" decimals="-6" id="f-320" unitRef="usd">10000000</us-gaap:ProfitLoss>
+    <us-gaap:ProfitLoss contextRef="c-17" decimals="-6" id="f-321" unitRef="usd">711000000</us-gaap:ProfitLoss>
+    <us-gaap:ProfitLoss contextRef="c-1" decimals="-6" id="f-341" unitRef="usd">1620000000</us-gaap:ProfitLoss>
+    <us-gaap:ProfitLoss contextRef="c-18" decimals="-6" id="f-342" unitRef="usd">1120000000</us-gaap:ProfitLoss>
+    <us-gaap:ProfitLoss contextRef="c-16" decimals="-6" id="f-737" unitRef="usd">682000000</us-gaap:ProfitLoss>
+    <us-gaap:ProfitLoss contextRef="c-17" decimals="-6" id="f-738" unitRef="usd">711000000</us-gaap:ProfitLoss>
+    <us-gaap:ProfitLoss contextRef="c-1" decimals="-6" id="f-739" unitRef="usd">1620000000</us-gaap:ProfitLoss>
+    <us-gaap:ProfitLoss contextRef="c-18" decimals="-6" id="f-740" unitRef="usd">1120000000</us-gaap:ProfitLoss>
+    <us-gaap:NetIncomeLossAttributableToNoncontrollingInterest contextRef="c-16" decimals="-6" id="f-741" unitRef="usd">1000000</us-gaap:NetIncomeLossAttributableToNoncontrollingInterest>
+    <us-gaap:NetIncomeLossAttributableToNoncontrollingInterest contextRef="c-17" decimals="-6" id="f-742" unitRef="usd">10000000</us-gaap:NetIncomeLossAttributableToNoncontrollingInterest>
+    <us-gaap:NetIncomeLossAttributableToNoncontrollingInterest contextRef="c-1" decimals="-6" id="f-743" unitRef="usd">9000000</us-gaap:NetIncomeLossAttributableToNoncontrollingInterest>
+    <us-gaap:NetIncomeLossAttributableToNoncontrollingInterest contextRef="c-18" decimals="-6" id="f-744" unitRef="usd">17000000</us-gaap:NetIncomeLossAttributableToNoncontrollingInterest>
+    <us-gaap:NetIncomeLoss contextRef="c-16" decimals="-6" id="f-745" unitRef="usd">681000000</us-gaap:NetIncomeLoss>
+    <us-gaap:NetIncomeLoss contextRef="c-17" decimals="-6" id="f-746" unitRef="usd">701000000</us-gaap:NetIncomeLoss>
+    <us-gaap:NetIncomeLoss contextRef="c-1" decimals="-6" id="f-747" unitRef="usd">1611000000</us-gaap:NetIncomeLoss>
+    <us-gaap:NetIncomeLoss contextRef="c-18" decimals="-6" id="f-748" unitRef="usd">1103000000</us-gaap:NetIncomeLoss>
+    <us-gaap:WeightedAverageNumberOfSharesOutstandingBasic contextRef="c-19" decimals="-6" id="f-749" unitRef="shares">992000000</us-gaap:WeightedAverageNumberOfSharesOutstandingBasic>
+    <us-gaap:WeightedAverageNumberOfSharesOutstandingBasic contextRef="c-20" decimals="-6" id="f-750" unitRef="shares">988000000</us-gaap:WeightedAverageNumberOfSharesOutstandingBasic>
+    <us-gaap:WeightedAverageNumberOfSharesOutstandingBasic contextRef="c-21" decimals="-6" id="f-751" unitRef="shares">991000000</us-gaap:WeightedAverageNumberOfSharesOutstandingBasic>
+    <us-gaap:WeightedAverageNumberOfSharesOutstandingBasic contextRef="c-22" decimals="-6" id="f-752" unitRef="shares">990000000</us-gaap:WeightedAverageNumberOfSharesOutstandingBasic>
+    <us-gaap:WeightedAverageNumberOfDilutedSharesOutstanding contextRef="c-19" decimals="-6" id="f-753" unitRef="shares">997000000</us-gaap:WeightedAverageNumberOfDilutedSharesOutstanding>
+    <us-gaap:WeightedAverageNumberOfDilutedSharesOutstanding contextRef="c-20" decimals="-6" id="f-754" unitRef="shares">991000000</us-gaap:WeightedAverageNumberOfDilutedSharesOutstanding>
+    <us-gaap:WeightedAverageNumberOfDilutedSharesOutstanding contextRef="c-21" decimals="-6" id="f-755" unitRef="shares">996000000</us-gaap:WeightedAverageNumberOfDilutedSharesOutstanding>
+    <us-gaap:WeightedAverageNumberOfDilutedSharesOutstanding contextRef="c-22" decimals="-6" id="f-756" unitRef="shares">995000000</us-gaap:WeightedAverageNumberOfDilutedSharesOutstanding>
+    <us-gaap:EarningsPerShareBasic contextRef="c-19" decimals="2" id="f-757" unitRef="usdPerShare">0.69</us-gaap:EarningsPerShareBasic>
+    <us-gaap:EarningsPerShareBasic contextRef="c-20" decimals="2" id="f-758" unitRef="usdPerShare">0.71</us-gaap:EarningsPerShareBasic>
+    <us-gaap:EarningsPerShareBasic contextRef="c-21" decimals="2" id="f-759" unitRef="usdPerShare">1.63</us-gaap:EarningsPerShareBasic>
+    <us-gaap:EarningsPerShareBasic contextRef="c-22" decimals="2" id="f-760" unitRef="usdPerShare">1.11</us-gaap:EarningsPerShareBasic>
+    <us-gaap:EarningsPerShareDiluted contextRef="c-19" decimals="2" id="f-761" unitRef="usdPerShare">0.68</us-gaap:EarningsPerShareDiluted>
+    <us-gaap:EarningsPerShareDiluted contextRef="c-20" decimals="2" id="f-762" unitRef="usdPerShare">0.71</us-gaap:EarningsPerShareDiluted>
+    <us-gaap:EarningsPerShareDiluted contextRef="c-21" decimals="2" id="f-763" unitRef="usdPerShare">1.62</us-gaap:EarningsPerShareDiluted>
+    <us-gaap:EarningsPerShareDiluted contextRef="c-22" decimals="2" id="f-764" unitRef="usdPerShare">1.11</us-gaap:EarningsPerShareDiluted>
+    <us-gaap:ProfitLoss contextRef="c-16" decimals="-6" id="f-1097" unitRef="usd">682000000</us-gaap:ProfitLoss>
+    <us-gaap:ProfitLoss contextRef="c-17" decimals="-6" id="f-1098" unitRef="usd">711000000</us-gaap:ProfitLoss>
+    <us-gaap:ProfitLoss contextRef="c-1" decimals="-6" id="f-1099" unitRef="usd">1620000000</us-gaap:ProfitLoss>
+    <us-gaap:ProfitLoss contextRef="c-18" decimals="-6" id="f-1100" unitRef="usd">1120000000</us-gaap:ProfitLoss>
+    <us-gaap:NetIncomeLossAttributableToNoncontrollingInterest contextRef="c-16" decimals="-6" id="f-1101" unitRef="usd">1000000</us-gaap:NetIncomeLossAttributableToNoncontrollingInterest>
+    <us-gaap:NetIncomeLossAttributableToNoncontrollingInterest contextRef="c-17" decimals="-6" id="f-1102" unitRef="usd">10000000</us-gaap:NetIncomeLossAttributableToNoncontrollingInterest>
+    <us-gaap:NetIncomeLossAttributableToNoncontrollingInterest contextRef="c-1" decimals="-6" id="f-1103" unitRef="usd">9000000</us-gaap:NetIncomeLossAttributableToNoncontrollingInterest>
+    <us-gaap:NetIncomeLossAttributableToNoncontrollingInterest contextRef="c-18" decimals="-6" id="f-1104" unitRef="usd">17000000</us-gaap:NetIncomeLossAttributableToNoncontrollingInterest>
+    <us-gaap:NetIncomeLoss contextRef="c-16" decimals="-6" id="f-1105" unitRef="usd">681000000</us-gaap:NetIncomeLoss>
+    <us-gaap:NetIncomeLoss contextRef="c-17" decimals="-6" id="f-1106" unitRef="usd">701000000</us-gaap:NetIncomeLoss>
+    <us-gaap:NetIncomeLoss contextRef="c-1" decimals="-6" id="f-1107" unitRef="usd">1611000000</us-gaap:NetIncomeLoss>
+    <us-gaap:NetIncomeLoss contextRef="c-18" decimals="-6" id="f-1108" unitRef="usd">1103000000</us-gaap:NetIncomeLoss>
+    </xbrl>

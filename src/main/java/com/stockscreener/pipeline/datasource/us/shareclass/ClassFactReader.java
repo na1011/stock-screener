@@ -48,9 +48,10 @@ public final class ClassFactReader {
      * 4 — IFRS 공시(ADR-0182 · 0183): 클래스 축 {@code ifrs-full:ClassesOfShareCapitalAxis}를 클래스 축으로 받고, IFRS의 EPS · 가중평균 ·
      * 분자를 같은 뜻의 us-gaap 이름으로 싣는다(AZN · VALE 표지가 그 축의 구성원에만 주식수를 싣는다 · 2026-10-22 인스턴스).
      * 5 — LP 단위(ADR-0187): LP 단위 가중평균을 LP 클래스 축에서도 받고(표지 클래스 구성원만), LP+GP 합계 단위를 다른 가중평균이 없는
-     * 자리의 폴백으로 싣는다(SUN · GEL · 2026-10-23).
+     * 자리의 폴백으로 싣는다(SUN · GEL · 2026-10-23). 6 — 지금 경로 분모(ADR-0189): 축 하나만 단 가중평균을 {@link #DIMENSIONED} 칸에
+     * 싣는다(재작성 · 연결 · 법인 축과 형 붙은 차원 제외 · BKR · CBSH · LYB · SJM · PAA는 축 맥락에만 싣는다 · 2026-10-24).
      */
-    public static final int READER_VERSION = 5;
+    public static final int READER_VERSION = 6;
 
     public static final String SHARES_OUTSTANDING = "EntityCommonStockSharesOutstanding";
     public static final String TRADING_SYMBOL = "TradingSymbol";
@@ -114,6 +115,20 @@ public final class ClassFactReader {
      */
     private static final String LP_CLASS_AXIS = "LimitedPartnersCapitalAccountByClassAxis";
     private static final String SUBSEQUENT_AXIS = "SubsequentEventTypeAxis";
+    /**
+     * 지금 경로 분모 칸의 접두어 — 축 하나만 단 가중평균을 {@code DIMENSIONED + 개념}에 {@code 축=구성원} 열쇠로 싣는다. 앵커 판정은 개념
+     * 이름으로 읽으므로 이 칸을 못 본다(ADR-0189).
+     */
+    public static final String DIMENSIONED = "d:";
+    /** 같은 분모를 다른 이름으로 단 축 — 주식 종류 · 조합원 종류 · EPS 표시 · 계속/중단영업(ADR-0189). */
+    static final Set<String> SAME_DENOMINATOR_AXES = Set.of(CLASS_AXIS, IFRS_CLASS_AXIS, "LimitedPartnersCapitalAccountByClassAxis",
+            "PartnerTypeOfPartnersCapitalAccountAxis", "IncomePerCommonShareAxis", "EarningsPerShareMethodAxis",
+            "StatementOperatingActivitiesSegmentAxis");
+    /** 지금 경로 칸에 안 싣는 축 — 다른 판(재작성)이나 다른 실체(연결 · 법인)다(이 판독기 머리말의 축 규칙과 같다). */
+    private static final Set<String> OTHER_VERSION_AXES = Set.of("RestatementAxis", "StatementScenarioAxis",
+            "ConsolidatedEntitiesAxis", "LegalEntityAxis", "ConsolidationItemsAxis",
+            "ErrorCorrectionsAndPriorPeriodAdjustmentsRestatementByRestatementPeriodAndAmountAxis",
+            "AdjustmentsForNewAccountingPronouncementsAxis");
     /** 표지의 거래소 축 — 상장 판정 표지만 받는다(Two Harbors 10-Q는 표지 기호마다 클래스 축 + 이 축을 단다 · R-D6-0 2026-10-18). */
     private static final String LISTINGS_EXCHANGE_AXIS = "EntityListingsExchangeAxis";
     private static final String XBRLI = "http://www.xbrl.org/2003/instance";
@@ -167,6 +182,7 @@ public final class ClassFactReader {
         List<Late> late = new ArrayList<>();
         List<Pending> lpAxis = new ArrayList<>();
         List<Pending> fallback = new ArrayList<>();
+        List<Pending> dimensioned = new ArrayList<>();
         List<Raw> raws = new ArrayList<>();
         String documentType = null;
         int unreadable = 0;
@@ -225,6 +241,21 @@ public final class ClassFactReader {
             String local = raw.concept();
             String text = raw.text();
             String decimals = raw.decimals();
+            if (coverConcepts == COVER && WEIGHTED_TAGS.contains(local)
+                    && c.start() != null && c.end() != null && c.dims().size() == 1
+                    && !OTHER_VERSION_AXES.contains(c.dims().keySet().iterator().next())
+                    && !"typed".equals(c.dims().values().iterator().next())) {
+                String axis = c.dims().keySet().iterator().next();
+                try {
+                    dimensioned.add(new Pending(DIMENSIONED + local, axis + "=" + c.dims().get(axis),
+                            new ClassFacts.Period(c.start(), c.end()),
+                            new ClassFacts.Measured(Double.parseDouble(text), halfWidth(decimals))));
+                } catch (NumberFormatException e) {
+                    if (!CLASS_AXIS.equals(axis) && !IFRS_CLASS_AXIS.equals(axis)) {
+                        unreadable++;    // 클래스 축 사실은 아래 본 경로가 센다 — 다른 축은 본 경로가 파싱 전에 건너뛴다
+                    }
+                }
+            }
             Set<String> extra = new java.util.HashSet<>(c.dims().keySet());
             extra.remove(CLASS_AXIS);
             extra.remove(IFRS_CLASS_AXIS);
@@ -330,6 +361,10 @@ public final class ClassFactReader {
             if (!taken && (!lp || coverMembers.contains(p.member()))) {
                 durations.computeIfAbsent(p.concept(), k -> new LinkedHashMap<>()).putIfAbsent(key, p.measured());
             }
+        }
+        for (Pending p : dimensioned) {
+            durations.computeIfAbsent(p.concept(), k -> new LinkedHashMap<>())
+                    .putIfAbsent(new ClassFacts.MemberPeriod(p.member(), p.period()), p.measured());
         }
         // 넓힌 꼴은 축 없는(클래스 축만 단) 사실이 없는 구성원만 채운다. 이중 상장(SunOpta STKL · NASDAQ과 SOY · TSX)은 한 증권의 기호가
         // 거래소마다 따로 오므로 기호는 「GOOGL, GOOG」 꼴로 잇고(DenominatorJudge.splitSymbols가 쪼갠다), 증권 이름은 문서 순서 첫 값이다.
