@@ -224,14 +224,15 @@ class CommonIncomeTest {
     }
 
     @Test
-    void aDenominatorTaggedInThousandsIsRescaledWhenExactlyOneScaleClosesWithTheNumerator() {
-        // TEM 꼴 — 가중평균 179,917(천 단위) · EPS 0.03 · NI 5.642M · 표지 없음.
+    void aDenominatorTaggedInThousandsIsNotRepaired() {
+        // TEM 꼴 — 가중평균 179,917(천 단위) · EPS 0.03 · NI 5.642M · 표지 없음. 단위 수리는 종목 특정 처리라 안 한다(정합성 훼손 —
+        // 2026-10-25 사용자 기준) — 확인 안 된 W라 값으로 안 쓰고 증인 전용(epsw)으로만 남는다(행 NI가 그 반올림 안에서 닫힐 리 없다).
         Ledger l = new Ledger().filing(A, "10-Q", LocalDate.of(2026, 7, 30), null);
         IssuerFacts.Key k = new IssuerFacts.Key(A, Q);
         l.netIncome.put(k, 5_642_000d);
         l.totalEps.put(k, 0.03);
         l.weighted.put(k, 179_917d);
-        assertThat(judge(l).branch()).isEqualTo("ni");
+        assertThat(judge(l).branch()).isEqualTo("epsw");
     }
 
     @Test

@@ -168,13 +168,8 @@ public final class CommonIncome {
         Double eps = m.totalEps() != null ? m.totalEps() : m.continuingEps();
         Basis basis = m.totalEps() != null ? Basis.T : Basis.C;
         Double ni = m.controllingIncome();
-        Double rescaled = rescaled(w, eps, m.nic() != null ? m.nic() : ni);
-        if (rescaled != null) {
-            // 가중평균을 천 · 백만 단위로 잘못 실었다(TEM 179,917 · ECHO · DDS — 표지가 없어 단위 확인이 못 고쳤다). 분자와 정확히 한
-            // 배율에서만 닫히면 그 배율이 원장의 단위다.
-            w = rescaled;
-            verified = true;
-        }
+        // 단위를 잘못 실은 가중평균(TEM 179,917 · ECHO · DDS — 천 단위)은 고쳐 쓰지 않는다 — 원장이 뒤틀린 자리를 종목 특정 수리로 메우지
+        // 않는다(2026-10-25 사용자 기준 · 정합성 훼손 → 그 키는 못 정함). 그 W는 표지 · 기준 표지와 10배 자릿수로 걸러져 값 갈래에 안 든다.
         // 폐합(갈래 1 · 2 · 3 · 4)은 확인 안 된 W로도 증인이 된다 — 단위가 틀린 W는 안 닫힌다. 클래스 축 앵커도 축 없는 EPS · W로 닫히면
         // 증인이다(DDS — 두 클래스 EPS가 같아 축 없이 싣는다). 값을 내는 갈래 5만 확인된 W와 앵커 아님을 요구한다.
         boolean witness = eps != null && w != null;
@@ -342,22 +337,6 @@ public final class CommonIncome {
      */
     private static final Set<String> SHARE_KIND_AXES = Set.of("StatementClassOfStockAxis", "ClassesOfShareCapitalAxis",
             "LimitedPartnersCapitalAccountByClassAxis", "PartnerTypeOfPartnersCapitalAccountAxis");
-
-    /** 그 배율로만 분자와 닫히는 W(×10^±3 · ×10^6) — 원래 W가 닫히거나 닫히는 배율이 하나가 아니면 null. */
-    private static Double rescaled(Double w, Double eps, Double numerator) {
-        if (w == null || eps == null || numerator == null || eps == 0 || closes(numerator, eps, w)) {
-            return null;
-        }
-        Double only = null;
-        int found = 0;
-        for (double scale : new double[]{1e3, 1e6, 1e-3}) {
-            if (closes(numerator, eps, w * scale)) {
-                only = w * scale;
-                found++;
-            }
-        }
-        return found == 1 ? only : null;
-    }
 
     /** 그 기간 클래스 구성원 EPS가 다 같거나 없는가(소수 넷째 자리까지). */
     private static boolean uniformClassEps(ClassFacts f, ClassFacts.Period p) {
