@@ -173,3 +173,10 @@
 - 못 정함: **44** — 표준 보통주 가중평균이 그 보고서에 아예 없음 32(하나금융 · 롯데지주 · LG · SK텔레콤 · 한국가스공사 · 한화생명 · CJ · 아모레퍼시픽 · 아모레G · CJ제일제당 · S-Oil · 현대건설 …) · 누계에만 4 · EPS 없음 4 · 보통주에 구형우선주를 섞음 2 · 가중평균이 보통주 수와 어긋남 2(신한 0.49배 · 차바이오텍).
 - 신종자본증권 몫을 직접 주는 재료는 이름이 회사마다 다르고(`DividendToHybridBond` · `DividendsPaidToHybridBond` · `InterestPaidToHybridBond` · `InterestExpenseForHybridBond` · 회사 확장 이름) 대부분 그 기간 귀속액이 아니라 현금 지급액이다 — 조합하지 않는다(8a).
 - 귀결: 국내 관문 켬에서 최신 TTM PER · EPS 계열이 약 44종목(편입의 약 13%) 미표시 — 지금은 우선주 · 신종자본증권 몫만큼 틀린 값이 나가는 자리다. 2024 앞 보고서는 보통주 밖 지분상품이 있는 약 90종목에서 못 정함(5년 창).
+
+### 8f. 8e 정정 — 측정 도구가 표준 구성원을 버렸다 ★ (0콜 · 같은 346 · `kr3/v22.py`)
+
+- 8e의 판독기는 W · E를 축 없음 또는 `ClassesOfShareCapitalAxis` × `OrdinarySharesMember`만 받았다. 346 파일의 W · E 축 · 구성원을 전수로 세면(`kr3/mem.py`) 표준 분류 구성원이 셋 더 있다 — `dart:ReportedAmountMember`(W 34 · E 24 파일 · DART 표준 「공시금액」 구성원) · `ifrs-full:ClassesOfOrdinarySharesAxis` × 보통주 · 공시금액(W 11) · `ComponentsOfEquityAxis` × `EquityAttributableToOwnersOfParentMember`(W 3 · 하나금융 · 한화생명) · `ParentMember`(1).
+- **판정 규칙(일반)**: 연결 축을 뺀 모든 구성원이 허용 집합 {`OrdinarySharesMember` · `dart:ReportedAmountMember` · `EquityAttributableToOwnersOfParentMember` · `ParentMember`} 안인 사실만 후보 · 같은 (개념, 기간, 기저)의 후보가 둘 이상 값이면 상충 → 못 정함. 우선주 · 자기주식 · 중단영업 · 회사 확장 구성원은 후보 밖(회사 확장 구성원만 있는 003670 포스코퓨처엠은 못 정함).
+- **다시 잰 단면**: 배분 0 **256** · E × W **55**(+9 — LG 1.95% · 롯데지주 24.1% · 하나금융 3.6% · 한화생명 15.3% · SK텔레콤 1.06% · BNK 3.0% · 우리 3.8% · 000990 0.22% · 011200 −0.02%) · 못 정함 **35** = W가 어떤 축으로도 없음 25(유한양행 · CJ대한통운 · 현대건설 · CJ · 아모레G · 효성 · DB손보 · GS건설 · S-Oil · HLB · 가스공사 · GS · 아모레퍼시픽 · CJ제일제당 · 이마트 · 한진칼 · HL만도 …) · 3개월 W 없이 누계만 2(039490 · 078600 — 누계 E × 누계 W − 1분기 보통주 몫으로 조합된다 · 1분기 보고서가 있어야 함) · EPS 없음 4 · 구형우선주 섞음 2 · W ÷ 보통주 수 어긋남 2(신한 0.49 · 차바이오텍 1.17).
+- 귀결 정정: 국내 관문 켬에서 최신 TTM 미표시 약 **33종목**(편입의 약 9.5%) · 2024 앞은 8b 그대로(재지 않음 — 드라이런이 센다).
