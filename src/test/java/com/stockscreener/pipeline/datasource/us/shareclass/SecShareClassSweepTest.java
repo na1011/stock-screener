@@ -112,6 +112,13 @@ class SecShareClassSweepTest {
                         ? com.stockscreener.pipeline.datasource.us.TaxonomyFrame.framedFacts(raw.path("facts"))
                         : com.stockscreener.pipeline.datasource.us.TaxonomyFrame.shareClassFacts(raw.path("facts")));
                 raw = framed;
+                if (!"plain".equals(frameMode)) {
+                    // 운영 입력과 같게 — 관문 켬 어댑터가 표지 단위 판정을 클래스 축 재료에 싣는다(ADR-0193 · 보충 없는 스윕이라 보충 전 트리로).
+                    JsonNode original = mapper.readTree(dir.resolve("tcf").resolve(ticker + ".json").toFile()).path("facts");
+                    com.stockscreener.pipeline.datasource.us.shareclass.CoverUnitJudge.attach(framed,
+                            com.stockscreener.pipeline.datasource.us.ShareClassCollector.judgeCovers(original,
+                                    splits.getOrDefault(ticker, List.of())));
+                }
             }
             IssuerFacts cf = IssuerFacts.fromCompanyFacts(raw);
             Map<String, IssuerFacts.Filing> extra = supplements.getOrDefault(ticker, Map.of());

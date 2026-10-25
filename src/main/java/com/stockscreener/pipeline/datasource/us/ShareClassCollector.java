@@ -4,7 +4,9 @@ import com.stockscreener.pipeline.datasource.DataSourceException;
 import com.stockscreener.pipeline.datasource.SecurityRef;
 import com.stockscreener.pipeline.datasource.http.ConditionalOnApiKey;
 import com.stockscreener.pipeline.datasource.us.shareclass.ClassFactReader;
+import com.stockscreener.pipeline.datasource.us.shareclass.CoverUnitJudge;
 import com.stockscreener.pipeline.datasource.us.shareclass.IssuerFacts;
+import com.stockscreener.pipeline.datasource.us.shareclass.IssuerTimeline;
 import com.stockscreener.pipeline.datasource.us.shareclass.ShareClassStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -80,6 +82,32 @@ public class ShareClassCollector {
         ObjectNode pruned = IssuerFacts.prune(root);
         store.saveInput(security.stockId(), cik, pruned.toString());
         return IssuerFacts.fromCompanyFacts(pruned);
+    }
+
+    /**
+     * 표지 단위 판정(ADR-0193) — 공시 보충 <b>뒤</b> 트리로 한 번 내고, 클래스 축 재료({@link #saveInput}과 같은 보충 전 트리)에 함께
+     * 실어 다시 둔다. 엔진은 다시 계산하지 않고 이 결정을 입는다. 증인은 클래스 축 틀(보충 공시 표지 포함), 사다리는 재무 열 틀(IFRS
+     * 가중평균 별칭 없음 · ADR-0182)이다.
+     *
+     * @param classFacts {@link #saveInput}에 넘긴 것과 같은 보충 전 클래스 축 틀
+     * @param facts      어댑터가 쥔 {@code facts} 노드(보충을 합친 것)
+     */
+    public CoverUnitJudge.Result judgeCovers(SecurityRef security, long cik, JsonNode classFacts, JsonNode facts) {
+        CoverUnitJudge.Result result = judgeCovers(facts, store.splits(security.stockId()));
+        ObjectNode root = MAPPER.createObjectNode();
+        root.set("facts", classFacts);
+        ObjectNode input = IssuerFacts.prune(root);
+        CoverUnitJudge.attach(input, result);
+        store.saveInput(security.stockId(), cik, input.toString());
+        return result;
+    }
+
+    /** {@link #judgeCovers(SecurityRef, long, JsonNode, JsonNode)}의 판정 — 스윕 도구가 운영과 같은 재료로 부르는 입구. */
+    public static CoverUnitJudge.Result judgeCovers(JsonNode facts, List<IssuerTimeline.Split> splits) {
+        TaxonomyFrame.Result frame = TaxonomyFrame.of(facts);
+        ObjectNode witnesses = MAPPER.createObjectNode();
+        witnesses.set("facts", frame.shareClassFacts());
+        return CoverUnitJudge.judge(IssuerFacts.fromCompanyFacts(witnesses), frame.facts().path("us-gaap"), splits);
     }
 
     /**

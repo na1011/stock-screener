@@ -81,4 +81,21 @@ class SecEdgarSharesFallbackTest {
         assertThat(fy24.supersedesShares(new BigDecimal("171874540"))).as("옛 사다리의 희석 12개월").isTrue();
         assertThat(fy24.supersedesShares(new BigDecimal("81340472"))).as("자기 값은 대신한 값이 아니다").isFalse();
     }
+
+    @Test
+    @DisplayName("표지 단위 판정이 버린 표지는 사다리 값이 대신하고, 그 표지와 손 수리 값을 대신한 값으로 단다(PKG 2025 FY · ADR-0193)")
+    void aJudgedCoverIsReplacedAndItsHandRepairIsSuperseded() throws Exception {
+        Path path = Path.of("src/test/resources/fixtures/sec/cover/companyfacts-pkg-cover.json");
+        JsonNode facts = new ObjectMapper().readTree(Files.readString(path, StandardCharsets.UTF_8)).path("facts");
+
+        RawFinancialReport judged = latest(SecEdgarFacts.build(facts, 2025, true,
+                ShareClassCollector.judgeCovers(facts, List.of())).reports(), 2025, "FY");
+        assertThat(judged.sharesOutstanding()).as("10-K의 기본 가중평균(Q4 3개월)").isEqualByComparingTo("89300000");
+        assertThat(judged.supersedesShares(new BigDecimal("89213394000"))).as("옛 추출 — 단위가 틀린 표지").isTrue();
+        assertThat(judged.supersedesShares(new BigDecimal("89213394"))).as("그 손 수리(ADR-0126)").isTrue();
+
+        // 대조: 판정 없이는 단위가 틀린 표지가 그대로 나간다.
+        assertThat(latest(SecEdgarFacts.build(facts, 2025, true).reports(), 2025, "FY").sharesOutstanding())
+                .isEqualByComparingTo("89213394000");
+    }
 }

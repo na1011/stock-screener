@@ -247,7 +247,13 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
             }
         }
 
-        SecEdgarFacts.Result result = SecEdgarFacts.build(tree, fromFiscalYear, usGate);
+        // 표지 단위 판정(ADR-0193 · 관문 뒤) — 공시 보충 **뒤** 트리로 한 번만 낸다. 그 결정을 재무 추출과 클래스 축 입력에 함께 싣는다 —
+        // 두 쪽이 저마다 내면 입력(보충 공시의 표지 · IFRS 가중평균 별칭)이 달라 결정이 갈린다.
+        com.stockscreener.pipeline.datasource.us.shareclass.CoverUnitJudge.Result coverUnit =
+                classInput != null ? shareClass.judgeCovers(security, cik.get(), frame.shareClassFacts(), tree) : null;
+        SecEdgarFacts.Result result = coverUnit != null
+                ? SecEdgarFacts.build(tree, fromFiscalYear, usGate, coverUnit)
+                : SecEdgarFacts.build(tree, fromFiscalYear, usGate);
         if (result.dropped() > 0) {
             // MUST NOT: 조용히 버리지 않는다. 「없다」와 「우리가 못 만들었다」는 다르고,
             // 그 구분이 없으면 결손 판정이 서지 않는다(P22 ①축).

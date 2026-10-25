@@ -290,8 +290,25 @@ class FinancialWriterTest {
             assertThat(changed).isZero();
             assertThat((BigDecimal) latestRow().get("shares_outstanding")).isEqualByComparingTo("104164000");
             assertThat(invalidations.calls).isEmpty();
-            assertThat(warnings()).as("사람이 근거 둘로 다시 고칠 행으로 남긴다")
-                    .anySatisfy(w -> assertThat(w).contains("손 수리된 주식수").contains("104164000").contains("165612"));
+            assertThat(infos()).as("손으로 다시 쓰지 않는다 — 남긴 행으로 센다(ADR-0193)")
+                    .anySatisfy(w -> assertThat(w).contains("손 수리된 주식수를 그대로 둔다").contains("104164000").contains("165612"));
+            assertThat(warnings()).noneSatisfy(w -> assertThat(w).contains("손 수리"));
+        }
+
+        @Test
+        @DisplayName("표지 단위 판정이 버린 표지의 손 수리는 대신한 값이라 사다리 값으로 덮는다(관문 켬 · PKG 2025 FY · ADR-0193)")
+        void overwritesAHandRepairOfAMistaggedCover() {
+            writer.write(stockId, List.of(withShares(2025, "FY", "2026-02-26", "1000", "89213394")));
+
+            long changed = fillOnlyWriter.write(stockId,
+                    List.of(withShares(2025, "FY", "2026-02-26", "1000", "89300000")
+                            .withSharesSuperseded(java.util.Set.of(new BigDecimal("89213394000"), new BigDecimal("89213394"),
+                                    new BigDecimal("89213394000000")))),
+                    WriteMode.FILL_MISSING);
+
+            assertThat(changed).isEqualTo(1);
+            assertThat((BigDecimal) latestRow().get("shares_outstanding")).isEqualByComparingTo("89300000");
+            assertThat(invalidations.calls).hasSize(1);
         }
 
 
@@ -395,6 +412,13 @@ class FinancialWriterTest {
             assertThat(changed).isEqualTo(1);
             assertThat(rowCount()).isEqualTo(1);
             assertThat((BigDecimal) latestRow().get("current_assets")).isEqualByComparingTo("9000");
+        }
+
+        private List<String> infos() {
+            return appender.list.stream()
+                    .filter(event -> event.getLevel() == Level.INFO)
+                    .map(ILoggingEvent::getFormattedMessage)
+                    .toList();
         }
 
         private List<String> warnings() {

@@ -31,8 +31,10 @@ public final class IssuerTimeline {
      * 판정한다(B 갈래 n · 시점 합) — 막던 근거 「ADS 비율을 원장이 안 준다」가 거짓이 됐고(공시 표지가 판마다 준다 · ADR-0183) ADS가
      * 아닌 20-F · 40-F 보통주(TRI · NU)에는 처음부터 안 서던 규칙이다. Q4 유도만 안 한다(연간 공시라 분기 n이 없다). 4 — 지금 경로
      * 분모(ADR-0189): 당기 기간만 · 인스턴스 축 맥락 · 원장 선언 대체 · 단위 확인 · 폐합 실패 입력 Q4의 출력 확인 · 16주 분기(2026-10-24).
+     * 5 — 배율 복원을 걷음(2026-10-25). 6 — 표지 단위 판정(ADR-0193): 단위가 틀린 표지는 사다리 다음 칸 · 맞는 칸이 없으면 숨김 · 표지가
+     * 증인과 맞는 공시의 n이 표지에서 단위만큼 갈리면 n이 틀린 쪽(2026-10-26).
      */
-    public static final int ENGINE_VERSION = 5;
+    public static final int ENGINE_VERSION = 6;
 
     /** 단일 클래스 연속 3개월 분모 변화 간격 120~200일의 p95(§10a · {@code single5.py}). */
     static final double TAU_TWO_QUARTERS = 0.1202;
@@ -149,7 +151,10 @@ public final class IssuerTimeline {
             String a = ev.accession();
             String form = cf.filings().get(a).form();
             if (!ev.kind().equals("T")) {
-                if (ev.kind().equals("d")) {
+                if (ev.kind().equals("d") && cf.witnesses().absentCovers().contains(a)) {
+                    // 표지가 단위로 틀렸고 사다리에 증인과 맞는 칸이 없다 — 원장이 이 공시의 주식수를 확인해 주지 않았다(ADR-0193).
+                    out.add(new Verdict(f, a, "d", 'X', "cover-unit", "어긋남", null, null));
+                } else if (ev.kind().equals("d")) {
                     out.add(new Verdict(f, a, "d", 'O', prepared.noInstance().contains(a) ? "d-noinst" : "d", null, null,
                             currentPathDenominator(cf, a, form, f, qv, splits, refs.get(a))));
                 }
@@ -416,7 +421,7 @@ public final class IssuerTimeline {
     private static final int SAME_END_DAYS = 3;
 
     /** 그 공시 당기 기말의 기간 창 안 가중평균 기간 — 당기 기말을 모르면 창 안 가장 늦은 기말. */
-    private static ClassFacts.Period currentPeriod(IssuerFacts cf, Map<IssuerFacts.Key, Double> weighted, String accession,
+    static ClassFacts.Period currentPeriod(IssuerFacts cf, Map<IssuerFacts.Key, Double> weighted, String accession,
                                                    int lo, int hi) {
         LocalDate end = cf.currentEnd(accession);
         ClassFacts.Period best = null;
@@ -435,7 +440,7 @@ public final class IssuerTimeline {
     }
 
     /** 10-Q의 분기 기간 — 3개월(80~100일)이 먼저, 없으면 16주 분기(100~115일 · KR · ACI · CAVA · PRMB 1분기). */
-    private static ClassFacts.Period quarterPeriod(IssuerFacts cf, Map<IssuerFacts.Key, Double> weighted, String accession) {
+    static ClassFacts.Period quarterPeriod(IssuerFacts cf, Map<IssuerFacts.Key, Double> weighted, String accession) {
         ClassFacts.Period p = currentPeriod(cf, weighted, accession, 80, 100);
         return p != null ? p : currentPeriod(cf, weighted, accession, 100, 115);
     }
@@ -474,11 +479,11 @@ public final class IssuerTimeline {
         return out;
     }
 
-    private static boolean digit(double v, Double ref) {
+    static boolean digit(double v, Double ref) {
         return ref == null || (v > 0 && Math.abs(Math.log10(v / ref)) < 1);
     }
 
-    private static boolean coverOk(double v, Double ref) {
+    static boolean coverOk(double v, Double ref) {
         return ref != null && v > 0 && Math.abs(Math.log10(v / ref)) <= COVER_WITNESS_LOG;
     }
 
@@ -695,7 +700,11 @@ public final class IssuerTimeline {
             return v;
         }
         Boolean closes = witnessCloses(cf, k, v);
-        if (closes == null || closes || digit(v, cover)) {
+        // 표지가 앞 표지 증인과 맞는 공시에서 n이 표지와 단위만큼 갈리면 n이 틀린 쪽이다 — 폐합이 참이어도(n과 EPS가 함께 반대로 틀린 HL
+        // 2017-05 395,370 × 70 · LUV 2011). 다음 태그 대체를 먼저 묻는다(HUBS 2015 33,208 → 33,208,000 · ADR-0193).
+        boolean reversed = !Boolean.FALSE.equals(closes) && cf.witnesses().witnessedCovers().contains(k.accession())
+                && CoverUnitJudge.unitShifted(v, cover);
+        if (!reversed && (closes == null || closes || digit(v, cover))) {
             return v;
         }
         for (double x : cf.witnesses().laterTags().getOrDefault(k, List.of())) {
@@ -742,12 +751,17 @@ public final class IssuerTimeline {
 
     /** EPS × n이 분자와 닫히는가 — companyfacts에는 선언 정밀도가 없어 대용 허용(τ · |분자|)과 EPS 반 센트. */
     private Boolean witnessCloses(IssuerFacts cf, IssuerFacts.Key k, double v) {
+        return closes(cf, k, v, judge.proxyTolerance());
+    }
+
+    /** {@link #witnessCloses}의 몸 — 허용(대용 τ)을 받는다. 표지 단위 판정({@link CoverUnitJudge})이 운영 문턱으로 같은 폐합을 쓴다. */
+    static Boolean closes(IssuerFacts cf, IssuerFacts.Key k, double v, double proxyTolerance) {
         Double e = cf.eps().get(k);
         Double num = cf.declaredNumerator().containsKey(k) ? cf.declaredNumerator().get(k) : cf.proxyNumerator().get(k);
         if (e == null || e == 0 || num == null) {
             return null;
         }
-        return Math.abs(v * e - num) <= v * 0.005 + judge.proxyTolerance() * Math.abs(num) + 1e-9 * Math.abs(num);
+        return Math.abs(v * e - num) <= v * 0.005 + proxyTolerance * Math.abs(num) + 1e-9 * Math.abs(num);
     }
 
     /** 엄격 폐합 — EPS 반 센트와 분자 끝자리 0이 말하는 반올림 반폭(companyfacts에 선언 정밀도가 없다)만. */

@@ -4,6 +4,7 @@ import com.stockscreener.pipeline.datasource.DataSourceException;
 import com.stockscreener.pipeline.datasource.FinancialColumnAbsence;
 import com.stockscreener.pipeline.datasource.FinancialFetch;
 import com.stockscreener.pipeline.datasource.RawFinancialReport;
+import com.stockscreener.pipeline.datasource.us.shareclass.CoverUnitJudge;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -248,12 +249,27 @@ final class SecEdgarFacts {
      */
     static Result build(JsonNode facts, int fromFiscalYear, boolean usGate)
             throws DataSourceException {
+        return build(facts, fromFiscalYear, usGate, CoverUnitJudge.Result.NONE);
+    }
+
+    /**
+     * @param coverUnit 표지 단위 판정(ADR-0193 · 관문 켬 어댑터가 공시 보충 뒤 트리로 한 번 낸 것) — 판정이 버린 표지의 공시는 주식수 사실을
+     *                  그 결정으로 갈음한다: 바꾼 공시는 사다리 값 하나, 맞는 칸이 없는 공시는 아무것도 없다(표지 없는 공시와 같은 꼴 —
+     *                  태그 고르기 2순위 · ADR-0182 자기 표지 갈래가 옛 dei나 증인과 안 맞는 칸으로 되살리지 못한다)
+     */
+    static Result build(JsonNode facts, int fromFiscalYear, boolean usGate, CoverUnitJudge.Result coverUnit)
+            throws DataSourceException {
         // 관문 켬: 공시마다 택소노미·표시 통화를 하나로 정하고 IFRS 개념을 같은 뜻의 us-gaap 열쇠에 싣는다(ADR-0182).
         TaxonomyFrame.Result frame = usGate ? TaxonomyFrame.of(facts) : null;
         if (frame != null) {
             facts = frame.facts();
         }
         Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn = collect(facts, usGate);
+        // 옛 추출 값(sharesSuperseded)은 판정 전 사실로 센다 — 옛 규칙이 실제로 고른 것은 단위가 틀린 그 표지다.
+        Map<String, Map<Slot, Fact>> sharesAsFiled = new LinkedHashMap<>(byColumn.get(SecEdgarColumn.SHARES_OUTSTANDING));
+        if (usGate) {
+            byColumn.put(SecEdgarColumn.SHARES_OUTSTANDING, judgedShares(sharesAsFiled, coverUnit));
+        }
         // 관문 뒤 재료(F2b)는 값만 댄다 — 공시 앵커 · 연차 창 · 라벨 기간을 찾는 데 넣지 않는다. 넣으면 10-K의 Q4 3개월 처분손익 팩트
         // 하나가 소스 Q4 라벨을 새로 열어 4분기 유도의 판 집합이 바뀐다(GD 2016 Q4 · 2026-10-23 스윕).
         Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> structure = withoutGated(byColumn);
@@ -300,7 +316,9 @@ final class SecEdgarFacts {
             reports.clear();
         }
         if (usGate) {
-            reports.replaceAll(r -> withSharesSuperseded(r, labelAnchors, byColumn));
+            Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> asFiled = new EnumMap<>(byColumn);
+            asFiled.put(SecEdgarColumn.SHARES_OUTSTANDING, sharesAsFiled);
+            reports.replaceAll(r -> withSharesSuperseded(r, labelAnchors, asFiled, coverUnit));
         }
         reports.sort(Comparator.comparing(RawFinancialReport::periodEnd)
                 .thenComparing(RawFinancialReport::fiscalPeriod)
@@ -321,7 +339,7 @@ final class SecEdgarFacts {
      */
     private static RawFinancialReport withSharesSuperseded(
             RawFinancialReport report, Map<Label, Anchor> labelAnchors,
-            Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn) {
+            Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn, CoverUnitJudge.Result coverUnit) {
         BigDecimal shares = report.sharesOutstanding();
         if (shares == null) {
             return report;
@@ -332,6 +350,20 @@ final class SecEdgarFacts {
         }
         if (anchor == null) {
             return report;
+        }
+        Double mistagged = coverUnit.original().get(anchor.accn());
+        if (mistagged != null) {
+            // 표지 단위 판정이 버린 표지(ADR-0193): 옛 추출은 그 표지를 냈고, 손 수리(ADR-0126)는 그것을 단위 계단만큼 옮겨 썼다 — 둘 다
+            // 이 행이 대신한 값이다. 사다리 값은 증인과 맞은 원장 값이라 덮는 전제가 선다(관문 날 손 수리를 걷는다).
+            Set<BigDecimal> superseded = new LinkedHashSet<>();
+            BigDecimal original = BigDecimal.valueOf(mistagged);
+            for (int step : new int[]{0, -6, -3, 3, 6}) {
+                BigDecimal v = original.scaleByPowerOfTen(step);
+                if (v.compareTo(shares) != 0) {
+                    superseded.add(v.stripTrailingZeros());
+                }
+            }
+            return report.withSharesSuperseded(superseded);
         }
         Map<String, Map<Slot, Fact>> byTag = byColumn.get(SecEdgarColumn.SHARES_OUTSTANDING);
         for (String tag : SecEdgarColumn.SHARES_OUTSTANDING.candidates()) {
@@ -352,6 +384,39 @@ final class SecEdgarFacts {
         }
         return report;
     }
+
+    /**
+     * 표지 단위 판정을 입힌 주식수 사실(ADR-0193). 판정이 버린 표지의 공시는 그 공시의 주식수 사실을 모든 태그에서 걷고, 바꾼 공시는 dei
+     * 자리에 사다리 값 하나를 둔다(기말 · 공시일은 그 표지 사실 그대로).
+     */
+    private static Map<String, Map<Slot, Fact>> judgedShares(Map<String, Map<Slot, Fact>> asFiled, CoverUnitJudge.Result coverUnit) {
+        if (coverUnit.original().isEmpty()) {
+            return asFiled;
+        }
+        Map<String, Map<Slot, Fact>> out = new LinkedHashMap<>();
+        Map<Slot, Fact> replacements = new HashMap<>();
+        asFiled.forEach((tag, slots) -> {
+            Map<Slot, Fact> kept = new HashMap<>();
+            slots.forEach((slot, fact) -> {
+                if (!coverUnit.judged(slot.accn())) {
+                    kept.put(slot, fact);
+                } else if (tag.equals(DEI_SHARES) && coverUnit.replaced().containsKey(slot.accn())) {
+                    replacements.put(slot, new Fact(fact.accn(), fact.start(), fact.end(),
+                            BigDecimal.valueOf(coverUnit.replaced().get(slot.accn())), fact.filed(), fact.form(), fact.fiscalYear(),
+                            fact.reportedPeriod(), fact.unit()));
+                }
+            });
+            if (tag.equals(DEI_SHARES)) {
+                kept.putAll(replacements);
+            }
+            if (!kept.isEmpty()) {
+                out.put(tag, kept);
+            }
+        });
+        return out;
+    }
+
+    private static final String DEI_SHARES = "dei:EntityCommonStockSharesOutstanding";
 
     // ---------- 1. 팩트를 컬럼별로 모은다 ----------
 

@@ -44,8 +44,19 @@ public record IssuerFacts(Map<String, Filing> filings,
      * 기간. {@code epsDiluted} · {@code dilutedNumerator}: 희석 EPS와 희석 분자.
      */
     public record Witnesses(Map<Key, List<Double>> laterTags, Map<Key, Double> diluted, Map<Key, Double> proForma,
-                            Map<Key, Double> epsDiluted, Map<Key, Double> dilutedNumerator, java.util.Set<Key> basicAndDilutedEps) {
+                            Map<Key, Double> epsDiluted, Map<Key, Double> dilutedNumerator, java.util.Set<Key> basicAndDilutedEps,
+                            java.util.Set<String> witnessedCovers, java.util.Set<String> absentCovers) {
         public static final Witnesses NONE = new Witnesses(Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), java.util.Set.of());
+
+        /**
+         * @param witnessedCovers 표지가 앞 표지 증인과 자릿수가 맞는 공시({@link CoverUnitJudge}) — 그 공시의 n이 표지에서 단위만큼 갈리면
+         *                        n이 틀린 쪽이다
+         * @param absentCovers    표지가 단위로 틀렸고 사다리에 맞는 칸이 없는 공시 — 판정이 그 공시를 숨긴다(원장이 주식수를 확인해 주지 않음)
+         */
+        public Witnesses(Map<Key, List<Double>> laterTags, Map<Key, Double> diluted, Map<Key, Double> proForma,
+                         Map<Key, Double> epsDiluted, Map<Key, Double> dilutedNumerator, java.util.Set<Key> basicAndDilutedEps) {
+            this(laterTags, diluted, proForma, epsDiluted, dilutedNumerator, basicAndDilutedEps, java.util.Set.of(), java.util.Set.of());
+        }
     }
 
     /**
@@ -108,6 +119,11 @@ public record IssuerFacts(Map<String, Filing> filings,
         for (JsonNode x : root.path("facts").path("dei").path(ClassFactReader.SHARES_OUTSTANDING).path("units").path("shares")) {
             cover.put(x.path("accn").asString(), x.path("val").asDouble());
         }
+        // 표지 단위 판정(ADR-0193) — 어댑터가 공시 보충 뒤에 한 번 낸 결정을 입는다. 단위가 틀린 표지는 사다리 다음 칸이 대신하고(이 뒤의
+        // 확인 가중평균 · 판정 · 보통주 몫이 모두 그 값을 본다), 맞는 칸이 없는 표지는 열쇠를 둔 채 판정이 숨긴다.
+        CoverUnitJudge.Result coverUnit = CoverUnitJudge.Result.fromJson(root.path("facts").path(CoverUnitJudge.NODE));
+        // 결정은 보충 뒤 트리로 냈다 — companyfacts 표지가 있는 공시에만 입힌다(보충 공시에 표지 열쇠를 새로 만들면 판정 사건 종류가 바뀐다).
+        coverUnit.replaced().forEach((a, v) -> cover.computeIfPresent(a, (k, old) -> v));
         Map<Key, Double> weighted = pick(gaap, WEIGHTED, "shares");
         pick(gaap, WEIGHTED_CONFIRMED, "shares").forEach((k, v) -> {
             Double c = cover.get(k.accession());
@@ -141,7 +157,7 @@ public record IssuerFacts(Map<String, Filing> filings,
                 cover,
                 new Witnesses(later, pick(gaap, List.of(DILUTED), "shares"), pick(gaap, List.of(PRO_FORMA), "shares"),
                         pick(gaap, List.of(EPS_DILUTED), "USD/shares"), pick(gaap, List.of(DILUTED_NUMERATOR), "USD"),
-                        basicAndDiluted),
+                        basicAndDiluted, coverUnit.witnessed(), coverUnit.absent()),
                 new Numerators(pick(gaap, ClassFactReader.TOTAL_EPS, "USD/shares"), pick(gaap, ClassFactReader.CONTINUING_EPS, "USD/shares"),
                         pick(gaap, List.of("NetIncomeLoss"), "USD"), pick(gaap, List.of("ProfitLoss"), "USD"),
                         pick(gaap, List.of(ClassFactReader.NONCONTROLLING), "USD"), pick(gaap, ClassFactReader.PREFERRED_DIVIDENDS, "USD"),

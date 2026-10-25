@@ -149,7 +149,8 @@ enum SecEdgarColumn {
      *
      * <p><b>후보가 하나뿐인 자리는 이것으로 안 고쳐진다.</b> {@code CNC}는 후보 넷 중
      * {@code CostOfGoodsAndServicesSold} 하나만 오고 그 값이 매출의 <b>1.4%</b>(194,777M 대
-     * 2,670M)다. 그런 자리의 처방은 ADR-0126 §규칙의 <b>손으로 고치되 근거를 둘 이상</b>이다.
+     * 2,670M)다. 그런 자리는 손으로 고치지 않는다(2026-10-25 사용자 기준 · ADR-0193) — 원장이 틀린 칸의 처방은 일반 규칙으로 고르거나
+     * 판정이 숨기는 것이고, 원가 단일 후보의 그 판정은 아직 없다.
      */
     COST_OF_SALES(Kind.DURATION, Unit.MONETARY, Selection.LARGEST, List.of(
             "CostOfGoodsAndServicesSold", "CostOfRevenue", "CostOfGoodsSold", "CostOfSales"),

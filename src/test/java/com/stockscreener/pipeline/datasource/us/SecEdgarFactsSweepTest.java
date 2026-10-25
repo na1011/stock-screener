@@ -104,6 +104,9 @@ class SecEdgarFactsSweepTest {
                 removals.computeIfAbsent(parts[0], k -> new java.util.HashSet<>()).add(parts[1]);
             }
         });
+        // 관문 켬의 표지 단위 판정(ADR-0193) — 운영 어댑터처럼 보충 뒤 트리로 낸다. 분할 원장(티커 · 날짜 · 비율 TSV)을 주면 켠다.
+        java.util.Map<String, List<com.stockscreener.pipeline.datasource.us.shareclass.IssuerTimeline.Split>> splits =
+                Optional.ofNullable(System.getenv("REPLAY_SPLITS")).map(SecEdgarFactsSweepTest::splits).orElse(null);
         List<Path> files;
         try (Stream<Path> stream = Files.list(dir)) {
             files = stream.filter(p -> p.getFileName().toString().endsWith(".json"))
@@ -140,7 +143,10 @@ class SecEdgarFactsSweepTest {
                                     .append(outcome.vintagesUncertain()).append('\n');
                         }
                     }
-                    result = SecEdgarFacts.build(facts, from, usGate);
+                    result = usGate && splits != null
+                            ? SecEdgarFacts.build(facts, from, true,
+                                    ShareClassCollector.judgeCovers(facts, splits.getOrDefault(ticker, List.of())))
+                            : SecEdgarFacts.build(facts, from, usGate);
                 } catch (RuntimeException | java.io.IOException
                         | com.stockscreener.pipeline.datasource.DataSourceException e) {
                     // MUST: DataSourceException도 잡는다. checked라 목록에 없던 탓에 한 종목의
@@ -235,5 +241,20 @@ class SecEdgarFactsSweepTest {
                 }
             }
         }
+    }
+
+    private static java.util.Map<String, List<com.stockscreener.pipeline.datasource.us.shareclass.IssuerTimeline.Split>> splits(String path) {
+        java.util.Map<String, List<com.stockscreener.pipeline.datasource.us.shareclass.IssuerTimeline.Split>> out = new java.util.HashMap<>();
+        try {
+            for (String line : Files.readAllLines(Path.of(path))) {
+                String[] p = line.split("\t");
+                out.computeIfAbsent(p[0], k -> new java.util.ArrayList<>()).add(
+                        new com.stockscreener.pipeline.datasource.us.shareclass.IssuerTimeline.Split(java.time.LocalDate.parse(p[1]),
+                                Double.parseDouble(p[2])));
+            }
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        }
+        return out;
     }
 }

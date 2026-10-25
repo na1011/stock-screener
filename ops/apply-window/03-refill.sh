@@ -55,9 +55,9 @@ if [ "${K:-0}" -gt 0 ]; then
   s=$(q "$PROD" "select status from batch_execution where id > $(cat "$A/exec-cur.txt") and job_name='company-profile' and triggered_by='MANUAL' order by id desc limit 1")
   case "$s" in SUCCESS|PARTIAL_SUCCESS) ;; *) die "후보 업종 먼저 실행이 ${s:-없음}이다(업종 먼저 $K)";; esac
 fi
-# 주식수 폴백 교정(탐색 SHARES-TIE-PLAN-1023 v1.1): 옛 추출 값을 덮은 행 수 · 손 수리(ADR-0126)라 안 덮고 남긴 행 — 그 목록은 04b 앞에
-# 근거 둘(순이익 ÷ EPS · 인접 분기)로 값을 정해 사용자 승인 뒤 쓰기 세션에서 고친다(README 「03 뒤 손 수리」).
+# 주식수 교정(관문 켬): 옛 추출 값 · 단위가 틀린 표지와 그 손 수리를 사다리 값으로 덮은 행(ADR-0186 · ADR-0193). 남긴 손 수리(ADR-0126)는
+# 정보로만 센다 — 손으로 다시 쓰지 않는다(2026-10-25 사용자 기준 · 관문 켬 판독은 판정이 정한다).
 SC=$(cat "$A"/refill-*-"$PROD".log "$A"/refill-retry-"$PROD"-*.log 2>/dev/null | sed -n 's/.* 주식수교정=\([0-9]*\).*/\1/p' | awk '{s+=$1} END {print s+0}')
-grep -h "손 수리된 주식수가 옛 추출 값의 축척 수리다" "$A"/refill-*-"$PROD".log "$A"/refill-retry-"$PROD"-*.log 2>/dev/null | sed 's/.*stockId=/stockId=/' | sort -u > "$A/shares-hand-$PROD.txt" || true
-echo "주식수 교정 $SC행 · 손 수리 다시 쓸 행 $(grep -c . "$A/shares-hand-$PROD.txt")(목록 shares-hand-$PROD.txt)" | tee -a $NOTES
+HK=$(cat "$A"/refill-*-"$PROD".log "$A"/refill-retry-"$PROD"-*.log 2>/dev/null | sed -n 's/.* 주식수손수리남김=\([0-9]*\).*/\1/p' | awk '{s+=$1} END {print s+0}')
+echo "주식수 교정 $SC행 · 손 수리 남김 $HK행(정보 — 쓰기 단계 없음)" | tee -a $NOTES
 echo "OK 재적재 — 현 편입 $N_CUR · 후보 재무 대상 $M(하한 $N_CAND_FIN) · 업종 먼저 ${K:-0} · note 합계 $(note_nums $NOTES)"

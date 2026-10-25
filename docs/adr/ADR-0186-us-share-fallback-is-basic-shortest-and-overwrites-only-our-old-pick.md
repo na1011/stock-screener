@@ -23,7 +23,7 @@ applies_to:
 
 - 옛 추출 값: 옛 사다리와 옛 동점 규칙이 같은 라벨 앵커 공시에서 낼 수 있던 값(`RawFinancialReport.sharesSuperseded`).
 - 손 수리(ADR-0126)는 그 집합 밖이라 지켜진다.
-- 손 수리가 옛 값의 축척만 고친 행은 덮지 않는다. Writer가 경고로 남기고, 관문 날 근거 둘로 사람이 다시 쓴다.
+- 손 수리가 옛 값의 축척만 고친 행은 덮지 않는다. Writer가 정보 로그(`주식수손수리남김=`)로 센다. 사람이 다시 쓰지 않는다 — 손 수리를 걷었다(ADR-0193 · 2026-10-25 사용자 기준). 표지 단위 판정이 버린 표지의 손 수리는 대신한 값에 들어 사다리 값으로 덮인다(ADR-0193).
 
 설계 · 실측 · 반증의 정본은 탐색 브랜치 `explore/s-vintage-coherence`의 `explore/financial-sync/SHARES-TIE-PLAN-1023.md`다. v1을 두 렌즈로 반증받았고 둘 다 「고쳐서 간다」였다. 고친 판이 v1.1이다.
 
@@ -56,7 +56,7 @@ applies_to:
   - BKH 3행이 반올림 차로 매 재적재마다 「교정」된다.
 - MUST NOT: 손 수리된 행에 옛 수리 배수를 새 값에 곱해 자동 교정하지 않는다. 같은 공시 · 같은 태그 안에서도 축척이 갈린다.
   - TBLA 2025 Q2: 누계 327,578,134,000(×1000)과 3개월 313,572,282(옳음).
-- MUST: 관문 날 03 뒤 · 04b 앞에 `shares-hand-<db>.txt`를 손 수리한다. 원시 SQL이므로 사용자 승인을 받는다.
+- MUST NOT: 관문 날 손 수리(원시 SQL)를 하지 않는다(ADR-0193). 남긴 손 수리 행은 관문 켬 제품이 안 읽는다(판정 `X` · 판정 없는 2019 행).
 
 ## 버린 대안
 
@@ -74,7 +74,7 @@ applies_to:
 - 켬: `sharesOutstanding` 열만 6,298행 · 199종목이 바뀐다. 행 집합과 다른 열은 같다.
 
 **Writer 모사(운영 SELECT)**
-- 교정 6,253 · 새 행 24 · 지킴 21(ECHO · RPAY · TBLA · TEM · VCTR 손 수리).
+- 교정 6,253 · 새 행 24 · 지킴 21(ECHO · RPAY · TBLA · TEM · VCTR 손 수리 — 손으로 다시 쓰지 않는다 · 관문 날 수용 기준이 아니다 · ADR-0193).
 - 교정 상대차 중앙값 1.25% · 5% 초과 1,200 · 50% 초과 129(Up-C 희석 → 기본).
 
 **시험**: `SecEdgarSharesFallbackTest` 4 · `FinancialWriterTest` 새 3. 대조군으로 원래 결함을 되살리면 붉다.
@@ -90,4 +90,4 @@ applies_to:
 
 - `./gradlew test --tests '*SecEdgarSharesFallbackTest' --tests '*FinancialWriterTest'`
 - 꺼짐 동일성: `REPLAY_SWEEP_DIR=.factcache REPLAY_SUPPLEMENT_DIR=off US_GATE=false` 스윕의 TSV · extra md5가 이 결정 전 main과 같다.
-- 이 결정은 운영 자동 검증 대상이 아니다. 관문 날 03이 교정 수와 손 수리 목록을 낸다.
+- 이 결정은 운영 자동 검증 대상이 아니다. 관문 날 03이 교정 수(`주식수교정=`)와 남긴 손 수리 수(`주식수손수리남김=` · 정보)를 낸다.

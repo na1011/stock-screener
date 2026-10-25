@@ -319,7 +319,8 @@ public class FinancialWriter {
                     stockId, mode, tally.inserted, tally.revised, tally.filled,
                     tally.deferredRevisions, tally.corrected, tally.untouched,
                     tally.insertedEarlier, tally.renumberedLabels,
-                    tally.sharesCorrected == 0 ? "" : " 주식수교정=" + tally.sharesCorrected);
+                    (tally.sharesCorrected == 0 ? "" : " 주식수교정=" + tally.sharesCorrected)
+                            + (tally.sharesHandRepairKept == 0 ? "" : " 주식수손수리남김=" + tally.sharesHandRepairKept));
         }
         return new Outcome(tally.changed(), tally.inserted, tally.filled, tally.revised,
                 tally.deferredRevisions, tally.corrected, tally.insertedEarlier,
@@ -753,12 +754,15 @@ public class FinancialWriter {
                 toCorrect.add(amount);
                 corrections.add("%s %s -> %s".formatted(amount.column, stored, incoming));
             } else if (amount == Amount.SHARES_OUTSTANDING && stored.compareTo(incoming) != 0
-                    && (report.supersedesShares(stored.movePointRight(3)) || report.supersedesShares(stored.movePointLeft(3)))) {
-                // 손 수리(ADR-0126)가 옛 추출 값의 축척만 고친 행 — 새 규칙이 고른 값과 다른 칸을 원장에 물어야 하므로 덮지 않고
-                // 사람이 근거 둘로 다시 쓴다(관문 절차 · 탐색 SHARES-TIE-PLAN-1023 v1.1 결정 3 · 드라이런 21행 ECHO · RPAY · TBLA · TEM · VCTR).
-                log.warn("손 수리된 주식수가 옛 추출 값의 축척 수리다 — 새 규칙 값과 다르다. 근거 둘로 다시 고친다(ADR-0126). "
-                                + "stockId={} {}/{} 공시일={} 저장={} 새 규칙={}",
+                    && (report.supersedesShares(stored.movePointRight(3)) || report.supersedesShares(stored.movePointLeft(3))
+                    || unitScaled(stored, incoming))) {
+                // 손 수리(ADR-0126)가 남은 행 — 옛 추출 값이나 새 값의 축척만 고친 것. 손으로 다시 쓰지 않는다(2026-10-25 사용자 기준 ·
+                // ADR-0193): 표지 단위 판정이 버린 표지의 행은 위 갈래가 사다리 값으로 덮고(sharesSuperseded), 여기 남는 것은 관문 켬
+                // 판정이 숨기거나 판정 없는 행이다. 들어온 값이 그 자체로 단위 오태깅일 수 있어(ECHO 271,519 · DDS 15,655) 덮으면
+                // 판정을 안 거치는 판독기(PriceRefutation · PriceIntegrityAlerter)에 1000배가 든다 — 그래서 둔다.
+                log.info("손 수리된 주식수를 그대로 둔다 — 관문 켬 판독은 판정이 정한다(ADR-0193). stockId={} {}/{} 공시일={} 저장={} 새 규칙={}",
                         stockId, report.fiscalYear(), report.fiscalPeriod(), report.publishedAt(), stored, incoming);
+                tally.sharesHandRepairKept++;
             }
         }
 
@@ -936,6 +940,19 @@ public class FinancialWriter {
      * <p>저장된 값이 둘 이상으로 갈리면(손 수리가 일부 판에만 닿은 라벨 — 같은 날 US 12라벨) 어느 쪽도 정본이라
      * 말할 수 없어 소스 값을 쓰고 경고로 남긴다. 그날 사본 재생에서 이 갈래에 걸린 삽입은 0이다.
      */
+    /** 두 주식수가 정확히 단위 계단(10^±3 · ±6)만큼 갈리는가 — 손 수리가 축척만 고친 꼴(ADR-0126). */
+    private static boolean unitScaled(BigDecimal stored, BigDecimal incoming) {
+        if (stored.signum() <= 0 || incoming.signum() <= 0) {
+            return false;
+        }
+        for (int step : new int[]{-6, -3, 3, 6}) {
+            if (incoming.scaleByPowerOfTen(step).compareTo(stored) == 0) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private BigDecimal storedSharesOfLabel(long stockId, RawFinancialReport report) {
         List<BigDecimal> stored = jdbcTemplate.queryForList("""
                 SELECT DISTINCT shares_outstanding FROM financial_statement
@@ -1122,6 +1139,7 @@ public class FinancialWriter {
         private int insertedEarlier;
         private int renumberedLabels;
         private int sharesCorrected;
+        private int sharesHandRepairKept;
         private LocalDate earliestInsertedPublication;
 
         long changed() {
