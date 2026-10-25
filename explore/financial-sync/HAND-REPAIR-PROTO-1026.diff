@@ -1,0 +1,147 @@
+diff --git a/src/main/java/com/stockscreener/pipeline/datasource/us/shareclass/IssuerTimeline.java b/src/main/java/com/stockscreener/pipeline/datasource/us/shareclass/IssuerTimeline.java
+index 49b4655e..ce5467df 100644
+--- a/src/main/java/com/stockscreener/pipeline/datasource/us/shareclass/IssuerTimeline.java
++++ b/src/main/java/com/stockscreener/pipeline/datasource/us/shareclass/IssuerTimeline.java
+@@ -39,7 +39,12 @@ public final class IssuerTimeline {
+ 
+     /** @param status 'O' 값을 받음 · 'X' 숨김 */
+     public record Verdict(LocalDate filed, String accession, String kind, char status, String branch, String category,
+-                          Double value, Double denominator) {
++                          Double value, Double denominator, boolean sharesHidden) {
++
++        public Verdict(LocalDate filed, String accession, String kind, char status, String branch, String category,
++                       Double value, Double denominator) {
++            this(filed, accession, kind, status, branch, category, value, denominator, false);
++        }
+     }
+ 
+     /** 인스턴스를 공급한다 — 없으면 null(받지 않은 공시). */
+@@ -97,6 +102,7 @@ public final class IssuerTimeline {
+         Prepared prepared = prepare(given, instances, splits, anchors);
+         IssuerFacts cf = prepared.facts();
+         Map<String, Double> refs = prepared.references();
++        List<Map.Entry<LocalDate, Double>> shownCovers = new ArrayList<>();
+         record Event(LocalDate filed, String accession, String kind) {
+         }
+         List<Event> events = new ArrayList<>();
+@@ -150,8 +156,8 @@ public final class IssuerTimeline {
+             String form = cf.filings().get(a).form();
+             if (!ev.kind().equals("T")) {
+                 if (ev.kind().equals("d")) {
+-                    out.add(new Verdict(f, a, "d", 'O', prepared.noInstance().contains(a) ? "d-noinst" : "d", null, null,
+-                            currentPathDenominator(cf, a, form, f, qv, splits, refs.get(a))));
++                    out.add(currentPathVerdict(cf, a, form, f, "d", prepared.noInstance().contains(a) ? "d-noinst" : "d",
++                            cf.coverShares().get(a), currentPathDenominator(cf, a, form, f, qv, splits, refs.get(a)), shownCovers, splits));
+                 }
+                 if (form.startsWith("10-Q")) {
+                     ClassFacts.Period p = quarterPeriod(cf, cf.weighted(), a);
+@@ -175,7 +181,9 @@ public final class IssuerTimeline {
+                 continue;
+             }
+             if (!facts.isClassAnchor()) {
+-                out.add(new Verdict(f, a, "T", 'O', "cur", null, null, currentPathDenominator(cf, a, form, f, qv, splits, refs.get(a))));
++                String axisless = facts.coverOf(ClassFactReader.SHARES_OUTSTANDING).get(AXISLESS);
++                out.add(currentPathVerdict(cf, a, form, f, "T", "cur", axisless == null ? null : Double.parseDouble(axisless),
++                        currentPathDenominator(cf, a, form, f, qv, splits, refs.get(a)), shownCovers, splits));
+                 if (form.startsWith("10-Q")) {
+                     ClassFacts.Period p = quarterPeriod(cf, cf.weighted(), a);
+                     Double v = p == null ? null : cf.weighted().get(new IssuerFacts.Key(a, p));
+@@ -445,6 +453,75 @@ public final class IssuerTimeline {
+         return form.startsWith("10-Q") ? quarterPeriod(cf, weighted, accession) : currentPeriod(cf, weighted, accession, 350, 380);
+     }
+ 
++    /**
++     * 지금 경로 판(d · 앵커 아닌 T)의 판정. 표지가 단위 오태깅이면 주식수만 숨기고 n은 둔다 — 그 공시의 분모 n이 EPS 폐합으로 확인돼
++     * 있으면 n이, 아니면 앞 정기 공시 넷의 표지 중앙값이 증인이다. 거꾸로 확인 안 된 n이 증인과 맞는 표지에서 단위만큼 갈리면 n이 틀린 쪽이다.
++     */
++    private Verdict currentPathVerdict(IssuerFacts cf, String a, String form, LocalDate f, String kind, String branch, Double cover,
++                                       Double n, List<Map.Entry<LocalDate, Double>> shownCovers, List<Split> splits) {
++        boolean hidden = false;
++        Double denominator = n;
++        if (cover != null && cover > 0) {
++            Double prior = priorCover(shownCovers, splits, f);
++            boolean priorOk = prior != null && coverOk(cover, prior);
++            ClassFacts.Period own = latestOwnPeriod(cf, cf.weighted(), a, form);
++            IssuerFacts.Key key = own == null ? null : new IssuerFacts.Key(a, own);
++            Double w = key == null ? null : cf.weighted().get(key);
++            boolean confirmed = w != null && w > 0 && Boolean.TRUE.equals(witnessCloses(cf, key, w));
++            if (confirmed && (unitShifted(cover, w) || n != null && unitShifted(cover, n))) {
++                hidden = !priorOk;
++            } else if (!confirmed && (w == null || w <= 0 || !coverOk(cover, w))) {
++                hidden = prior != null && unitShifted(cover, prior);
++            }
++            if (!hidden && n != null && priorOk && unitShifted(n, cover)) {
++                denominator = null;
++            }
++            if (!hidden) {
++                shownCovers.add(Map.entry(f, cover));
++            }
++            if (System.getenv("COVER_DIAG") != null && (hidden || denominator == null && n != null
++                    || (w != null && w > 0 && unitShifted(cover, w)) || (n != null && unitShifted(cover, n))
++                    || (prior != null && unitShifted(cover, prior)))) {
++                try {
++                    java.nio.file.Files.writeString(java.nio.file.Path.of(System.getenv("COVER_DIAG")), String.format(Locale.ROOT,
++                            "%s\t%s\t%s\t%s\t%.0f\t%s\t%s\t%s\t%s\t%s\t%s%n", a, f, form, branch, cover, w,
++                            key == null || w == null ? null : witnessCloses(cf, key, w), prior, hidden, n != null && denominator == null, n),
++                            java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.APPEND);
++                } catch (java.io.IOException e) {
++                    throw new java.io.UncheckedIOException(e);
++                }
++            }
++        }
++        return new Verdict(f, a, kind, 'O', branch, null, null, denominator, hidden);
++    }
++
++    /** {@code v}가 증인 {@code w}에서 단위(10^±3 · 10^±6)만큼 표지 증인 문턱 안으로 갈렸는가. */
++    static boolean unitShifted(double v, double w) {
++        if (v <= 0 || w <= 0) {
++            return false;
++        }
++        double l = Math.log10(v / w);
++        for (int k : new int[]{-6, -3, 3, 6}) {
++            if (Math.abs(l - k) <= COVER_WITNESS_LOG) {
++                return true;
++            }
++        }
++        return false;
++    }
++
++    /** 앞서 보인 지금 경로 표지 넷의 중앙값(분할 반영) — 표지 증인. 숨긴 표지는 증인이 아니다(연속 오태깅이 다수가 되지 않게). */
++    private static Double priorCover(List<Map.Entry<LocalDate, Double>> shownCovers, List<Split> splits, LocalDate f) {
++        if (shownCovers.isEmpty()) {
++            return null;
++        }
++        List<Double> window = new ArrayList<>();
++        for (Map.Entry<LocalDate, Double> x : shownCovers.subList(Math.max(0, shownCovers.size() - 4), shownCovers.size())) {
++            window.add(x.getValue() * splitFactor(splits, x.getKey(), f));
++        }
++        window.sort(Comparator.naturalOrder());
++        return window.get(window.size() / 2);
++    }
++
+     /**
+      * 기준 표지 — 그 공시와 앞 정기 공시 넷(분할 반영)의 축 없는 표지 중앙값. 표지 자체를 단위 오태깅한 공시가 있어(AA 2019-05 · 07 ×10^6
+      * · CRM 2011 133.9 · HBAN 2011 ×0.001) 한 공시의 표지를 증인으로 못 쓴다 — 다수가 정한다. 미래 공시는 안 본다(판정이 그 공시의 시점
+diff --git a/src/test/java/com/stockscreener/pipeline/datasource/us/shareclass/SecShareClassSweepTest.java b/src/test/java/com/stockscreener/pipeline/datasource/us/shareclass/SecShareClassSweepTest.java
+index cd0cb1a5..f892665e 100644
+--- a/src/test/java/com/stockscreener/pipeline/datasource/us/shareclass/SecShareClassSweepTest.java
++++ b/src/test/java/com/stockscreener/pipeline/datasource/us/shareclass/SecShareClassSweepTest.java
+@@ -97,7 +97,7 @@ class SecShareClassSweepTest {
+         rowLines.add("ticker\tfy\tfp\trev\tstart\tend\tpub\trc\tnetIncomeControlling\tbranch\tbasis\tcommon");
+         int unreadable = 0;
+         List<String> lines = new ArrayList<>();
+-        lines.add("ticker\tfiled\taccession\tkind\tstatus\tbranch\tcategory\tvalue\tdenominator");
++        lines.add("ticker\tfiled\taccession\tkind\tstatus\tbranch\tcategory\tvalue\tdenominator\tsharesHidden");
+         for (Map.Entry<String, List<String[]>> e : todo.entrySet()) {
+             String ticker = e.getKey();
+             JsonNode raw = mapper.readTree(dir.resolve("tcf").resolve(ticker + ".json").toFile());
+@@ -139,7 +139,8 @@ class SecShareClassSweepTest {
+                     splits.getOrDefault(ticker, List.of()), LocalDate.of(2015, 1, 1), LocalDate.of(2020, 9, 1));
+             for (IssuerTimeline.Verdict v : judged) {
+                 lines.add(String.join("\t", ticker, v.filed().toString(), v.accession(), v.kind(), String.valueOf(v.status()),
+-                        v.branch(), v.category() == null ? "" : v.category(), fmt(v.value()), fmt(v.denominator())));
++                        v.branch(), v.category() == null ? "" : v.category(), fmt(v.value()), fmt(v.denominator()),
++                        v.sharesHidden() ? "H" : ""));
+             }
+             if (candidatesOut != null) {
+                 for (String a : IssuerTimeline.numeratorCandidates(cf)) {
