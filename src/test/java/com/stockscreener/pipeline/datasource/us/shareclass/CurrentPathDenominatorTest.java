@@ -27,7 +27,7 @@ import static org.assertj.core.api.Assertions.within;
  * {@code D-DENOM-PLAN-1024.md} v1.1). 픽스처는 실제 companyfacts와 인스턴스를 분모 · EPS · 분자 · 표지 개념과 사례 기간으로 가지친 것이다.
  *
  * <p>무너지는 방식이 조용하다 — n이 빈 끝은 주식수 비 지표 셋이 앞 판의 n으로 내려가고(BKR · KKR · PAA는 전 판이 비어 값 없음),
- * 단위가 틀린 n(MCD 711 · BRKR 147)은 그대로 증가율에 실리며, 전년 비교열이 그 공시의 n으로 나가도(CHRD 회생 전 315M) 값은 그럴듯하다.
+ * 단위가 틀린 n(MCD 711 · BRKR 147)은 그대로 증가율에 실리며(이제는 값 없음 — 2026-10-25 사용자 기준), 전년 비교열이 그 공시의 n으로 나가도(CHRD 회생 전 315M) 값은 그럴듯하다.
  */
 class CurrentPathDenominatorTest {
 
@@ -111,9 +111,9 @@ class CurrentPathDenominatorTest {
     }
 
     @Test
-    @DisplayName("단위가 틀린 n(백만 단위 711)은 같은 기간의 다음 값이나 단위 복원으로 바꾼다 — 폐합과 표지 자릿수가 함께 맞을 때(MCD 2026 Q1)")
-    void wrongUnitIsRepaired() throws IOException {
-        assertThat(at(judge(Case.of("mcd")), "2026-05-07").denominator()).isEqualTo(710_700_000d);
+    @DisplayName("단위가 틀린 n(백만 단위 711)은 같은 공시가 다른 태그로 맞는 값을 안 실었으면 값 없음이다 — 배율을 찾아 고쳐 쓰지 않는다(MCD 2026 Q1)")
+    void wrongUnitIsNotRepaired() throws IOException {
+        assertThat(at(judge(Case.of("mcd")), "2026-05-07").denominator()).as("고쳐 쓰던 값 710,700,000").isNull();
     }
 
     @Test

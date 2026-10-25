@@ -43,15 +43,15 @@ class DenominatorJudgeTest {
                 ClassFactReader.DECLARED_NUMERATOR, Map.of(AXISLESS, new double[]{150_000_000, 500})),
                 Map.of("us-gaap:CommonClassAMember", "100000000"), Map.of(), Map.of());
 
-        DenominatorJudge.Result r = judge.judge("ZZ", f, DenominatorJudge.Form.QUARTER, null);
+        DenominatorJudge.Result r = judge.judge("ZZ", f, DenominatorJudge.Form.QUARTER);
 
         assertThat(r.n()).isEqualTo(100_000_000);
         assertThat(r.branch()).isEqualTo("A-ok");
     }
 
     @Test
-    @DisplayName("분모가 천 단위로 잘못 실린 공시는 표지 총량과 자릿수가 맞는 후보 하나로만 복원한다 — 대수로 같은 EPS ×1000은 기각")
-    void unitRestorationNeedsTheCoverTotal() {
+    @DisplayName("분모가 천 단위로 잘못 실린 공시는 배율을 찾아 고치지 않는다 — 표지 총량이 자릿수를 말해 줘도 원장 어긋남 실패다(TEM)")
+    void wrongUnitIsNotRestored() {
         Map<String, Map<String, double[]>> d = Map.of(
                 W, Map.of(AXISLESS, new double[]{178_880, 0.5}),
                 EPS, Map.of(AXISLESS, new double[]{-0.50, 0.005}),
@@ -60,13 +60,13 @@ class DenominatorJudgeTest {
                 "us-gaap:CommonClassBMember", "9000000"), Map.of(), Map.of());
         ClassFacts withoutCover = facts(d, Map.of(), Map.of(), Map.of());
 
-        DenominatorJudge.Result restored = judge.judge("TEM", withCover, DenominatorJudge.Form.QUARTER, null);
-        DenominatorJudge.Result refused = judge.judge("TEM", withoutCover, DenominatorJudge.Form.QUARTER, null);
+        DenominatorJudge.Result withTotal = judge.judge("TEM", withCover, DenominatorJudge.Form.QUARTER);
+        DenominatorJudge.Result withoutTotal = judge.judge("TEM", withoutCover, DenominatorJudge.Form.QUARTER);
 
-        assertThat(restored.n()).isEqualTo(178_880_000);
-        assertThat(restored.branch()).isEqualTo("A-ok+w+3");
-        assertThat(refused.n()).as("자릿수를 가를 시점 총량이 없으면 복원하지 않는다").isNull();
-        assertThat(refused.failureSource()).isEqualTo("원장");
+        assertThat(withTotal.n()).as("옛 판은 ×1000을 받아 178,880,000(A-ok+w+3)").isNull();
+        assertThat(withTotal.failureSource()).isEqualTo("원장");
+        assertThat(withoutTotal.n()).isNull();
+        assertThat(withoutTotal.failureSource()).isEqualTo("원장");
     }
 
     @Test
@@ -78,7 +78,7 @@ class DenominatorJudgeTest {
                 "NetIncomeLoss", Map.of(AXISLESS, new double[]{50_000_000, 500})),
                 Map.of("us-gaap:CommonClassAMember", "810000000"), Map.of(), Map.of());
 
-        DenominatorJudge.Result r = judge.judge("MDLN", f, DenominatorJudge.Form.QUARTER, null);
+        DenominatorJudge.Result r = judge.judge("MDLN", f, DenominatorJudge.Form.QUARTER);
 
         assertThat(r.n()).isEqualTo(810_000_000);
         assertThat(r.branch()).isEqualTo("A-unverifiable-sign");
@@ -93,7 +93,7 @@ class DenominatorJudgeTest {
                 "NetIncomeLoss", Map.of(AXISLESS, new double[]{130_000_000, 500})),
                 Map.of("us-gaap:CommonClassAMember", "100000000"), Map.of(), Map.of());
 
-        DenominatorJudge.Result r = judge.judge("ZZ", f, DenominatorJudge.Form.QUARTER, null);
+        DenominatorJudge.Result r = judge.judge("ZZ", f, DenominatorJudge.Form.QUARTER);
 
         assertThat(r.n()).isNull();
         assertThat(r.failureSource()).isEqualTo("대용");

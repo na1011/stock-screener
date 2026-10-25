@@ -32,7 +32,7 @@ public final class IssuerTimeline {
      * 아닌 20-F · 40-F 보통주(TRI · NU)에는 처음부터 안 서던 규칙이다. Q4 유도만 안 한다(연간 공시라 분기 n이 없다). 4 — 지금 경로
      * 분모(ADR-0189): 당기 기간만 · 인스턴스 축 맥락 · 원장 선언 대체 · 단위 확인 · 폐합 실패 입력 Q4의 출력 확인 · 16주 분기(2026-10-24).
      */
-    public static final int ENGINE_VERSION = 4;
+    public static final int ENGINE_VERSION = 5;
 
     /** 단일 클래스 연속 3개월 분모 변화 간격 120~200일의 p95(§10a · {@code single5.py}). */
     static final double TAU_TWO_QUARTERS = 0.1202;
@@ -186,8 +186,7 @@ public final class IssuerTimeline {
                 }
                 continue;
             }
-            Double coverDei = cf.coverShares().get(a);
-            DenominatorJudge.Result r = judge.judge(ticker, facts, DenominatorJudge.Form.of(form), coverDei);
+            DenominatorJudge.Result r = judge.judge(ticker, facts, DenominatorJudge.Form.of(form));
             boolean fpi = form.startsWith("20-F") || form.startsWith("40-F");
             Double n = r.n();
             String branch = r.branch();
@@ -199,7 +198,7 @@ public final class IssuerTimeline {
             if (form.startsWith("10-Q")) {
                 Map<String, Quarter> d = new LinkedHashMap<>();
                 d.put("3m", new Quarter(f, p, n, true, "inst", "원장"));
-                DenominatorJudge.Result r9 = judge.judge(ticker, facts, DenominatorJudge.Form.NINE_MONTHS, coverDei);
+                DenominatorJudge.Result r9 = judge.judge(ticker, facts, DenominatorJudge.Form.NINE_MONTHS);
                 if (r9.period() != null) {
                     d.put("9m", new Quarter(f, r9.period(), r9.n(), r9.n() != null, "inst",
                             r9.failureSource() == null ? "원장" : r9.failureSource()));
@@ -553,8 +552,8 @@ public final class IssuerTimeline {
     /**
      * 지금 경로(축 없는 표지가 있는 정기 공시 · 표지가 클래스에 없는 보충 공시)의 분모 재료를 원장대로 고친다(ADR-0189).
      * <ol>
-     *   <li>값마다(전 기간): 기준 표지와 자릿수(10배)가 맞는 첫 태그 값. 없으면 ×10^±3 · ±6 중 폐합과 자릿수를 함께 맞추는 것이 하나일 때
-     *       그 값, 아니면 0(값 없음 — 기간 열쇠는 남긴다).</li>
+     *   <li>값마다(전 기간): 기준 표지와 자릿수(10배)가 맞는 첫 태그 값. 없으면 0(값 없음 — 기간 열쇠는 남긴다). 배율을 찾아 고쳐 쓰지
+     *       않는다(2026-10-25 사용자 기준).</li>
      *   <li>당기 값이 없으면 원장이 선언한 대체: 기본 = 희석을 선언한 기간의 희석 가중평균, 기본 EPS와 엄격히 닫히는 ProForma.</li>
      *   <li>그래도 없으면(2020 뒤) 인스턴스: 축 없는 값 또는 뜻이 같은 축 하나짜리의 0 아닌 값 하나(폐합 또는 표지 비율), 그 밖 축은
      *       선언 정밀도의 엄격 폐합 — 모두 자릿수.</li>
@@ -685,8 +684,8 @@ public final class IssuerTimeline {
 
     /**
      * 값 하나의 단위 확인 — 그 공시 자기 표지와 EPS 폐합. 폐합이 참이거나 불명이면 둔다(표지가 틀린 공시가 있어 어느 쪽이 틀렸는지 못 가른다
-     * — CRM 2011 · PNR 2011). 폐합이 거짓이고 표지와 자릿수(10배)도 어긋나면: 같은 기간의 다음 태그 값(AMCR) → ×10^±3 · ±6 중 폐합과
-     * 자릿수를 함께 맞추는 것이 하나일 때 그 값 → 없으면 0.
+     * — CRM 2011 · PNR 2011). 폐합이 거짓이고 표지와 자릿수(10배)도 어긋나면: 같은 기간의 다음 태그 값(AMCR — 원장이 같은 공시에 실은
+     * 값) → 없으면 0. 배율을 찾아 고쳐 쓰지 않는다 — 원장이 뒤틀린 자리를 수리로 메우는 것이라 정합성 훼손이다(2026-10-25 사용자 기준).
      */
     private Double unitChecked(IssuerFacts cf, IssuerFacts.Key k, Double v, Double cover) {
         if (v == null || v <= 0 || cover == null) {
@@ -701,17 +700,8 @@ public final class IssuerTimeline {
                 return x;
             }
         }
-        Double only = null;
-        int found = 0;
-        for (int s : new int[]{-6, -3, 3, 6}) {
-            double x = v * Math.pow(10, s);
-            if (digit(x, cover) && Boolean.TRUE.equals(witnessCloses(cf, k, x))) {
-                only = x;
-                found++;
-            }
-        }
         // MUST NOT: 열쇠를 지우지 않는다 — 0은 지금 경로 분모가 「값 없음」으로, Q4 입력이 「없음」으로 읽는 값이다.
-        return found == 1 ? only : 0.0;
+        return 0.0;
     }
 
     /** EPS × n이 분자와 닫히는가 — companyfacts에는 선언 정밀도가 없어 대용 허용(τ · |분자|)과 EPS 반 센트. */

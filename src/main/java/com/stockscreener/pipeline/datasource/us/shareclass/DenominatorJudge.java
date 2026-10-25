@@ -19,7 +19,6 @@ import static com.stockscreener.pipeline.datasource.us.shareclass.ClassFactReade
 import static com.stockscreener.pipeline.datasource.us.shareclass.ClassFactReader.EPS_TAGS;
 import static com.stockscreener.pipeline.datasource.us.shareclass.ClassFactReader.NUMERATOR_TAGS;
 import static com.stockscreener.pipeline.datasource.us.shareclass.ClassFactReader.SECURITY_TITLE;
-import static com.stockscreener.pipeline.datasource.us.shareclass.ClassFactReader.SHARES_OUTSTANDING;
 import static com.stockscreener.pipeline.datasource.us.shareclass.ClassFactReader.TRADING_SYMBOL;
 import static com.stockscreener.pipeline.datasource.us.shareclass.ClassFactReader.WEIGHTED_TAGS;
 
@@ -28,8 +27,9 @@ import static com.stockscreener.pipeline.datasource.us.shareclass.ClassFactReade
  *
  * <p>폐합: 분모 × EPS = 분자. 허용은 하나의 오차 예산이다 — 원장이 EPS 분자로 밝힌 분자({@link ClassFactReader#DECLARED_NUMERATOR} ·
  * EPS 구성원 전원의 배분)면 선언 정밀도만, 대용 분자({@code NetIncomeLoss}·{@code ProfitLoss})면 + {@code proxyTolerance}·|분자|.
- * 실패면 단위 복원(분모 ×10^±3,±6 · EPS ×10^±2,±3 · 분자 ×10^±3,±6)을 다시 폐합하고, 같은 공시의 시점 총량 T와 자릿수가 맞는
- * 후보가 <b>하나</b>일 때만 받는다(T가 없으면 복원하지 않는다). EPS와 분자의 부호가 어긋나면 폐합으로 검사할 수 없다(값을 받는다).
+ * 실패면 실패다 — 배율(×10^k)을 찾아 분모 · EPS · 분자를 고쳐 쓰지 않는다. 원장이 단위를 틀리게 실은 공시는 뒤틀린 원장이고, 수리로
+ * 메우면 정합성 훼손이다(2026-10-25 사용자 기준 · 옛 판은 시점 총량과 자릿수가 맞는 배율 하나를 받았다 — TEM · DDS · ECHO · RPAY).
+ * EPS와 분자의 부호가 어긋나면 폐합으로 검사할 수 없다(값을 받는다).
  */
 public final class DenominatorJudge {
 
@@ -75,7 +75,7 @@ public final class DenominatorJudge {
         return proxyTolerance;
     }
 
-    public Result judge(String ticker, ClassFacts f, Form form, Double coverTotal) {
+    public Result judge(String ticker, ClassFacts f, Form form) {
         Result base = closure(ticker, f, form);
         if (base.period() == null || !base.branch().contains("FAIL")) {
             return base;
@@ -93,59 +93,8 @@ public final class DenominatorJudge {
             }
             return new Result(nn, base.branch().replace("FAIL", "unverifiable-sign"), p, null);
         }
-        Double t = coverTotal;
-        if (t == null) {
-            double s = 0;
-            boolean any = false;
-            for (String v : f.coverOf(SHARES_OUTSTANDING).values()) {
-                double d = Double.parseDouble(v);
-                if (d > 0) {
-                    s += d;
-                    any = true;
-                }
-            }
-            t = any ? s : null;
-        }
-        List<Object[]> hits = new ArrayList<>();
-        restore(ticker, f, form, p, WEIGHTED_TAGS, "w", new int[]{3, 6, -3, -6}, hits);
-        restore(ticker, f, form, p, EPS_TAGS, "eps", new int[]{2, 3, -2, -3}, hits);
-        restore(ticker, f, form, p, NUMERATOR_TAGS, "num", new int[]{3, 6, -3, -6}, hits);
-        if (t == null) {
-            hits.clear();
-        } else {
-            double tt = t;
-            hits.removeIf(h -> Math.abs(Math.log10((Double) h[1] / tt)) >= 1);
-        }
-        if (hits.size() == 1) {
-            Object[] h = hits.get(0);
-            return new Result((Double) h[1], h[2] + "+" + h[0], p, null);
-        }
         String source = declared(f, p) ? "원장" : "대용";
         return new Result(null, base.branch() + "/" + source, p, source);
-    }
-
-    private void restore(String ticker, ClassFacts f, Form form, ClassFacts.Period p, List<String> tags, String label,
-                         int[] steps, List<Object[]> hits) {
-        for (int s : steps) {
-            Result r = closure(ticker, scaled(f, tags, p, Math.pow(10, s)), form);
-            if (r.n() != null && !r.branch().contains("FAIL") && !r.branch().contains("unverif")) {
-                hits.add(new Object[]{label + (s > 0 ? "+" : "") + s, r.n(), r.branch()});
-            }
-        }
-    }
-
-    private static ClassFacts scaled(ClassFacts f, List<String> tags, ClassFacts.Period p, double k) {
-        Map<String, LinkedHashMap<ClassFacts.MemberPeriod, ClassFacts.Measured>> d = new LinkedHashMap<>(f.durations());
-        for (String t : tags) {
-            if (!d.containsKey(t)) {
-                continue;
-            }
-            LinkedHashMap<ClassFacts.MemberPeriod, ClassFacts.Measured> copy = new LinkedHashMap<>();
-            d.get(t).forEach((mp, m) -> copy.put(mp, mp.period().equals(p)
-                    ? new ClassFacts.Measured(m.value() * k, m.halfWidth() * k) : m));
-            d.put(t, copy);
-        }
-        return new ClassFacts(d, f.cover(), f.documentType());
     }
 
     /** 원장이 EPS 분자를 밝혔는가 — 축 없는 「보통주 귀속 순이익」 또는 EPS 구성원 전원의 배분. */
