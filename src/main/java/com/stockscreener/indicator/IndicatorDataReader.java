@@ -593,12 +593,14 @@ public class IndicatorDataReader {
         BigDecimal shares = rs.getBigDecimal("shares_outstanding");
         ShareClassLine.State state = null;
         BigDecimal weighted = null;
+        boolean judged = false;
         if (line != null) {
             ShareClassLine.Read read = line.read(rs.getString("report_code"),
                     rs.getObject("published_at", LocalDate.class), shares);
             shares = read.shares();
             state = read.state();
             weighted = read.denominator();
+            judged = read.judged();
         }
         return new FinancialFigures(
                 rs.getInt("fiscal_year"),
@@ -638,7 +640,7 @@ public class IndicatorDataReader {
                 rs.getBigDecimal("profit_before_tax"),
                 rs.getBigDecimal("share_basis_multiple"),
                 rs.getString("share_basis_status"),
-                state, weighted,
+                state, weighted, judged,
                 discontinued ? rs.getBigDecimal("discontinued_income") : null,
                 discontinued ? rs.getBigDecimal("discontinued_income_controlling") : null,
                 discontinued ? rs.getBigDecimal("discontinued_rule") : null,

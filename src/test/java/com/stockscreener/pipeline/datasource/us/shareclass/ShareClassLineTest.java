@@ -38,7 +38,7 @@ class ShareClassLineTest {
                 List.of());
 
         assertThat(line.read("10-Q:A1", Q1, CURRENT)).isEqualTo(
-                new ShareClassLine.Read(CURRENT, new BigDecimal("790"), ShareClassLine.State.SHOWN, "지금 경로"));
+                new ShareClassLine.Read(CURRENT, new BigDecimal("790"), ShareClassLine.State.SHOWN, "지금 경로", true));
         assertThat(line.read("10-Q:A2", Q2, CURRENT).shares()).isEqualByComparingTo("1000");
         ShareClassLine.Read hiddenRead = line.read("10-Q:A3", Q3, CURRENT);
         assertThat(hiddenRead.state()).isEqualTo(ShareClassLine.State.HIDDEN);

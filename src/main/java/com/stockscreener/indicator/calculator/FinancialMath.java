@@ -676,7 +676,7 @@ final class FinancialMath {
         if (bar != null && bar.listedShares() != null && bar.listedShares().signum() > 0) {
             return context.sharesOn(bar.tradeDate(), bar.listedShares());
         }
-        return fromFinancials(context, bar, quarters, FinancialFigures::sharesOutstanding);
+        return fromFinancials(context, bar, quarters, FinancialFigures::sharesOutstanding, false);
     }
 
     /**
@@ -685,7 +685,9 @@ final class FinancialMath {
      * <p>관문이 켜진 미국 행(클래스 축이 읽은 행 — {@link FinancialFigures#shareClassState()}가 있다)이면 <b>그 공시의 EPS 분모
      * n</b>이다 — 발행사 전부가 두 끝 다 같은 개념이라, 공시 형식(축 없는 표지 대 클래스 표지)에 따라 기저가 바뀌지 않는다
      * (탐색 {@code SHARES-CLASS-PLAN-V5-1015.md} §10b-6). n이 없는 끝은 시점 주식수로 <b>안 내려간다</b> — 내려가면 두 끝의
-     * 기저가 섞인다. 그 밖(국내 · 관문 꺼짐)은 {@link #sharesOf}와 같다.
+     * 기저가 섞인다. 판정이 그 판의 n을 「없음」으로 정했으면 앞 판의 n으로도 안 내려간다 — 원장이 그 공시의 분모를 확인해 주지
+     * 않은 것이라(단위 오태깅 · 폐합 실패 · ADR-0189) 앞 판의 n을 내면 같은 날짜에 낡은 수가 그럴듯하게 나간다. 그 밖(국내 · 관문
+     * 꺼짐)은 {@link #sharesOf}와 같다.
      */
     static BigDecimal endpointShares(IndicatorContext context, PriceBar bar, PeriodSeries series) {
         if (series == null) {
@@ -693,13 +695,14 @@ final class FinancialMath {
         }
         List<FinancialFigures> rows = series.pointRows();
         if (!rows.isEmpty() && rows.get(0).shareClassState() != null) {
-            return fromFinancials(context, bar, rows, FinancialFigures::weightedShares);
+            return fromFinancials(context, bar, rows, FinancialFigures::weightedShares, true);
         }
         return sharesOf(context, bar, rows);
     }
 
     private static BigDecimal fromFinancials(IndicatorContext context, PriceBar bar, List<FinancialFigures> quarters,
-                                             java.util.function.Function<FinancialFigures, BigDecimal> count) {
+                                             java.util.function.Function<FinancialFigures, BigDecimal> count,
+                                             boolean denominator) {
         if (quarters.isEmpty()) {
             return null;
         }
@@ -732,6 +735,10 @@ final class FinancialMath {
                 return null;
             }
             BigDecimal fromFinancials = count.apply(asOf);
+            if (denominator && asOf.weightedSharesJudged() && (fromFinancials == null || fromFinancials.signum() <= 0)) {
+                // MUST: 아래 「없으면 앞 판으로」보다 먼저 본다 — 판정이 이 판의 n을 「없음」으로 정했다(숨김과 같은 이유).
+                return null;
+            }
             if (fromFinancials == null || fromFinancials.signum() <= 0) {
                 continue;
             }

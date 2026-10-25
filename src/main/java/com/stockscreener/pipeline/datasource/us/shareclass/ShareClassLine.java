@@ -35,11 +35,19 @@ public final class ShareClassLine {
 
     public enum State { SHOWN, HIDDEN }
 
-    /** 행 하나를 읽은 결과. {@code shares}는 그 행의 공시일 기준(지금 경로면 행이 실은 값 그대로 — null일 수 있다). */
-    public record Read(BigDecimal shares, BigDecimal denominator, State state, String reason) {
+    /**
+     * 행 하나를 읽은 결과. {@code shares}는 그 행의 공시일 기준(지금 경로면 행이 실은 값 그대로 — null일 수 있다). {@code judged}는
+     * 보인 판정이 이 행의 분모 n을 정했는가다 — 참인데 {@code denominator}가 null이면 판정이 「n 없음」을 정한 것이다(원장이 그 공시의
+     * 분모를 확인해 주지 않았다 · ADR-0189).
+     */
+    public record Read(BigDecimal shares, BigDecimal denominator, State state, String reason, boolean judged) {
 
         static Read hidden(String reason) {
-            return new Read(null, null, State.HIDDEN, reason);
+            return new Read(null, null, State.HIDDEN, reason, false);
+        }
+
+        static Read unjudged(BigDecimal shares) {
+            return new Read(shares, null, State.SHOWN, "판정 없음", false);
         }
     }
 
@@ -97,11 +105,10 @@ public final class ShareClassLine {
             if (firstAnchor != null && !firstAnchor.isAfter(publishedAt) && !publishedAt.isBefore(INSTANCE_FROM)) {
                 return Read.hidden("미판정");
             }
-            return new Read(currentShares, null, State.SHOWN, "판정 없음");
+            return Read.unjudged(currentShares);
         }
         Verdict standing = standingOn(publishedAt);
-        return standing == null ? new Read(currentShares, null, State.SHOWN, "판정 없음")
-                : apply(standing, publishedAt, currentShares);
+        return standing == null ? Read.unjudged(currentShares) : apply(standing, publishedAt, currentShares);
     }
 
     private Read apply(Verdict v, LocalDate publishedAt, BigDecimal currentShares) {
@@ -109,10 +116,10 @@ public final class ShareClassLine {
             return Read.hidden("숨김");
         }
         if (v.currentPath()) {
-            return new Read(currentShares, v.denominator(), State.SHOWN, "지금 경로");
+            return new Read(currentShares, v.denominator(), State.SHOWN, "지금 경로", true);
         }
         return new Read(v.lineShares().multiply(factor(ordinarySplits, v.filed(), publishedAt)), v.denominator(), State.SHOWN,
-                "클래스 축");
+                "클래스 축", true);
     }
 
     /** {@code day}에 서 있던 판정(그날까지 공시된 것의 최신). */

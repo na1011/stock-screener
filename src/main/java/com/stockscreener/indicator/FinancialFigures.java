@@ -120,6 +120,12 @@ public record FinancialFigures(
         BigDecimal weightedShares,
 
         /**
+         * <b>보인 판정이 이 행의 n을 정했는가</b>({@link ShareClassLine.Read#judged()}). 참인데 {@link #weightedShares}가
+         * {@code null}이면 판정이 「n 없음」을 정한 것이다 — 주식수 비 지표의 끝이 앞 판의 n으로 내려가지 않는다.
+         */
+        boolean weightedSharesJudged,
+
+        /**
          * <b>중단영업 손익(연결 · 세후 · 비지배 몫 포함).</b> 0은 「중단영업 줄이 없다」다. {@link #discontinuedRule}이 있는데
          * {@code null}이면 원장이 그 판에서 정해 주지 않은 것이다(재분류된 해의 Q4 — 계속영업을 지어내지 않는다).
          */

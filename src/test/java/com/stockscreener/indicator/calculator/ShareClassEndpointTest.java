@@ -46,8 +46,26 @@ class ShareClassEndpointTest {
         assertThat(FinancialMath.endpointShares(context(), bar(), series(off))).isEqualByComparingTo("1000");
     }
 
-    private static FinancialMath.PeriodSeries series(FinancialFigures row) {
-        return FinancialMath.seriesOf(new IndicatorContext(1L, null, List.of(bar()), List.of(), List.of(row),
+    @Test
+    @DisplayName("판정이 그 판의 n을 「없음」으로 정했으면 앞 판의 n으로 안 내려간다 — 판정이 없는 행(정정 등)은 예전처럼 내려간다")
+    void judgedAbsenceStopsTheWalk() {
+        FinancialFigures older = FinancialFiguresFixture.quarter(LocalDate.of(2025, 9, 30)).publishedAt(LocalDate.of(2025, 11, 1))
+                .sharesOutstanding(new BigDecimal("1000")).shareClass(ShareClassLine.State.SHOWN, new BigDecimal("950"))
+                .denominatorJudged().build();
+        FinancialFigures judgedWithoutN = FinancialFiguresFixture.quarter(LocalDate.of(2025, 12, 31))
+                .publishedAt(LocalDate.of(2026, 2, 1)).sharesOutstanding(new BigDecimal("1000"))
+                .shareClass(ShareClassLine.State.SHOWN, null).denominatorJudged().build();
+        FinancialFigures unjudged = FinancialFiguresFixture.quarter(LocalDate.of(2025, 12, 31))
+                .publishedAt(LocalDate.of(2026, 2, 1)).sharesOutstanding(new BigDecimal("1000"))
+                .shareClass(ShareClassLine.State.SHOWN, null).build();
+
+        assertThat(FinancialMath.endpointShares(context(), bar(), series(judgedWithoutN, older)))
+                .as("MCD 2026 Q2 — 단위가 틀린 n을 판정이 지웠는데 앞 판 727.2M이 나가던 자리").isNull();
+        assertThat(FinancialMath.endpointShares(context(), bar(), series(unjudged, older))).isEqualByComparingTo("950");
+    }
+
+    private static FinancialMath.PeriodSeries series(FinancialFigures... rows) {
+        return FinancialMath.seriesOf(new IndicatorContext(1L, null, List.of(bar()), List.of(), List.of(rows),
                 List.of(), List.of(), new TreeMap<>(), List.of(), Map.of()));
     }
 

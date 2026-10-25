@@ -56,6 +56,7 @@ final class FinancialFiguresFixture {
     private String shareBasisStatus;
     private com.stockscreener.pipeline.datasource.us.shareclass.ShareClassLine.State shareClassState;
     private BigDecimal weightedShares;
+    private boolean weightedSharesJudged;
     private BigDecimal discontinuedIncome;
     private BigDecimal discontinuedIncomeControlling;
     private BigDecimal discontinuedRule;
@@ -126,6 +127,7 @@ final class FinancialFiguresFixture {
         fixture.shareBasisStatus = source.shareBasisStatus();
         fixture.shareClassState = source.shareClassState();
         fixture.weightedShares = source.weightedShares();
+        fixture.weightedSharesJudged = source.weightedSharesJudged();
         fixture.discontinuedIncome = source.discontinuedIncome();
         fixture.discontinuedIncomeControlling = source.discontinuedIncomeControlling();
         fixture.discontinuedRule = source.discontinuedRule();
@@ -269,6 +271,12 @@ final class FinancialFiguresFixture {
         return this;
     }
 
+    /** 보인 판정이 이 행의 n을 정했다(값이든 「없음」이든 — {@link com.stockscreener.pipeline.datasource.us.shareclass.ShareClassLine.Read#judged()}). */
+    FinancialFiguresFixture denominatorJudged() {
+        this.weightedSharesJudged = true;
+        return this;
+    }
+
     FinancialFiguresFixture costOfSales(BigDecimal value) {
         this.costOfSales = value;
         return this;
@@ -333,6 +341,6 @@ final class FinancialFiguresFixture {
                 noninterestExpense, benefitsLossesAndExpenses,
                 grossProfit, operatingExpenses, costsAndExpenses,
                 incomeTaxExpense, profitBeforeTax, shareBasisMultiple, shareBasisStatus, shareClassState,
-                weightedShares, discontinuedIncome, discontinuedIncomeControlling, discontinuedRule, common);
+                weightedShares, weightedSharesJudged, discontinuedIncome, discontinuedIncomeControlling, discontinuedRule, common);
     }
 }
