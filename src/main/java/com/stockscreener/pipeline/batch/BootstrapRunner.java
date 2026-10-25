@@ -192,6 +192,7 @@ public class BootstrapRunner implements ApplicationRunner {
     private final SymbolEraSeedJob symbolEraSeedJob;
     private final CandidateIntake candidateIntake;
     private final FreshnessCatchUpJob freshnessCatchUpJob;
+    private final KrXbrlCollectJob krXbrlCollectJob;
     private final BatchExecutionSweeper executionSweeper;
     private final ConfigurableApplicationContext context;
 
@@ -222,7 +223,9 @@ public class BootstrapRunner implements ApplicationRunner {
                            SecCikBindJob secCikBindJob,
                            UsDelistedIntakeJob usDelistedIntakeJob,
                            PriceBoundaryJob priceBoundaryJob,
-                           SymbolEraSeedJob symbolEraSeedJob) {
+                           SymbolEraSeedJob symbolEraSeedJob,
+                           KrXbrlCollectJob krXbrlCollectJob) {
+        this.krXbrlCollectJob = krXbrlCollectJob;
         this.priceBoundaryJob = priceBoundaryJob;
         this.symbolEraSeedJob = symbolEraSeedJob;
         this.stockFoldJob = stockFoldJob;
@@ -415,6 +418,10 @@ public class BootstrapRunner implements ApplicationRunner {
             // --tickers는 그 안에서 더 좁힌다. 손 실행은 사슬 안 화해를 안 한다(무효화 알림이 화해 명령을 싣는다).
             case "refresh-behind" -> freshnessCatchUpJob.run(asOf, BatchExecutionRecorder.TriggeredBy.MANUAL,
                     csv(args, "tickers"));
+            // 국내 보통주 몫 재료(ADR-0192) — 값을 안 바꾸는 재료 표 둘과 디스크 캐시만 쓴다. --max-fetches 0 이하면 새로 받기 상한 없음
+            // (관문 앞 밀린 재료 비우기) · 안 주면 정기 상한.
+            case "kr-xbrl-collect" -> krXbrlCollectJob.run(asOf, BatchExecutionRecorder.TriggeredBy.MANUAL, csv(args, "tickers"),
+                    optionalInteger(args, "max-fetches"));
             // 외부 호출이 0이다. 유도 규칙을 고친 뒤 이것만 다시 돌린다.
             case "governance-derive" -> governanceDeriveJob.run(
                     asOf, BatchExecutionRecorder.TriggeredBy.MANUAL, csv(args, "tickers"));
@@ -524,7 +531,7 @@ public class BootstrapRunner implements ApplicationRunner {
             "initial-load", "financial-refill", "full-statement-refill", "filing-consumption", "candidate-consumption",
             "refresh-behind",
             "corporate-action", "corporate-action-judge", "adjustment-rebuild", "candidate-splits", "depositary-splits",
-            "price-boundary");
+            "price-boundary", "kr-xbrl-collect");
 
     /**
      * 화해의 기준일. {@code --as-of}가 없으면 정기 화해와 같은 규약({@link IndicatorReconciler#dataAsOf} —

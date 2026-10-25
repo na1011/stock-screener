@@ -91,6 +91,7 @@ class PipelineSchedulerChainTest {
     private BatchExecutions batchExecutions;
     private WriteLock writeLock;
     private FilingListingJob filingListingJob;
+    private com.stockscreener.pipeline.batch.KrXbrlCollectJob krXbrlCollectJob;
     private FilingConsumptionJob filingConsumptionJob;
     private FreshnessCatchUpJob freshnessCatchUpJob;
     private CandidateSplitJob candidateSplitJob;
@@ -114,6 +115,7 @@ class PipelineSchedulerChainTest {
         batchExecutions = mock(BatchExecutions.class);
         writeLock = WriteLock.inactive("단위 시험");
         filingListingJob = mock(FilingListingJob.class);
+        krXbrlCollectJob = mock(com.stockscreener.pipeline.batch.KrXbrlCollectJob.class);
         filingConsumptionJob = mock(FilingConsumptionJob.class);
         candidateSplitJob = mock(CandidateSplitJob.class);
         freshnessCatchUpJob = mock(FreshnessCatchUpJob.class);
@@ -139,7 +141,21 @@ class PipelineSchedulerChainTest {
                         indicatorCalendar, null, false),
                 universeIntegrityAlerter, batchExecutions, writeLock, filingListingJob, filingConsumptionJob,
                 freshnessCatchUpJob, new UsCandidateFeed(candidateFeed), candidateSplitJob,
-                mock(com.stockscreener.pipeline.batch.PriceIntegrityAlerter.class));
+                mock(com.stockscreener.pipeline.batch.PriceIntegrityAlerter.class),
+                krXbrlCollectJob);
+    }
+
+    @Test
+    @DisplayName("국내 보통주 몫 재료 받기는 14:16 사슬 끝에서 정기 상한으로 돈다 — 앞 단계가 던져도 돈다(재료 표만 쓴다)")
+    void krMaterialCollectionRunsLastEvenAfterAFailure() {
+        RuntimeException boom = new IllegalStateException("소비 실패");
+        when(filingConsumptionJob.run(any(), any())).thenThrow(boom);
+
+        assertThatThrownBy(() -> scheduler.runFilingListing()).isSameAs(boom);
+
+        org.mockito.InOrder order = org.mockito.Mockito.inOrder(freshnessCatchUpJob, krXbrlCollectJob);
+        order.verify(freshnessCatchUpJob).run(any(), eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER), eq(List.of()));
+        order.verify(krXbrlCollectJob).run(any(), eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER), eq(List.of()), org.mockito.ArgumentMatchers.isNull());
     }
 
     @Test
@@ -559,7 +575,8 @@ class PipelineSchedulerChainTest {
                 new IndicatorReconciler(indicatorBackfillJob, shareBasisDeriver, governanceDeriveJob, indicatorCalendar, null, false),
                 universeIntegrityAlerter, batchExecutions, WriteLock.inactive("단위 시험"), mock(FilingListingJob.class),
                 mock(FilingConsumptionJob.class), mock(FreshnessCatchUpJob.class), new UsCandidateFeed(false), mock(CandidateSplitJob.class),
-                mock(com.stockscreener.pipeline.batch.PriceIntegrityAlerter.class));
+                mock(com.stockscreener.pipeline.batch.PriceIntegrityAlerter.class),
+                mock(com.stockscreener.pipeline.batch.KrXbrlCollectJob.class));
 
         Map<String, LocalDate> picked = new java.util.LinkedHashMap<>();
         for (LocalDate day = LocalDate.of(2026, 10, 19); !day.isAfter(LocalDate.of(2026, 11, 5));
@@ -626,7 +643,8 @@ class PipelineSchedulerChainTest {
                 new IndicatorReconciler(indicatorBackfillJob, shareBasisDeriver, governanceDeriveJob, indicatorCalendar, null, false),
                 universeIntegrityAlerter, batchExecutions, refusing, blockedListing, blockedConsumption,
                 blockedCatchUp, new UsCandidateFeed(false), mock(CandidateSplitJob.class),
-                mock(com.stockscreener.pipeline.batch.PriceIntegrityAlerter.class));
+                mock(com.stockscreener.pipeline.batch.PriceIntegrityAlerter.class),
+                mock(com.stockscreener.pipeline.batch.KrXbrlCollectJob.class));
 
         // 성질로 센다(잠금 결정 7) — 손으로 든 목록이면 새 쓰기 크론이 잠금 없이 붙어도 이 시험이 못 본다.
         List<String> writeCrons = new java.util.ArrayList<>();
@@ -673,7 +691,8 @@ class PipelineSchedulerChainTest {
                 new IndicatorReconciler(indicatorBackfillJob, shareBasisDeriver, governanceDeriveJob, indicatorCalendar, null, false),
                 universeIntegrityAlerter, batchExecutions, failing, mock(FilingListingJob.class),
                 mock(FilingConsumptionJob.class), mock(FreshnessCatchUpJob.class), new UsCandidateFeed(false), mock(CandidateSplitJob.class),
-                mock(com.stockscreener.pipeline.batch.PriceIntegrityAlerter.class));
+                mock(com.stockscreener.pipeline.batch.PriceIntegrityAlerter.class),
+                mock(com.stockscreener.pipeline.batch.KrXbrlCollectJob.class));
 
         assertThatThrownBy(broken::runHeavyJobOfTheDay).isSameAs(boom);
 

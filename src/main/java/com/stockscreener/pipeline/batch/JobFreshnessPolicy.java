@@ -125,6 +125,8 @@ public class JobFreshnessPolicy {
         map.put(FilingConsumptionJob.CANDIDATE_JOB_NAME, new Budget(5, "--job=candidate-consumption"));
         map.put(CandidateSplitJob.JOB_NAME, new Budget(5, "--job=candidate-splits"));
         map.put(FreshnessCatchUpJob.JOB_NAME, new Budget(5, "--job=refresh-behind"));
+        // 국내 보통주 몫 재료(ADR-0192) — 평일 14:16 사슬 끝 · 공시 목록과 같은 주기.
+        map.put(KrXbrlCollectJob.JOB_NAME, new Budget(5, "--job=kr-xbrl-collect"));
         // 소스가 미래 휴장일을 모르므로 실행일까지만 찬다 — 그만큼 천천히 낡는다.
         map.put(MarketCalendarJob.JOB_NAME, new Budget(60, null));
         return Map.copyOf(map);

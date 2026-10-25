@@ -32,7 +32,7 @@ import java.util.Set;
  */
 public final class DartXbrlFactReader {
 
-    /** 판독기 판. 재료 표({@code dart_report_xbrl.reader_version})가 이 값과 다르면 캐시에서 다시 읽는다. */
+    /** 판독기 판. 재료 표({@code kr_report_xbrl.reader_version})가 이 값과 다르면 캐시에서 다시 읽는다. */
     public static final int READER_VERSION = 1;
 
     static final String SOURCE = "dart";

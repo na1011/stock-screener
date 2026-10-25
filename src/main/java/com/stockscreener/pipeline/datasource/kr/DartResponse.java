@@ -199,6 +199,33 @@ final class DartResponse {
     }
 
     /**
+     * ZIP 자리({@code fnlttXbrl.xml})에 온 XML 오류 봉투에서 예외를 만든다 — {@code <result><status>013</status><message>…</message></result>}
+     * ({@code docs/api-spec/dart-xbrl.md} · 2026-10-25 실측: 없는 접수번호 {@code 013} · 원본 없음 {@code 014}). JSON 꼴의
+     * {@link #errorFromBody}로 읽으면 따옴표 필드를 못 찾아 {@code 013} · {@code 014}가 받기 실패(TRANSIENT)로 갈린다.
+     * {@code 013} · {@code 014}는 {@link NoData}다.
+     */
+    static DataSourceException errorFromXml(byte[] body, String context) {
+        String text = body == null ? "" : new String(body, StandardCharsets.UTF_8);
+        String status = between(text, "<status>", "</status>");
+        String message = between(text, "<message>", "</message>");
+        if (status == null) {
+            return new DataSourceException(DataSourceException.Kind.TRANSIENT, SOURCE_NAME,
+                    "ZIP도 DART 오류 봉투도 아닌 응답이다. " + context + " body=" + truncate(text));
+        }
+        String full = "DART 오류 [" + status + "] " + (message == null ? "" : message) + " — " + context;
+        if ("013".equals(status) || "014".equals(status)) {
+            return new NoData(full);
+        }
+        return new DataSourceException(kindOf(status), SOURCE_NAME, full);
+    }
+
+    private static String between(String text, String open, String close) {
+        int start = text.indexOf(open);
+        int end = start < 0 ? -1 : text.indexOf(close, start + open.length());
+        return start < 0 || end < 0 ? null : text.substring(start + open.length(), end).strip();
+    }
+
+    /**
      * status 코드를 재시도 정책으로 옮긴다. <b>이 표의 정본이 여기다</b> — 해석 지점이
      * 저장소에 이곳 하나뿐이라 문서로 떼어 두면 갈려도 아무도 모른다.
      *

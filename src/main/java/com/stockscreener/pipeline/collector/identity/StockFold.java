@@ -97,7 +97,10 @@ public class StockFold {
             new Rule("sec_share_class_input", List.of(), List.of("cik"), OnConflict.COMPARE),
             new Rule("financial_share_class_filing", List.of("accession"), List.of(), OnConflict.DROP_SOURCE),
             // 관문 마이그레이션(V70_1) — 같은 등록인의 같은 공시면 정한 k가 같아야 한다. 다르면 멈춘다(ADR-0183).
-            new Rule("sec_depositary_ratio", List.of("accession"), List.of("k"), OnConflict.COMPARE));
+            new Rule("sec_depositary_ratio", List.of("accession"), List.of("k"), OnConflict.COMPARE),
+            // 국내 보통주 몫 재료(V69_5 · ADR-0192) — 같은 회사의 같은 판 · 같은 해 명부는 같은 원장 사실이다(재료는 다시 받을 수 있다).
+            new Rule("kr_report_xbrl", List.of("rcept_no"), List.of(), OnConflict.DROP_SOURCE),
+            new Rule("kr_share_register", List.of("bsns_year"), List.of(), OnConflict.DROP_SOURCE));
 
     /** 따로 다루는 표 + S와 함께 지워도 되는 표(S의 기호 시대 — 접힌 S에는 없다 · 있어도 T가 새로 쓴다). */
     static final Set<String> SPECIAL = Set.of("universe_membership", "financial_statement", "stock_symbol_era");

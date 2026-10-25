@@ -86,6 +86,7 @@ public class PipelineScheduler {
     private final FilingListingJob filingListingJob;
     private final FilingConsumptionJob filingConsumptionJob;
     private final FreshnessCatchUpJob freshnessCatchUpJob;
+    private final com.stockscreener.pipeline.batch.KrXbrlCollectJob krXbrlCollectJob;
     private final UsCandidateFeed usCandidateFeed;
     private final CandidateSplitJob candidateSplitJob;
 
@@ -108,8 +109,10 @@ public class PipelineScheduler {
                              FreshnessCatchUpJob freshnessCatchUpJob,
                              UsCandidateFeed usCandidateFeed,
                              CandidateSplitJob candidateSplitJob,
-                             com.stockscreener.pipeline.batch.PriceIntegrityAlerter priceIntegrityAlerter) {
+                             com.stockscreener.pipeline.batch.PriceIntegrityAlerter priceIntegrityAlerter,
+                             com.stockscreener.pipeline.batch.KrXbrlCollectJob krXbrlCollectJob) {
         this.priceIntegrityAlerter = priceIntegrityAlerter;
+        this.krXbrlCollectJob = krXbrlCollectJob;
         this.dailyUpdateJob = dailyUpdateJob;
         this.universeRebalanceJob = universeRebalanceJob;
         this.corporateActionJob = corporateActionJob;
@@ -561,6 +564,16 @@ public class PipelineScheduler {
                     }
                 } catch (BatchShutdownException e) {
                     log.info("후보 공시 소비가 종료로 중단됐다. today={} — 표시는 종목 트랜잭션 안이라 남은 행은 다음 평일이 먹인다.", today);
+                    return;
+                } catch (RuntimeException e) {
+                    held = keepFirst(held, e);
+                }
+                // 끝에 국내 보통주 몫 재료를 받는다(ADR-0192) — 값을 안 바꾸는 재료 표만 쓰고, 앞 단계가 그날 새로 쓴 국내 판까지 받으려고
+                // 맨 뒤다. 한 판에 새로 받는 수는 설정 상한이 묶는다(14:18 · 14:20을 안 민다).
+                try {
+                    krXbrlCollectJob.run(today, BatchExecutionRecorder.TriggeredBy.SCHEDULER, List.of(), null);
+                } catch (BatchShutdownException e) {
+                    log.info("국내 보통주 몫 재료 받기가 종료로 중단됐다. today={} — 판마다 표에 남아 다음 평일이 잇는다.", today);
                     return;
                 } catch (RuntimeException e) {
                     held = keepFirst(held, e);
