@@ -1,47 +1,54 @@
 diff --git a/src/main/java/com/stockscreener/pipeline/datasource/us/shareclass/IssuerFacts.java b/src/main/java/com/stockscreener/pipeline/datasource/us/shareclass/IssuerFacts.java
-index 48d82094..4d8b4117 100644
+index 48d82094..6adf65b6 100644
 --- a/src/main/java/com/stockscreener/pipeline/datasource/us/shareclass/IssuerFacts.java
 +++ b/src/main/java/com/stockscreener/pipeline/datasource/us/shareclass/IssuerFacts.java
-@@ -44,8 +44,18 @@ public record IssuerFacts(Map<String, Filing> filings,
+@@ -44,8 +44,23 @@ public record IssuerFacts(Map<String, Filing> filings,
       * 기간. {@code epsDiluted} · {@code dilutedNumerator}: 희석 EPS와 희석 분자.
       */
      public record Witnesses(Map<Key, List<Double>> laterTags, Map<Key, Double> diluted, Map<Key, Double> proForma,
 -                            Map<Key, Double> epsDiluted, Map<Key, Double> dilutedNumerator, java.util.Set<Key> basicAndDilutedEps) {
 +                            Map<Key, Double> epsDiluted, Map<Key, Double> dilutedNumerator, java.util.Set<Key> basicAndDilutedEps,
-+                            java.util.Set<String> witnessedCovers) {
++                            java.util.Set<String> witnessedCovers, Map<String, List<Double>> ladder, java.util.Set<String> absentCovers) {
          public static final Witnesses NONE = new Witnesses(Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), java.util.Set.of());
 +
 +        public Witnesses(Map<Key, List<Double>> laterTags, Map<Key, Double> diluted, Map<Key, Double> proForma,
 +                         Map<Key, Double> epsDiluted, Map<Key, Double> dilutedNumerator, java.util.Set<Key> basicAndDilutedEps) {
-+            this(laterTags, diluted, proForma, epsDiluted, dilutedNumerator, basicAndDilutedEps, java.util.Set.of());
++            this(laterTags, diluted, proForma, epsDiluted, dilutedNumerator, basicAndDilutedEps, java.util.Set.of(), Map.of(), java.util.Set.of());
 +        }
 +
-+        Witnesses withWitnessedCovers(java.util.Set<String> covers) {
-+            return new Witnesses(laterTags, diluted, proForma, epsDiluted, dilutedNumerator, basicAndDilutedEps, java.util.Set.copyOf(covers));
++        Witnesses withLadder(Map<String, List<Double>> l) {
++            return new Witnesses(laterTags, diluted, proForma, epsDiluted, dilutedNumerator, basicAndDilutedEps, witnessedCovers, l, absentCovers);
++        }
++
++        Witnesses withCoverJudgement(java.util.Set<String> covers, java.util.Set<String> absent) {
++            return new Witnesses(laterTags, diluted, proForma, epsDiluted, dilutedNumerator, basicAndDilutedEps, java.util.Set.copyOf(covers),
++                    ladder, java.util.Set.copyOf(absent));
 +        }
      }
  
      /**
-@@ -133,7 +143,7 @@ public record IssuerFacts(Map<String, Filing> filings,
+@@ -133,7 +148,7 @@ public record IssuerFacts(Map<String, Filing> filings,
          later.values().removeIf(List::isEmpty);
          java.util.Set<Key> basicAndDiluted = new java.util.HashSet<>(pick(gaap, List.of(EPS_BASIC_AND_DILUTED), "USD/shares").keySet());
          basicAndDiluted.removeAll(pick(gaap, List.of("EarningsPerShareBasic"), "USD/shares").keySet());
 -        return new IssuerFacts(filings,
-+        return IssuerTimeline.coverUnitChecked(new IssuerFacts(filings,
++        IssuerFacts built = (new IssuerFacts(filings,
                  weighted,
                  pick(gaap, ClassFactReader.EPS_TAGS, "USD/shares"),
                  pick(gaap, List.of(ClassFactReader.DECLARED_NUMERATOR), "USD"),
-@@ -146,7 +156,26 @@ public record IssuerFacts(Map<String, Filing> filings,
+@@ -146,7 +161,28 @@ public record IssuerFacts(Map<String, Filing> filings,
                          pick(gaap, List.of("NetIncomeLoss"), "USD"), pick(gaap, List.of("ProfitLoss"), "USD"),
                          pick(gaap, List.of(ClassFactReader.NONCONTROLLING), "USD"), pick(gaap, ClassFactReader.PREFERRED_DIVIDENDS, "USD"),
                          pick(gaap, ClassFactReader.PARTICIPATING, "USD"), pick(gaap, List.of(ClassFactReader.GENERAL_PARTNER), "USD"),
 -                        pick(gaap, List.of(ClassFactReader.LIMITED_PARTNERS), "USD")));
-+                        pick(gaap, List.of(ClassFactReader.LIMITED_PARTNERS), "USD"))), ladder(gaap));
++                        pick(gaap, List.of(ClassFactReader.LIMITED_PARTNERS), "USD"))));
++        return new IssuerFacts(built.filings(), built.weighted(), built.eps(), built.declaredNumerator(), built.proxyNumerator(),
++                built.coverShares(), built.witnesses().withLadder(ladder(gaap)), built.numerators());
 +    }
 +
 +    /** 사다리 다음 칸 — 관문 켬 주식수 후보 순서에서 dei 표지를 뺀 것(SecEdgarColumn.GATED_SHARES_ORDER · 같은 공시 · 가장 늦은 기말 · 가장 짧은 창). */
-+    private static Map<String, Double> ladder(JsonNode gaap) {
-+        Map<String, Double> out = new LinkedHashMap<>();
++    private static Map<String, List<Double>> ladder(JsonNode gaap) {
++        Map<String, List<Double>> out = new LinkedHashMap<>();
 +        for (String tag : List.of("CommonStockSharesOutstanding", "WeightedAverageNumberOfSharesOutstandingBasic", DILUTED)) {
 +            Map<String, JsonNode> best = new LinkedHashMap<>();
 +            for (JsonNode x : gaap.path(tag).path("units").path("shares")) {
@@ -53,17 +60,44 @@ index 48d82094..4d8b4117 100644
 +                    best.put(a, x);
 +                }
 +            }
-+            best.forEach((a, x) -> out.putIfAbsent(a, x.path("val").asDouble()));
++            best.forEach((a, x) -> out.computeIfAbsent(a, z -> new java.util.ArrayList<>()).add(x.path("val").asDouble()));
 +        }
 +        return out;
      }
  
      /**
 diff --git a/src/main/java/com/stockscreener/pipeline/datasource/us/shareclass/IssuerTimeline.java b/src/main/java/com/stockscreener/pipeline/datasource/us/shareclass/IssuerTimeline.java
-index 49b4655e..5a6dc60c 100644
+index 49b4655e..3d90e056 100644
 --- a/src/main/java/com/stockscreener/pipeline/datasource/us/shareclass/IssuerTimeline.java
 +++ b/src/main/java/com/stockscreener/pipeline/datasource/us/shareclass/IssuerTimeline.java
-@@ -695,7 +695,9 @@ public final class IssuerTimeline {
+@@ -94,6 +94,7 @@ public final class IssuerTimeline {
+      */
+     public List<Verdict> judge(String ticker, IssuerFacts given, Set<String> anchors, Instances instances, List<Split> splits,
+                                LocalDate historyFrom, LocalDate instanceFrom) {
++        given = coverUnitChecked(given, splits);
+         Prepared prepared = prepare(given, instances, splits, anchors);
+         IssuerFacts cf = prepared.facts();
+         Map<String, Double> refs = prepared.references();
+@@ -149,7 +150,9 @@ public final class IssuerTimeline {
+             String a = ev.accession();
+             String form = cf.filings().get(a).form();
+             if (!ev.kind().equals("T")) {
+-                if (ev.kind().equals("d")) {
++                if (ev.kind().equals("d") && cf.witnesses().absentCovers().contains(a)) {
++                    out.add(new Verdict(f, a, "d", 'X', "cover-unit", "어긋남", null, null));
++                } else if (ev.kind().equals("d")) {
+                     out.add(new Verdict(f, a, "d", 'O', prepared.noInstance().contains(a) ? "d-noinst" : "d", null, null,
+                             currentPathDenominator(cf, a, form, f, qv, splits, refs.get(a))));
+                 }
+@@ -488,6 +491,7 @@ public final class IssuerTimeline {
+      */
+     public Map<IssuerFacts.Key, CommonIncome.Value> commonIncomes(IssuerFacts given, Set<String> anchors, Instances instances,
+                                                                  List<Split> splits, List<Verdict> verdicts) {
++        given = coverUnitChecked(given, splits);
+         Prepared prepared = prepare(given, instances, splits, anchors);
+         Map<String, ClassFacts> loaded = new LinkedHashMap<>();
+         for (String a : prepared.facts().filings().keySet()) {
+@@ -695,7 +699,9 @@ public final class IssuerTimeline {
              return v;
          }
          Boolean closes = witnessCloses(cf, k, v);
@@ -74,29 +108,30 @@ index 49b4655e..5a6dc60c 100644
              return v;
          }
          for (double x : cf.witnesses().laterTags().getOrDefault(k, List.of())) {
-@@ -732,6 +734,100 @@ public final class IssuerTimeline {
+@@ -732,6 +738,116 @@ public final class IssuerTimeline {
          }
      }
  
-+    /** 표지 단위 확인의 띠 — 단위 계단(10^±3 · ±6)에서 이만큼 안이면 단위 오태깅이다(시제품 · COVER_UNIT_BAND 환경변수로 바꿔 잰다). */
++    /** 표지 단위 확인의 띠(시제품). */
 +    static final double COVER_UNIT_BAND = Double.parseDouble(java.util.Optional.ofNullable(System.getenv("COVER_UNIT_BAND")).orElse("0.1"));
 +
 +    /**
-+     * 표지의 단위 확인(시제품) — 표지가 증인에서 단위만큼 갈리면 「없는 표지」로 보고 사다리 다음 칸(같은 공시의
-+     * CommonStockSharesOutstanding → 기본 가중평균 → 희석 가중평균 · ADR-0186)으로 바꾼다. 증인은 그 공시 당기 기본 가중평균(EPS 폐합이
-+     * 참일 때)과 앞서 보인 표지 넷의 중앙값. 거꾸로 n이 틀린 쪽이면 그 n을 0(값 없음)으로 둔다.
++     * 표지의 단위 판정(시제품 v3.1) — 증인은 EPS로 확인된 그 공시 기본 가중평균과 앞서 보인 표지 넷의 중앙값(분할 반영). 어느 증인에서 단위만큼
++     * 갈리고 어느 증인과도 자릿수가 안 맞으면 표지가 틀린 것이다 — 사다리 다음 칸 중 모든 증인과 자릿수가 맞는 첫 값으로 바꾸고, 없으면 「없음」.
 +     */
-+    public static IssuerFacts coverUnitChecked(IssuerFacts cf, Map<String, Double> ladder) {
++    public static IssuerFacts coverUnitChecked(IssuerFacts cf, List<Split> splits) {
 +        Map<String, Double> cover = new LinkedHashMap<>(cf.coverShares());
 +        java.util.Set<String> witnessed = new java.util.LinkedHashSet<>();
++        java.util.Set<String> absent = new java.util.LinkedHashSet<>();
 +        List<String> order = cover.keySet().stream().filter(a -> cf.filings().containsKey(a))
 +                .sorted(Comparator.comparing((String a) -> cf.filings().get(a).filed()).thenComparing(a -> a)).toList();
-+        List<Double> shown = new ArrayList<>();
++        List<Map.Entry<LocalDate, Double>> shown = new ArrayList<>();
 +        for (String a : order) {
 +            Double c = cover.get(a);
 +            if (c == null || c <= 0) {
 +                continue;
 +            }
++            LocalDate f = cf.filings().get(a).filed();
 +            String form = cf.filings().get(a).form();
 +            ClassFacts.Period own = form.startsWith("10-Q") || form.startsWith("6-K")
 +                    ? quarterPeriod(cf, cf.weighted(), a) : currentPeriod(cf, cf.weighted(), a, 350, 380);
@@ -105,49 +140,64 @@ index 49b4655e..5a6dc60c 100644
 +            boolean confirmed = wv != null && wv > 0 && Boolean.TRUE.equals(staticCloses(cf, key, wv));
 +            Double prior = null;
 +            if (!shown.isEmpty()) {
-+                List<Double> window = new ArrayList<>(shown.subList(Math.max(0, shown.size() - 4), shown.size()));
++                List<Double> window = new ArrayList<>();
++                for (Map.Entry<LocalDate, Double> x : shown.subList(Math.max(0, shown.size() - 4), shown.size())) {
++                    window.add(x.getValue() * splitFactor(splits, x.getKey(), f));
++                }
 +                window.sort(Comparator.naturalOrder());
 +                prior = window.get(window.size() / 2);
 +            }
-+            boolean priorOk = prior != null && coverOk(c, prior);
-+            if (priorOk) {
++            List<Double> witnesses = new ArrayList<>();
++            if (confirmed) {
++                witnesses.add(wv);
++            }
++            if (prior != null) {
++                witnesses.add(prior);
++            }
++            boolean shifted = witnesses.stream().anyMatch(x -> unitShifted(c, x));
++            boolean agrees = witnesses.stream().anyMatch(x -> digit(c, x));
++            boolean rawAgrees = wv != null && wv > 0 && coverOk(c, wv);
++            if (prior != null && digit(c, prior)) {
 +                witnessed.add(a);
 +            }
 +            String decision = null;
-+            if (confirmed && unitShifted(c, wv)) {
-+                decision = priorOk ? "n" : "cover";
-+            } else if (!confirmed && (wv == null || wv <= 0 || !coverOk(c, wv)) && prior != null && unitShifted(c, prior)) {
-+                decision = "cover";
-+            } else if (!confirmed && priorOk && wv != null && wv > 0 && unitShifted(wv, c)) {
-+                decision = "n";
-+            }
 +            double kept = c;
-+            if ("cover".equals(decision)) {
-+                Double next = ladder.get(a);
-+                if (next != null && next > 0) {
++            if (shifted && !agrees && !rawAgrees) {
++                Double next = null;
++                for (double v : cf.witnesses().ladder().getOrDefault(a, List.of())) {
++                    if (v > 0 && witnesses.stream().allMatch(x -> digit(v, x))) {
++                        next = v;
++                        break;
++                    }
++                }
++                if (next != null) {
 +                    cover.put(a, next);
 +                    kept = next;
++                    decision = "cover";
 +                } else {
-+                    cover.remove(a);
++                    absent.add(a);
 +                    kept = 0;
++                    decision = "absent";
 +                }
++            } else if (shifted) {
++                decision = "keep";
 +            }
 +            if (decision != null && System.getenv("COVER_DIAG") != null) {
 +                try {
 +                    java.nio.file.Files.writeString(java.nio.file.Path.of(System.getenv("COVER_DIAG")), String.format(Locale.ROOT,
-+                            "%s\t%s\t%s\t%.0f\t%s\t%s\t%s\t%s\t%s%n", a, cf.filings().get(a).filed(), form, c, wv, confirmed, prior,
-+                            decision, "cover".equals(decision) ? ladder.get(a) : null),
++                            "%s\t%s\t%s\t%.0f\t%s\t%s\t%s\t%s\t%s%n", a, f, form, c, wv, confirmed, prior, decision,
++                            "cover".equals(decision) ? kept : null),
 +                            java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.APPEND);
 +                } catch (java.io.IOException e) {
 +                    throw new java.io.UncheckedIOException(e);
 +                }
 +            }
 +            if (kept > 0) {
-+                shown.add(kept);
++                shown.add(Map.entry(f, kept));
 +            }
 +        }
 +        return new IssuerFacts(cf.filings(), cf.weighted(), cf.eps(), cf.declaredNumerator(), cf.proxyNumerator(), cover,
-+                cf.witnesses().withWitnessedCovers(witnessed), cf.numerators());
++                cf.witnesses().withCoverJudgement(witnessed, absent), cf.numerators());
 +    }
 +
 +    static boolean unitShifted(double v, double w) {
