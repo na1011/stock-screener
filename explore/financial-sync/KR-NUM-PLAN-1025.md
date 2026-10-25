@@ -180,3 +180,86 @@
 - **판정 규칙(일반)**: 연결 축을 뺀 모든 구성원이 허용 집합 {`OrdinarySharesMember` · `dart:ReportedAmountMember` · `EquityAttributableToOwnersOfParentMember` · `ParentMember`} 안인 사실만 후보 · 같은 (개념, 기간, 기저)의 후보가 둘 이상 값이면 상충 → 못 정함. 우선주 · 자기주식 · 중단영업 · 회사 확장 구성원은 후보 밖(회사 확장 구성원만 있는 003670 포스코퓨처엠은 못 정함).
 - **다시 잰 단면**: 배분 0 **256** · E × W **55**(+9 — LG 1.95% · 롯데지주 24.1% · 하나금융 3.6% · 한화생명 15.3% · SK텔레콤 1.06% · BNK 3.0% · 우리 3.8% · 000990 0.22% · 011200 −0.02%) · 못 정함 **35** = W가 어떤 축으로도 없음 25(유한양행 · CJ대한통운 · 현대건설 · CJ · 아모레G · 효성 · DB손보 · GS건설 · S-Oil · HLB · 가스공사 · GS · 아모레퍼시픽 · CJ제일제당 · 이마트 · 한진칼 · HL만도 …) · 3개월 W 없이 누계만 2(039490 · 078600 — 누계 E × 누계 W − 1분기 보통주 몫으로 조합된다 · 1분기 보고서가 있어야 함) · EPS 없음 4 · 구형우선주 섞음 2 · W ÷ 보통주 수 어긋남 2(신한 0.49 · 차바이오텍 1.17).
 - 귀결 정정: 국내 관문 켬에서 최신 TTM 미표시 약 **33종목**(편입의 약 9.5%) · 2024 앞은 8b 그대로(재지 않음 — 드라이런이 센다).
+
+## 9. 구현 계획 v1 (2026-10-25 · 최종 — 반증 대상)
+
+### 9a. 실측 ★ (이 계획을 받치는 것 · 내가 쟀다)
+
+- **판마다 자기 XBRL**(DART 5콜): 고려아연(00102858) `list.json`이 FY2024 판 셋(20250320001542 원 · 20250331003521 정정 · 20260813001711 정정)을 주고, `fnlttXbrl.xml?rcept_no=…`가 판마다 다른 인스턴스를 준다(md5 셋 다름) — 원 판 `ProfitLoss` 194,781,564,506 = 우리 revision 0 행 `net_income`. 대조: 기아 2026 반기 원 · 정정은 같은 인스턴스(재무 안 바뀐 정정).
+- **판 열쇠**: `financial_statement`에 접수번호가 없다 · `published_at` = 접수번호 앞 8자리(`DartReportPeriods.publishedAt`) · 국내 재무 행 20,383 · 정정 판 74 · 최신 아님 59(2020 뒤 · Q4 빼고).
+- **옛 형식**: 2019 · 2020 사업 · 2020 1분기(기아) 인스턴스는 2019 분류체계 · 기본 이름공간 · 주석 태그 없음(EPS 본표만 · W 없음).
+- **구조 재료(표준 이름 · 346 파일 전수)**: `dart:BasicEarningsLossPerSharePreferredStock` 33 · `dart:HybridBonds` 31 · `ifrs-full:WeightedAverageNumberOfInstruments…OtherThanOrdinaryShares` 27 · `ifrs-full:ProfitLossAttributableToParticipatingEquityInstrumentsOtherThanOrdinaryShares…` 21 · `ifrs-full:BasicEarningsLossPerInstrument…OtherThanOrdinaryShares` 16 · `dart:IssuedCapitalOfPreferredStock` 7.
+- **구조만으로 배분 0인 256 중 E × W 검산이 서는 142**: 반올림(±0.5 × W) 안 136 · 밖 6(030200 0.09% · 035250 0.16% · 038500 1.7% · 043260 −0.37% · 082740 0.27% · 267270 99.9%).
+- **쿼터**: DART는 경로마다 하루 계획 10,000(`DartDailyQuota` 경로당 18,000 · api-sources skill) · `fnlttXbrl.xml`은 자기 경로 · 인스턴스 zip 0.2~0.5MB.
+- **국내 소비자**: `GovernanceFactDeriver.withClassAxisShares`는 국내 행 `eps`가 늘 NULL이라 국내에 안 닿는다 · 국내 지배 NI NULL 행은 연결 NI로 폴백(OFS · 비지배 없음 — `FinancialMath.controllingNetIncomeOf` javadoc 2026-09-22 판정).
+
+### 9b. 받기 — 국내 관문 켬 FSR 안(`FullStatementRefillJob` 종목 루프 · 미국 `ShareClassCollector` 꼴)
+
+1. 종목마다 `list.json`(corp_code · `pblntf_ty=A` · FSR 창 시작 ~ 기준일 · 페이지 끝까지) → 정기 공시 (접수번호, 보고서 코드, 사업연도). 보고서 코드 산식은 공시 목록 장부(`filing_consumption.reprt_code` 주석)와 같은 것을 재사용한다.
+2. 그 종목 재무 행 중 Q4가 아닌 판마다 `published_at` = 접수일인 접수번호를 고른다(같은 (사업연도, 보고서 코드) · 같은 날 둘이면 큰 번호). 못 찾으면 그 판은 `nokey`.
+3. 고른 접수번호 중 재료 표에 지금 판독기 판의 OK · NO_XBRL 행이 없는 것만 `fnlttXbrl.xml` 1콜 → zip의 `.xbrl` 하나를 판독기에 먹여 재료 행을 쓴다. ZIP · 인스턴스는 안 둔다.
+4. 실패는 접수번호 단위 FAILED(종류 · 메시지) · 한도(`020` · 우리 쿼터)는 FAILED가 아니라 그 실행의 미완료로 남기고 다음 실행이 잇는다. 종목 실패는 종목 단위 격리(`StockTaskExecutor`).
+- 일일: 공시 소비의 좁힌 FSR이 새 공시를 받으면 같은 길로 1~2콜.
+
+### 9c. 판독기 `DartXbrlFactReader`(판 1 · 이름공간 인지 · 두 형식)
+
+재료 개념만 맥락과 함께 남긴다 — (개념, 기간 시작 · 끝/시점, 연결 축 구성원, 나머지 축 · 구성원 목록, 값, decimals):
+- E `ifrs-full:BasicEarningsLossPerShare` · E_계속 `…FromContinuingOperations` · W `ifrs-full:WeightedAverageShares`
+- 직접 `ifrs-full:ProfitLossAttributableToOrdinaryEquityHoldersOfParentEntity` (+계속영업 판)
+- 앵커 `ifrs-full:ProfitLossAttributableToOwnersOfParent` · `ifrs-full:ProfitLoss`
+- 우선 `dart:BasicEarningsLossPerSharePreferredStock` · `ifrs-full:BasicEarningsLossPerInstrument…OtherThanOrdinaryShares` · `ifrs-full:WeightedAverageNumberOfInstruments…OtherThanOrdinaryShares` · `ifrs-full:ProfitLossAttributableToParticipatingEquityInstrumentsOtherThanOrdinaryShares…`
+- 구조 `dart:HybridBonds` · `dart:IssuedCapitalOfPreferredStock`
+- 그 밖 개념 · 회사 확장 이름공간 개념은 버린다(확장 구성원은 맥락에 남겨 판정이 거른다).
+
+### 9d. 판정 — (종목, 판) · 행 기간 · 순수 함수 `KrCommonIncome`
+
+- **기저(앵커)**: 행 기간과 같은 기간 · 연결 구성원(또는 축 없음)의 `ProfitLossAttributableToOwnersOfParent`가 행 `net_income_controlling`과 같으면(1원 · 상대 1e−9) 연결, 별도 구성원의 `ProfitLoss`가 행 `net_income`과 같으면 별도(지배 NULL 행) · 둘 다 아니면 `none:anchor`. 이후 재료는 그 기저 맥락만.
+- **후보 사실**: 연결 축을 뺀 구성원이 전부 허용 집합 {`OrdinarySharesMember` · `dart:ReportedAmountMember` · `EquityAttributableToOwnersOfParentMember` · `ParentMember`} 안 · 같은 (개념, 기간)의 후보 값이 둘 이상이면 상충.
+- **구조**: 보통주 밖 지분상품 있음 = 그 판 인스턴스에 우선 개념 하나라도(값 ≠ 0) · `HybridBonds` ≠ 0(기말) · `IssuedCapitalOfPreferredStock` ≠ 0 · 또는 주식총수(`governance_report_row` `SHARE_TOTALS` 사업연도 Y · Y−1의 11011) 합계 발행 > 보통주 발행.
+- 사다리(행 기간 = 3개월 분기 · 연간):
+  1. 구조 없음 → E · W가 후보로 서면 |지배 NI − E × W| ≤ 0.5 × W 검산 · 밖이면 `none:eps-closure` · 안이거나 검산 재료 없음 → `kr-ni`(값 = 행 지배 NI · 지배 NULL이고 기저가 별도면 행 NI · 지배 NULL인데 연결이면 `none:no-controlling`).
+  2. 구조 있음 → E 상충 · W 상충 → `none:conflict` · E 없음 → `none:no-eps` · W 없음 → 누계 갈래(아래) 아니면 `none:no-w` · W ÷ 보통주 수(같은 해 `ISSUED_SHARES_COMMON − TREASURY_SHARES_COMMON`)가 0.9~1.1 밖 → `none:w-vs-common` · W가 보통주 + 우선주 수와 3% 안이고 보통주 수와 3% 밖 → `none:w-includes-pref` · 그 밖 → `exw`(값 = 직접 태그가 E × W ± 0.5 × W 안이면 그 값, 아니면 E × W).
+  - 누계 갈래: 3개월 E · W가 없고 누계(사업연도 시작 ~ 행 끝) E · W가 서면 누계 몫 − 같은 사업연도 앞 분기들의 누계 몫(앞 판 재료) — 앞이 하나라도 못 정하면 `none:cum`.
+  - 계속영업: 중단영업이 있는 행(국내 F2b 갈래)에서 E_계속이 후보로 서면 C(E_계속 × W) · 아니면 T.
+  - **배당성향 성분** `preferred`: 구조 없음 → 0 · 있음 → 우선 직접 태그가 E_p × W_p ± 0.5 × W_p 안이면 그 값, 아니면 E_p × W_p(`dart:` · `ifrs-full:` EPS 둘이 다르면 상충) · 재료 없고 우선주 수가 0이면(신종자본증권만) 0 · 그 밖 NULL(배당성향 미표시).
+- **Q4**: FY 몫 − Q1~Q3 몫(각 분기는 `published_at` ≤ Q4 행 `published_at`인 마지막 판) · 그 세 판의 지배 NI 합 + Q4 행 지배 NI = FY 행 지배 NI(1원)이 아니면 `none:q4-vintage` · 하나라도 못 정하면 `none:q4` · 다 `kr-ni`면 `kr-ni`.
+- 2024 앞 판(주석 태그 없음): 구조 있음이면 W가 없어 `none:no-w` — 그대로 미표시(8b).
+
+### 9e. 저장 — 시험 마이그레이션 `V70_6__kr_common_income.sql`(국내 관문 직전에 main으로)
+
+- `dart_report_xbrl_fact`(corp_code, rcept_no PK · stock_id · bsns_year · reprt_code · reader_version · status OK/NO_XBRL/FAILED · facts jsonb · failure_kind · failure_message · fetched_at) — `sec_filing_class_fact` 꼴 · 평생 한 행 · 판독기 판이 바뀌면 다시 받는다.
+- `financial_common_income`(V70_5)에 열 셋 — `preferred numeric(24,2)` · `income_snapshot numeric(24,2)`(붙일 때 행 `coalesce(net_income_controlling, net_income)`) · `published_snapshot date`. 미국 행은 셋 다 NULL. 국내 갈래 이름 `kr-ni` · `exw` · `cum` · `q4` · `none:*` · `nokey`(값 제약은 `kr-ni`에 값을 허용 — 미국 `ni`와 달리 값을 박는다: 국내 지배 NULL 행의 폴백을 판정 때 정해 두려고).
+- V70_5 · V70_6은 먼저 여는 관문이 함께 옮긴다(reload-gate의 V70_2~4 규칙과 같다).
+
+### 9f. 유도 — `IndicatorReconciler.deriveShareBases`(국내 관문 켬) → `KrCommonIncomeDeriver`
+
+- 대상: 국내 재무 행이 있는 종목 전원(편입 · 과거 편입) · 외부 0콜 · 종목마다 트랜잭션 · 그 종목 국내 행의 `financial_common_income`을 통째 바꾼다.
+- 시각: 평일 14:18(`deriveReconcileInputs`) · 수동 FR · FSR · 공시 소비 뒤(`REDERIVE_SHARE_BASIS_AFTER`) — 미국과 같은 걸이.
+
+### 9g. 읽기 — 국내 관문 켬 · 국내 시장만
+
+- `IndicatorDataReader`: 국내 켬이면 `*_COMMON_KR` 질의 — `ci.report_code = f.report_code AND ci.published_snapshot = f.published_at AND ci.income_snapshot IS NOT DISTINCT FROM coalesce(f.net_income_controlling, f.net_income)` · 안 맞거나 행이 없으면 `nokey`(미표시).
+- `CommonIncomeRead`에 `preferred` · `FinancialFigures.commonNetIncome`은 그대로(보통주 몫) · 새 `dividendIncome()` = 보통주 몫(중단 포함) + `preferred`(미국 행은 `preferred` 0으로 읽는다 — 미국 결정 「분모는 보통주 몫」 그대로) · `DividendPayoutCalculator`가 그것을 읽는다.
+- `FinancialMath`: 국내 켬 행은 `readsCommonIncome` 참 → 창 단위 연결 폴백 안 탐(폴백은 판정 때 행마다 정해졌다 — 9d 1번).
+- `StockReader` · 재무 탭: `withCommon`을 국내 켬에도.
+- 소비자 전수(grep `financial_common_income|CommonIncomeRead|readsCommonIncome|commonNetIncome|commonContinuingIncome|commonIncome` — 22파일): PER · EPS_TTM · PER_MEDIAN_5Y · EPS_CAGR_5Y · EPS_GROWTH_TTM_YOY → `controllingTtm` · PEG · PER_DISCOUNT_5Y · PER_PCTL · PER_SECTOR_* → PER에서 유도 · DIVIDEND_PAYOUT → `dividendIncome` · EXEC_PAY_TO_NET_INCOME → 지배 NI 그대로(안 바뀐다) · `GovernanceFactDeriver` → 국내 안 닿음 · 재무 탭 · 워치리스트(PER 열 — 같은 저장 지표).
+
+### 9h. 검증 · 드라이런 (싼 재료부터)
+
+1. 단위 시험: 판독기(두 형식 픽스처 — 받아 둔 2026 H1 하나 · 2020 사업 하나를 잘라서) · 판정 갈래마다 · Q4 · 누계 · 앵커.
+2. **0콜 스윕** `DartCommonIncomeSweepTest`(`REPLAY_KR_XBRL_DIR` · 행은 운영 SELECT TSV) — 346 단면이 파이썬 `v22.py`의 256 / 55 / 35와 같은지(구현 둘의 맞대기) · 갈래별 수.
+3. 이력 표본(20종목 × 2019~2026 판 · 약 600콜 · 탐색 재료 폴더 · 판정 뒤 지움): 판마다 갈래 · 5년 창 지표가 서는 종목 수.
+4. 관문 꺼짐 = main 바이트(스윕 · 지표 스냅숏).
+5. 작은 DB(의심 종목 10 · 스키마 + 그 행만): FSR 켬 받기 → 유도 → `computeAt` 여러 날(공시일 전후 · 정정 판 경계).
+
+### 9i. 관문 절차(국내 순서 절에 더함)
+
+V70_5 · V70_6 옮김 → FSR 전 창 켬(받기 포함 · `fnlttXbrl` 약 11,000콜 → 이틀에 나뉠 수 있다 — 미해결 0까지) → 재료 미해결 판정(`dart_report_xbrl_fact` FAILED · 옛 판 0) → 유도 → 화해 → `PresetResultSnapshotTest` 전후 → 뒤집은 jar.
+
+### 9j. 재지 않았다
+
+- 이력(2019~2025) 판의 갈래 분포 · 5년 창 커버리지(9h-3이 잰다).
+- 앵커 일치율(행 지배 NI 대 XBRL — 국내 매퍼의 비표준 계정 행이 어긋날 수 있다).
+- `list.json` 판 ↔ 행 `published_at` 짝 실패 수.
+- 다중 우선주 종류(1우 · 2우B)가 회사 확장 구성원으로만 오면 `preferred` NULL — 수.
+- 0.9~1.1 · 3% 문턱의 근처 수.
