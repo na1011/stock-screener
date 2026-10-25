@@ -144,6 +144,9 @@ class DartXbrlFactReaderTest {
     void namespacesAreClassifiedByUriNotByPrefix() {
         assertThat(Source.of("http://xbrl.ifrs.org/taxonomy/2019-03-27/ifrs-full")).isEqualTo(Source.IFRS);
         assertThat(Source.of("https://xbrl.ifrs.org/taxonomy/2023-03-23/ifrs-full")).isEqualTo(Source.IFRS);
+        // 2018년 앞 판(삼성전자 FY2018 사업보고서 20190401004781) — IASB 시절 URI도 IFRS 표준이다.
+        assertThat(Source.of("http://xbrl.iasb.org/taxonomy/2010-04-30/ifrs")).isEqualTo(Source.IFRS);
+        assertThat(Source.of("http://xbrl.iasb.org/info")).isEqualTo(Source.ENTITY);
         assertThat(Source.of("http://dart.fss.or.kr/taxonomy/2019-10-01/ifrs/dart")).isEqualTo(Source.DART);
         assertThat(Source.of("http://dart.fss.or.kr/taxonomy/2026-06-30/entity00164742")).isEqualTo(Source.ENTITY);
         assertThat(Source.of("http://dart.fss.or.kr/taxonomy/2014-03-31/entity00106641")).isEqualTo(Source.ENTITY);

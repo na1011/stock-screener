@@ -48,8 +48,10 @@ ADR-0098 기록). 재료는 정기 공시 판마다의 **DART 재무제표 원�
   `EquityAttributableToOwnersOfParentMember` · `ParentMember`})다 — 검산이 닫혀도 지배 NI로 안 바꾼다. 원장 EPS가 반올림이면 참 몫은
   E × W ± 0.5W 안이고 지배 NI의 오차 상한은 W라 최악 오차가 작은 쪽이다. 직접 태그(`ProfitLossAttributableToOrdinaryEquityHoldersOfParentEntity`)가
   그 안이면 그 값.
-- MUST: 지분상품이 없으면 값은 지배 NI(`kr-ni`)다 — E × W가 서면 |NI − E × W| ≤ 0.5W를 상충 검사로 걸고, W가 없으면 E × 기말 보통주 수
-  증인(±5% · 놓친 지분상품의 큰 배분만 거른다)을 건다. 명부가 그 해 · 앞 해 둘 다 없으면 구조 미정 → 검산 없이는 미표시.
+- MUST: 지분상품이 없고 E × W가 지배 NI와 반올림(0.5W) 안에서 닫히면 값은 지배 NI(`kr-ni` · 더 정밀하다). 닫히지 않으면 지분상품 증거가
+  없어도 E × W다 — 감사받은 보통주 EPS가 보통주 몫을 직접 밝히고, 구조 추론은 EPS × W가 없을 때만 쓰는 간접 증거다(드라이런 이력 표본:
+  NAVER FY2024 지배 NI 1,923.2B 대 E × W 1,912.8B · 0.54% — 숨기면 그 FY가 Q4를 막아 최신 TTM까지 숨는다). W가 없으면 구조로 `kr-ni`이고
+  E × 기말 보통주 수 증인(±5% · 놓친 지분상품의 큰 배분만 거른다)을 건다. 명부가 그 해 · 앞 해 둘 다 없으면 구조 미정 → 미표시.
 - MUST: 「지분상품 있음」 = 명부의 종류 둘 이상 ∨ 그 판 인스턴스의 `dart:` 표준 신종자본증권 개념(이름에 `Hybrid` · 값 ≠ 0 · 비지배 구성원 밖)
   ∨ 표준 우선 개념(`dart:BasicEarningsLossPerSharePreferredStock*` · `dart:IssuedCapitalOfPreferredStock` · `ifrs-full:*OtherThanOrdinaryShares`
   EPS · W). 태그 하나의 부재를 지분상품의 부재로 읽지 않는다(반증 — GS건설은 `HybridBonds` 없이 이자 개념만 있다).

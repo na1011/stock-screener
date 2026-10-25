@@ -50,13 +50,15 @@ class KrCommonIncomeTest {
     }
 
     @Test
-    void noInstrumentsButTheEpsIdentityFailsIsALedgerContradiction() {
-        // EPS 990원 × 1,000만 = 99억 — 지배 NI 100억과 0.5W(5백만) 밖으로 갈린다 · 보통주 밖 지분상품의 증거는 없다.
+    void theLedgerEpsWinsOverTheStructureWhenTheIdentityFails() {
+        // EPS 990원 × 1,000만 = 99억 — 지배 NI 100억과 0.5W(5백만) 밖으로 갈린다 · 지분상품 증거는 없다(NAVER FY2024 꼴).
+        // 원장 EPS가 보통주 몫을 직접 밝히므로 그 값을 따른다 · 신종자본증권 증거가 없어 배당성향 분모는 지배 NI 그대로다.
         Judged j = judge(rowNi(10_000_000_000L), COMMON_ONLY,
                 owners(10_000_000_000L), eps(990), weighted(10_000_000));
 
-        assertThat(j.branch()).isEqualTo("none:eps-closure");
-        assertThat(j.common()).isNull();
+        assertThat(j.branch()).isEqualTo("exw");
+        assertThat(j.common()).isEqualByComparingTo("9900000000");
+        assertThat(j.payoutBase()).isEqualByComparingTo("10000000000");
     }
 
     @Test
@@ -135,6 +137,31 @@ class KrCommonIncomeTest {
 
         Judged off = judge(rowNi(12_000_000_000L), COMMON_ONLY, owners(10_000_000_000L), eps(1000), weighted(10_000_000));
         assertThat(off.branch()).isEqualTo("none:anchor");
+    }
+
+    @Test
+    void aConsolidatedRowWithoutControllingIncomeTakesTheControllingLineFromTheSameFiling() {
+        // 고려아연 꼴 — 행은 연결(행 NI = 연결 순이익)인데 지배 NI가 비었다. 그 판이 지배 귀속을 표준으로 주면 그 값이 지배 NI다.
+        Fact profit = fact(Source.IFRS, "ProfitLoss", Q2, List.of(), 10_300_000_000L);
+        Judged composed = KrCommonIncome.judge(Q2, new RowIncome(null, BigDecimal.valueOf(10_300_000_000L)),
+                List.of(profit, owners(10_000_000_000L), eps(1000), weighted(10_000_000)), COMMON_ONLY, null, NO_ACTIONS);
+        assertThat(composed.branch()).isEqualTo("kr-ni");
+        assertThat(composed.common()).isEqualByComparingTo("10000000000");
+
+        // 지배 귀속이 그 판에 없으면 정하지 않는다 — 연결 순이익(비지배 포함)을 지배로 읽지 않는다.
+        Judged missing = KrCommonIncome.judge(Q2, new RowIncome(null, BigDecimal.valueOf(10_300_000_000L)),
+                List.of(profit, eps(1000), weighted(10_000_000)), COMMON_ONLY, null, NO_ACTIONS);
+        assertThat(missing.branch()).isEqualTo("none:no-controlling");
+    }
+
+    @Test
+    void theOwnersShareMayComeFromTheEquityStatementAxis() {
+        // NAVER 2018 반기 꼴 — 손익계산서에 표준 지배 귀속 줄이 없고 자본변동표의 지배주주 지분 구성원으로만 온다.
+        Fact profit = fact(Source.IFRS, "ProfitLoss", Q2, List.of(), 10_300_000_000L);
+        Fact equity = fact(Source.IFRS, "ProfitLoss", Q2,
+                List.of(new Member("ComponentsOfEquityAxis", "EquityAttributableToOwnersOfParentMember", Source.IFRS)), 10_000_000_000L);
+        Judged j = judge(rowNi(10_000_000_000L), COMMON_ONLY, profit, equity, eps(1000), weighted(10_000_000));
+        assertThat(j.branch()).isEqualTo("kr-ni");
     }
 
     @Test

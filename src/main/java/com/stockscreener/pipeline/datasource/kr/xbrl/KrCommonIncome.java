@@ -142,7 +142,13 @@ public final class KrCommonIncome {
                                Multiple multiple) {
         Anchor anchor = anchor(period, row, facts);
         if (anchor == null) {
-            return Judged.none("anchor", 'N');
+            // 행 지배 NI가 비었는데 연결 순이익이 행 NI와 같다 — 연결로 지은 행인데 지배 몫이 없다(매퍼 · 원장 몫 · reload-gate 국내
+            // 「매퍼가 지배주주 순이익을 못 집는다」). 앵커 실패와 갈라 센다.
+            boolean consolidatedRow = row.netIncomeControlling() == null && row.netIncome() != null
+                    && axisless(facts, PROFIT, period, Set.of(Basis.CONSOLIDATED, Basis.NONE)).stream()
+                    .anyMatch(v -> same(v, row.netIncome()))
+                    && facts.stream().anyMatch(f -> f.basis() == Basis.CONSOLIDATED);
+            return Judged.none(consolidatedRow ? "no-controlling" : "anchor", 'N');
         }
         Material m = new Material(facts, anchor.bases());
         boolean hybrid = m.hybrid();
@@ -164,12 +170,12 @@ public final class KrCommonIncome {
             }
             BigDecimal tolerance = HALF.multiply(weighted);
             BigDecimal product = eps.multiply(weighted);
-            if (!instruments) {
-                if (income.subtract(product).abs().compareTo(tolerance) > 0) {
-                    return Judged.none("eps-closure", anchor.statement());
-                }
+            if (!instruments && income.subtract(product).abs().compareTo(tolerance) <= 0) {
+                // 지분상품이 없고 원장 EPS가 지배 NI와 반올림 안에서 닫힌다 — 배분 0 · 값은 더 정밀한 지배 NI.
                 return decided("kr-ni", income, 'T', anchor.statement(), tolerance, income, "ni", false);
             }
+            // 원장 보통주 EPS가 보통주 몫을 직접 밝힌다 — 지분상품 증거가 없어도 EPS × W가 지배 NI와 갈리면 그 EPS를 따른다(NAVER FY2024
+            // 0.54% · 구조 추론은 EPS × W가 없을 때만 쓰는 간접 증거다 · ADR-0192).
             BigDecimal common = product;
             Set<BigDecimal> direct = m.values(DIRECT, period, COMMON_MEMBERS);
             if (direct.size() == 1 && direct.iterator().next().subtract(product).abs().compareTo(tolerance) <= 0) {
@@ -370,7 +376,7 @@ public final class KrCommonIncome {
         boolean hasConsolidated = facts.stream().anyMatch(f -> f.basis() == Basis.CONSOLIDATED);
         Set<Basis> consolidated = Set.of(Basis.CONSOLIDATED, Basis.NONE);
         if (row.netIncomeControlling() != null) {
-            List<BigDecimal> owners = axisless(facts, OWNERS, period, consolidated);
+            List<BigDecimal> owners = owners(facts, period, consolidated);
             if (owners.stream().anyMatch(v -> same(v, row.netIncomeControlling()))) {
                 return new Anchor(row.netIncomeControlling(), consolidated, 'C');
             }
@@ -383,11 +389,35 @@ public final class KrCommonIncome {
         if (row.netIncome() == null) {
             return null;
         }
+        if (hasConsolidated && axisless(facts, PROFIT, period, consolidated).stream().anyMatch(v -> same(v, row.netIncome()))) {
+            // 연결로 지은 행인데 지배 몫이 비었다 — 그 판이 같은 기간 지배 귀속을 표준으로 주면 그 값이 지배 NI다(원장 조합).
+            Set<BigDecimal> owners = new LinkedHashSet<>();
+            owners(facts, period, consolidated).forEach(v -> owners.add(normalized(v)));
+            return owners.size() == 1 ? new Anchor(owners.iterator().next(), consolidated, 'C') : null;
+        }
         Set<Basis> separate = hasConsolidated ? Set.of(Basis.SEPARATE) : Set.of(Basis.SEPARATE, Basis.NONE);
         if (axisless(facts, PROFIT, period, separate).stream().anyMatch(v -> same(v, row.netIncome()))) {
             return new Anchor(row.netIncome(), separate, 'S');
         }
         return null;
+    }
+
+    /**
+     * 그 기간 연결 지배 귀속 순이익 — 손익계산서의 표준 귀속 줄, 그 줄이 없는 판(NAVER 2018 반기 등)은 자본변동표의 표준 축
+     * ({@code ComponentsOfEquityAxis} × {@code EquityAttributableToOwnersOfParentMember})으로 단 순이익.
+     */
+    private static List<BigDecimal> owners(List<Fact> facts, Period period, Set<Basis> consolidated) {
+        List<BigDecimal> owners = new ArrayList<>(axisless(facts, OWNERS, period, consolidated));
+        for (Fact f : facts) {
+            if (f.source() == Source.IFRS && PROFIT.equals(f.concept()) && consolidated.contains(f.basis())
+                    && period.start().equals(f.start()) && period.end().equals(f.end()) && f.members().size() == 1
+                    && "ComponentsOfEquityAxis".equals(f.members().get(0).axis())
+                    && "EquityAttributableToOwnersOfParentMember".equals(f.members().get(0).member())
+                    && f.members().get(0).source() != Source.ENTITY) {
+                owners.add(f.value());
+            }
+        }
+        return owners;
     }
 
     private static List<BigDecimal> axisless(List<Fact> facts, String concept, Period period, Set<Basis> bases) {

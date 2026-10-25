@@ -19,8 +19,9 @@ import java.util.Set;
 /**
  * DART 재무제표 원본(XBRL 인스턴스 · {@code fnlttXbrl.xml}의 ZIP 안 {@code .xbrl})에서 국내 보통주 몫 판정(ADR-0192)의 재료 사실만 읽는다.
  *
- * <p><b>두 형식을 이름공간으로 읽는다</b>({@code docs/api-spec/dart-xbrl.md}) — 2021-12 앞 판은 인스턴스 이름공간이 기본(접두 없음)이고
- * 2019 분류체계 · 주석 태그가 없다. 그 뒤 판은 {@code xbrli:} 접두다. 둘 다 같은 이름공간 URI라 접두로 가르지 않는다.
+ * <p><b>세 형식을 이름공간으로 읽는다</b>({@code docs/api-spec/dart-xbrl.md}) — 2021-12 앞 판은 인스턴스 이름공간이 기본(접두 없음)이고
+ * 주석 태그가 없다. 그중 2018년 앞 판은 IFRS 이름공간이 IASB 시절 URI({@code http://xbrl.iasb.org/taxonomy/2010-04-30/ifrs})다. 그 뒤 판은
+ * {@code xbrli:} 접두다. 판독은 이름공간 URI로 하고 접두로 가르지 않는다.
  *
  * <p><b>남기는 것</b>: 표준 이름공간({@code ifrs-full} · DART 표준 {@code dart}) 개념 중 {@link #IFRS_MATERIAL} · {@link #DART_MATERIAL} ·
  * 이름에 {@code Hybrid} · {@code PreferredStock}이 든 DART 개념 · 이름에 {@code OtherThanOrdinaryShares}가 든 IFRS 개념. 회사 확장 개념({@code entity…})은 버린다 —
@@ -70,7 +71,9 @@ public final class DartXbrlFactReader {
             if (uri == null) {
                 return ENTITY;
             }
-            if (uri.startsWith("http://xbrl.ifrs.org/") || uri.startsWith("https://xbrl.ifrs.org/")) {
+            // 2018년 앞 판은 IASB 시절 이름공간(http://xbrl.iasb.org/taxonomy/2010-04-30/ifrs · 접두 ifrs)이다 — 같은 IFRS 표준 개념이다.
+            if (uri.startsWith("http://xbrl.ifrs.org/") || uri.startsWith("https://xbrl.ifrs.org/")
+                    || uri.startsWith("http://xbrl.iasb.org/taxonomy/")) {
                 return IFRS;
             }
             // DART 표준 분류체계: http://dart.fss.or.kr/taxonomy/<날짜>/ifrs/dart(-gcd 등 갈래 포함). 회사 확장은 …/entity<번호>.
