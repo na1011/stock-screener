@@ -18,6 +18,7 @@ description: 새 조건·지표·프리셋을 구현할 원자료가 외부 소�
 | KR | 기업 행위 — 분할·병합·증자·합병 | 〃 | 〃 | 〃 | [`dart-corporate-action.md`](../../../docs/api-spec/dart-corporate-action.md) |
 | KR | 거버넌스 여덟 · 감사의견 · 주식 총수 | 〃 | 〃 | 〃 | [`dart-governance.md`](../../../docs/api-spec/dart-governance.md) |
 | KR | 기업개황 — 업종·설립일·결산월 | 〃 | 〃 | 〃 | [`dart-company-profile.md`](../../../docs/api-spec/dart-company-profile.md) |
+| KR | 재무 원본(XBRL) · 종목별 정기 공시 목록 · 주식총수 이력 | 〃 | 〃 | `datasource/kr/xbrl/` | [`dart-xbrl.md`](../../../docs/api-spec/dart-xbrl.md) |
 | US | 자산 마스터 — 유니버스·종목명·거래소 | Alpaca Trading API | `APCA_API_KEY_ID` + `APCA_API_SECRET_KEY`(**키가 둘이다**) | `datasource/us/Alpaca*Adapter` | [`alpaca-universe.md`](../../../docs/api-spec/alpaca-universe.md) |
 | US | 일별 시세 — OHLC·거래량 | Alpaca **Market Data** API(base URL이 다르다) | 위와 같은 키 | `datasource/us/AlpacaPriceAdapter` | [`alpaca-bars.md`](../../../docs/api-spec/alpaca-bars.md) |
 | US | 재무 계정 — XBRL 팩트 | SEC EDGAR | `SEC_EDGAR_USER_AGENT`(**키가 아니라 신원 표시다**) | `datasource/us/SecEdgar*` | [`sec-edgar-financial.md`](../../../docs/api-spec/sec-edgar-financial.md) |
@@ -71,6 +72,7 @@ ZIP 계약)가 각각 유일한 해석 지점이다. **HTTP 200으로 오는 인
 | `fnlttSinglAcnt.json` | **사용 중** | `dart-financial.md` | 종목·연도당 4 |
 | `fnlttSinglAcntAll.json` | **사용 중** | 〃 | 종목·연도당 1(연간 전용), 폴백 시 2 |
 | `fnlttMultiAcnt.json` | **탐침만** (정정 탐지) | 〃 | **100종목 묶음** = 64 |
+| `fnlttXbrl.xml` | **사용 중**(ADR-0192) | `dart-xbrl.md` | **판(접수번호)당 1 · 평생 1** — 국내 재무 행이 있는 종목 전원의 2015~ 판 약 14,000이 처음 한 번 · 그 뒤 새 판만 |
 | `xbrlTaxonomy.json` | 미착수 (계정 사전) | 〃 | `sj_div`당 1 |
 | `irdsSttus.json` | **사용 중** | `dart-corporate-action.md` | 창이 정한다 — 2020~2026 백필이 **종목당 2** |
 | `cmpMgDecsn.json` · `stkExtrDecsn.json` | 미착수 (U-06) | 〃 | 각 종목당 1 = 350 |
