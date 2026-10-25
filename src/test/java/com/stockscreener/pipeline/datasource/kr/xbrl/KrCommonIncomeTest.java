@@ -291,6 +291,38 @@ class KrCommonIncomeTest {
     }
 
     @Test
+    void fourthQuarterFallsBackToTheNineMonthCumulativeWhenAQuarterIsUndecided() {
+        // 1분기 판에 가중평균이 없다(금융지주 2025 꼴) — 3분기 판의 9개월 누계 몫으로 Q4 = FY − 9개월.
+        List<Row> rows = new ArrayList<>();
+        Period q1 = quarter(2025, 1);
+        rows.add(new Row(1, 2025, "Q1", q1.start(), q1.end(), LocalDate.of(2025, 5, 15), BigDecimal.valueOf(1_000_000_000L), null,
+                List.of(fact(Source.IFRS, "ProfitLossAttributableToOwnersOfParent", q1, List.of(), 1_000_000_000L),
+                        fact(Source.IFRS, "BasicEarningsLossPerShare", q1, List.of(ORDINARY), 90),
+                        fact(Source.DART, "HybridBonds", new Period(null, q1.end()), List.of(), 1L))));
+        Period q2 = quarter(2025, 2);
+        rows.add(new Row(2, 2025, "Q2", q2.start(), q2.end(), LocalDate.of(2025, 8, 14), BigDecimal.valueOf(2_000_000_000L), null,
+                exwFacts(q2, 2_000_000_000L, 180)));
+        Period q3 = quarter(2025, 3);
+        Period nine = new Period(q1.start(), q3.end());
+        List<Fact> third = new ArrayList<>(exwFacts(q3, 3_000_000_000L, 270));
+        third.add(fact(Source.IFRS, "BasicEarningsLossPerShare", nine, List.of(ORDINARY), 540));
+        third.add(fact(Source.IFRS, "WeightedAverageShares", nine, List.of(ORDINARY), 10_000_000));
+        rows.add(new Row(3, 2025, "Q3", q3.start(), q3.end(), LocalDate.of(2025, 11, 14), BigDecimal.valueOf(3_000_000_000L), null, third));
+        Period fy = new Period(LocalDate.of(2025, 1, 1), LocalDate.of(2025, 12, 31));
+        rows.add(new Row(5, 2025, "FY", fy.start(), fy.end(), LocalDate.of(2026, 3, 10), BigDecimal.valueOf(10_000_000_000L), null,
+                exwFacts(fy, 10_000_000_000L, 900)));
+        Period q4 = quarter(2025, 4);
+        rows.add(new Row(4, 2025, "Q4", q4.start(), q4.end(), LocalDate.of(2026, 3, 10), BigDecimal.valueOf(4_000_000_000L), null, null));
+
+        Map<Long, Resolved> byId = byId(KrCommonIncomeRows.resolve(rows, Map.of(2024, COMMON_ONLY), NO_ACTIONS));
+
+        assertThat(byId.get(1L).common()).isNull();
+        // FY 90억 − 9개월 540원 × 1,000만 = 54억 → 36억.
+        assertThat(byId.get(4L).branch()).isEqualTo("q4-cum");
+        assertThat(byId.get(4L).common()).isEqualByComparingTo("3600000000");
+    }
+
+    @Test
     void cumulativeShareLessTheEarlierQuarterWhenOnlyTheHalfYearWeightedAverageIsGiven() {
         Period q1 = quarter(2026, 1);
         Row first = new Row(1, 2026, "Q1", q1.start(), q1.end(), LocalDate.of(2026, 5, 15), BigDecimal.valueOf(1_000_000_000L), null,

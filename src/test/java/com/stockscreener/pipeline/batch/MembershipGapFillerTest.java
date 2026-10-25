@@ -71,7 +71,8 @@ class MembershipGapFillerTest {
         when(batchExecutionReader.liveJobNames()).thenReturn(List.of());
         filler = new MembershipGapFiller(stockRegistrar, initialLoadJob, companyProfileJob,
                 fullStatementRefillJob, governanceLoadJob, governanceDeriveJob,
-                alerter, alertPort, batchExecutionReader);
+                alerter, alertPort, batchExecutionReader,
+                org.mockito.Mockito.mock(KrXbrlCollectJob.class), null, false);
     }
 
     @Test

@@ -232,7 +232,19 @@ public record FinancialFigures(
         return discontinuedIncome != null && discontinuedIncome.signum() == 0 ? common.value() : null;
     }
 
-    /** 이 행이 보통주 귀속 규칙으로 읽혔는가(미국 관문 켬). */
+    /**
+     * <b>배당성향의 분모</b> — 국내 관문 켬 행은 판정이 정한 분모(사용자 결정 「지배 NI − 신종자본증권 몫」 · ADR-0192 · 못 정했으면
+     * {@code null}), 미국 관문 켬 행은 {@link #commonNetIncome}(보통주 몫 · 중단 포함). 이 규칙으로 안 읽은 행은 {@code null}이고 호출부가
+     * 지배 NI 갈래로 간다.
+     */
+    public BigDecimal dividendIncome() {
+        if (common == null) {
+            return null;
+        }
+        return common.payoutDeclared() ? common.payoutBase() : commonNetIncome();
+    }
+
+    /** 이 행이 보통주 귀속 규칙으로 읽혔는가(미국 · 국내 관문 켬). */
     public boolean readsCommonIncome() {
         return common != null;
     }

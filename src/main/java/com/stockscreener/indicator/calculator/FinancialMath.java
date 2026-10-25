@@ -429,12 +429,14 @@ final class FinancialMath {
 
     /**
      * 연간 한 행의 <b>보통주 귀속 순이익(중단 포함)</b> — {@code DIVIDEND_PAYOUT}의 분모. 미국 배당 총액이 보통주 DPS × 보통주 수라
-     * 분모도 보통주 몫이어야 짝이다(탐색 {@code PERSHARE-NUM-PLAN-1024.md}). 이 규칙으로 안 읽은 행(관문 꺼짐 · 국내 — 국내 총액은 우선주
-     * 배당을 포함한다)은 {@link #controllingNetIncomeOf} 그대로다.
+     * 분모도 보통주 몫이어야 짝이다(탐색 {@code PERSHARE-NUM-PLAN-1024.md}). 국내 관문 켬 행은 총액이 우선주 배당을 포함하므로 분모가
+     * 「지배 NI − 신종자본증권 몫」이다(사용자 결정 2026-10-25 · ADR-0192 — 판정이 정한 값 · {@link FinancialFigures#dividendIncome}).
+     * 이 규칙으로 안 읽은 행(관문 꺼짐)은 {@link #controllingNetIncomeOf} 그대로다.
      */
     static BigDecimal commonNetIncomeOf(FinancialFigures annual) {
         if (annual != null && annual.readsCommonIncome()) {
-            return annual.commonNetIncome();
+            // 국내 켬 행은 판정이 정한 분모(「지배 NI − 신종자본증권 몫」 · ADR-0192) · 미국 켬 행은 보통주 몫.
+            return annual.dividendIncome();
         }
         return controllingNetIncomeOf(annual);
     }

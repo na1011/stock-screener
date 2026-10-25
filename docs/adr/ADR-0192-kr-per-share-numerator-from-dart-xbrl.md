@@ -7,7 +7,7 @@ applies_to:
   - "src/main/java/**/datasource/kr/xbrl/**"
   - "src/main/java/**/batch/KrXbrlCollectJob*"
   - "src/main/java/**/collector/KrCommonIncome*"
-  - "src/main/resources/db/migration/V69_5__dart_xbrl_material.sql"
+  - "src/main/resources/db/migration/V69_5__kr_xbrl_material.sql"
   - "src/test/resources/db/testmigration/V70_6__kr_common_income.sql"
 ---
 
@@ -30,9 +30,9 @@ ADR-0098 기록). 재료는 정기 공시 판마다의 **DART 재무제표 원�
 **재료**
 - MUST: XBRL은 접수번호(판)마다 받는다 — 판마다 인스턴스가 다르다(`dart-xbrl.md` · 고려아연 FY2024 세 판). 재무 행의 판은
   `published_at`이 종목별 정기 공시 목록(`list.json` corp_code)의 접수번호 앞 8자리 또는 `rcept_dt`와 같은 접수번호다.
-- MUST: 받은 인스턴스는 gzip으로 디스크 캐시(`stockscreener.dart.xbrl-cache-dir`)에 두고, 판독기를 지난 재료 사실만 DB(`dart_report_xbrl`)에
+- MUST: 받은 인스턴스는 gzip으로 디스크 캐시(`stockscreener.dart.xbrl-cache-dir`)에 두고, 판독기를 지난 재료 사실만 DB(`kr_report_xbrl`)에
   둔다 — 판독기 판이 바뀌면 캐시에서 0콜로 다시 판독한다. 캐시는 다시 받을 수 있는 원본이라 되돌리기 재료가 아니다.
-- MUST: 주식총수 명부는 재무 행이 있는 사업연도와 그 앞 해의 11011을 받아 `dart_share_register`에 둔다 — `governance_report_row`에
+- MUST: 주식총수 명부는 재무 행이 있는 사업연도와 그 앞 해의 11011을 받아 `kr_share_register`에 둔다 — `governance_report_row`에
   쓰지 않는다(거버넌스 유도를 움직이면 관문 밖에서 값이 바뀐다).
 - MUST NOT: 명부의 구분 라벨로 보통주를 가르지 않는다 — 회사마다 자유 문구다(`dart-xbrl.md`). 「합계 · 비고를 뺀 발행수 > 0 종류 행이
   둘 이상」이면 보통주 밖 주식이 있다 · 보통주 수는 가장 큰 종류 행이다(상법 제344조의3 — 의결권 없는 · 제한 주식은 발행 총수의 1/4 이하).
@@ -82,4 +82,18 @@ ADR-0098 기록). 재료는 정기 공시 판마다의 **DART 재무제표 원�
 
 ## 결과
 
-(구현 · 드라이런 뒤에 수로 채운다.)
+**드라이런 1 — 0콜 단면**(2026-10-25 · `DartCommonIncomeSweepTest` · 받아 둔 2026 H1 XBRL 346판 · 재무 행 · 2025 명부 · 기업행위는 운영 SELECT):
+배분 0(`kr-ni`) 243 · E × W 63 · 못 정함 40(그 판 3개월 W 없음 25 — 누계 갈래는 앞 분기 판이 재료에 없어 못 섬 · 증인 4 · 구형우선주 섞은 W 3 ·
+EPS 없음 3 · W 단위 2 · 같은 기간 E 상충 2 · 앵커 1) · 배당성향 분모가 서는 판 305. 판정 규칙을 그대로 옮긴 탐색의 파이썬 기준 구현과 갈래가
+346판 전부 같았다(그때 기준 구현의 별도 기저 재료 결함 하나를 찾아 고쳤다 · 계산 차이는 직접 태그로 다듬은 값과 계속영업 몫뿐).
+
+**드라이런 2 — 이력 표본**(20종목 · 2018~2026 · 판 560 · DART 762콜 · 우선주 · 신종자본증권 발행사 16과 대조군 4):
+- 판독기 결함 하나 · 앵커 갈래 둘을 찾아 고쳤다 — 2018년 앞 판의 IFRS 이름공간이 IASB 시절 URI라 표준 개념을 전부 버렸다(앵커 실패 122 → 53) ·
+  지배 NI가 빈 연결 행은 같은 판의 표준 지배 귀속으로 · 손익계산서에 귀속 줄이 없는 판은 자본변동표 표준 축으로(53 → 3 · 지배 몫 없음 16).
+- 지분상품 증거가 없는데 E × W가 지배 NI와 갈리는 판(NAVER FY2024 0.54%)은 숨기지 않고 E × W를 따른다(§규칙).
+- Q4는 1분기 판에 가중평균이 없으면 3분기 판의 9개월 누계로 짓는다(`q4-cum` · 금융지주 다섯 · 두산 2025).
+- 최신 TTM 창(2025 Q3~2026 Q2)이 서는 종목 15/20 · 1년 전 12 · 3년 전 2/14 · 5년 전 1/14 — 지분상품 발행사의 2024 앞 판은 표준 가중평균 태그가
+  없거나(no-w 133) EPS가 회사 확장 개념이다(no-eps 129). 원장이 표준 재료로 주지 않는 진짜 한계이고 그 창은 미표시다(5년 창 지표 —
+  `EPS_CAGR_5Y` · `PER_MEDIAN_5Y` · `PER_DISCOUNT_5Y`). 대조군 SK하이닉스는 2018~2026 전 분기가 선다.
+
+**관문 꺼짐**: 판정 · 읽기 · 꼬리 유도는 `gate.kr` 뒤 · 재료 받기는 값을 안 바꾼다 · 전체 빌드 초록(2026-10-25).

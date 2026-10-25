@@ -138,7 +138,7 @@ public final class KrCommonIncomeRows {
         for (Row r : quarters) {
             Resolved q = out.get(r.id());
             if (q == null || q.common() == null || q.basis() != annual.basis() || q.statement() != annual.statement()) {
-                return new Resolved(q4, "none:q4", null, 'T', annual.statement(), null);
+                return nineMonths(q4, annual, quarters);
             }
             common = common.subtract(q.common());
             allNi &= "kr-ni".equals(q.branch());
@@ -148,6 +148,23 @@ public final class KrCommonIncomeRows {
             return new Resolved(q4, "kr-ni", q4.income().snapshot(), 'T', annual.statement(), null);
         }
         return new Resolved(q4, "q4", common, annual.basis(), annual.statement(), null);
+    }
+
+    /**
+     * 분기 하나가 안 정해졌을 때 — 3분기 판이 9개월 누계 EPS × 누계 W를 주면 Q4 = FY 몫 − 9개월 누계 몫이다(국내 어댑터의 Q4 = FY − 3분기
+     * 누계와 같은 꼴 · 1분기 판에 가중평균 태그가 없는 금융지주 2025가 그 자리다). 연간 몫이 중단 포함 합(T)이고 3분기 판이 정해졌을 때만.
+     */
+    private static Resolved nineMonths(Row q4, Resolved annual, List<Row> quarters) {
+        Row first = quarters.get(0);
+        Row third = quarters.get(2);
+        if (annual.basis() != 'T' || third.facts() == null) {
+            return new Resolved(q4, "none:q4", null, 'T', annual.statement(), null);
+        }
+        BigDecimal nine = KrCommonIncome.cumulative(new Period(first.start(), third.end()), third.period(), third.income(), third.facts());
+        if (nine == null) {
+            return new Resolved(q4, "none:q4", null, 'T', annual.statement(), null);
+        }
+        return new Resolved(q4, "q4-cum", annual.common().subtract(nine), 'T', annual.statement(), null);
     }
 
     /** 그 사업연도 · 기간 행 중 {@code published} ≤ 기준인 마지막 판. */

@@ -315,6 +315,12 @@ final class FinancialFiguresFixture {
         return this;
     }
 
+    /** 국내 관문 켬 행(ADR-0192) — 판정이 정한 배당성향 분모를 함께 싣는다. */
+    FinancialFiguresFixture krCommon(BigDecimal value, String basis, String branch, BigDecimal payoutBase) {
+        this.common = new com.stockscreener.indicator.CommonIncomeRead(value, basis, branch, payoutBase, true);
+        return this;
+    }
+
     FinancialFigures build() {
         return new FinancialFigures(
                 fiscalYear, fiscalPeriod, periodStart, periodEnd, publishedAt, currencyCode,

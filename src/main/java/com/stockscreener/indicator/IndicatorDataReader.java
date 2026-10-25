@@ -127,6 +127,22 @@ public class IndicatorDataReader {
             """;
 
     /**
+     * 국내 보통주 귀속 이익(ADR-0192). <b>국내 관문이 켜졌을 때 국내 행만 읽는다.</b> 국내 {@code report_code}(11011 등)는 판을 안 가르므로
+     * 붙일 때의 행 스냅숏({@code published_at} · {@code coalesce(net_income_controlling, net_income)})이 지금 행과 같을 때만 쓴다 — 판이
+     * 바뀌었는데 유도가 아직 안 돈 행은 「붙은 것 없음」(그 창 미표시)이다. 배당성향 분모({@code payout_base})를 함께 싣는다.
+     */
+    private static final String COMMON_KR_MATCH = """
+            ci.financial_statement_id = financial_statement.id AND ci.published_snapshot = financial_statement.published_at
+                 AND ci.income_snapshot IS NOT DISTINCT FROM coalesce(financial_statement.net_income_controlling, financial_statement.net_income)""";
+
+    private static final String COMMON_COLUMNS_KR = """
+            , (SELECT ci.common FROM financial_common_income ci WHERE %1$s) AS common_income
+            , (SELECT ci.basis FROM financial_common_income ci WHERE %1$s) AS common_basis
+            , (SELECT ci.branch FROM financial_common_income ci WHERE %1$s) AS common_branch
+            , (SELECT ci.payout_base FROM financial_common_income ci WHERE %1$s) AS common_payout
+            """.formatted(COMMON_KR_MATCH);
+
+    /**
      * 재무를 어느 시점의 눈으로 볼 것인가(ADR-0071).
      *
      * <p>MUST: 호출부가 <b>반드시 고른다.</b> 기본값을 주거나 시점용 메서드를 옆에 따로 두면
@@ -214,6 +230,9 @@ public class IndicatorDataReader {
     private static final String SELECT_FINANCIALS_LATEST_COMMON =
             SELECT_FINANCIALS_LATEST_TEMPLATE.formatted(FINANCIAL_COLUMNS + DISCONTINUED_COLUMNS + COMMON_COLUMNS);
 
+    private static final String SELECT_FINANCIALS_LATEST_COMMON_KR =
+            SELECT_FINANCIALS_LATEST_TEMPLATE.formatted(FINANCIAL_COLUMNS + DISCONTINUED_COLUMNS + COMMON_COLUMNS_KR);
+
     /**
      * 그 시점까지 공시된 <b>판 이력 전부</b>를 읽는다({@link FinancialVisibility#KNOWN_ON}).
      *
@@ -253,6 +272,9 @@ public class IndicatorDataReader {
 
     private static final String SELECT_FINANCIALS_KNOWN_ON_COMMON =
             SELECT_FINANCIALS_KNOWN_ON_TEMPLATE.formatted(FINANCIAL_COLUMNS + DISCONTINUED_COLUMNS + COMMON_COLUMNS);
+
+    private static final String SELECT_FINANCIALS_KNOWN_ON_COMMON_KR =
+            SELECT_FINANCIALS_KNOWN_ON_TEMPLATE.formatted(FINANCIAL_COLUMNS + DISCONTINUED_COLUMNS + COMMON_COLUMNS_KR);
 
     private static final RowMapper<PriceBar> PRICE_BAR_MAPPER = (rs, rowNum) -> new PriceBar(
             rs.getObject("trade_date", LocalDate.class),
@@ -532,17 +554,21 @@ public class IndicatorDataReader {
         // 그 행 시장의 관문만 본다 — 한쪽 관문을 연 상태에서 다른 시장 행이 이 축을 타면 그 시장 값이 관문 없이 바뀐다.
         boolean discontinued = market != null && (us ? usGate : krGate);
         ShareClassLine line = usGate && us ? shareClasses.line(stockId) : null;
-        RowMapper<FinancialFigures> mapper = (rs, rowNum) -> mapFigures(rs, line, discontinued);
+        // 국내 보통주 몫(ADR-0192) — 국내 관문이 켜졌고 그 행이 국내일 때만(미국 행은 위 클래스 축 갈래).
+        boolean krCommon = krGate && market != null && !us;
+        RowMapper<FinancialFigures> mapper = (rs, rowNum) -> mapFigures(rs, line, discontinued, krCommon);
         return switch (visibility) {
             case LATEST -> jdbcTemplate.query(
-                    (line != null ? SELECT_FINANCIALS_LATEST_COMMON
+                    (krCommon ? SELECT_FINANCIALS_LATEST_COMMON_KR
+                            : line != null ? SELECT_FINANCIALS_LATEST_COMMON
                             : discontinued ? SELECT_FINANCIALS_LATEST_DISCONTINUED : SELECT_FINANCIALS_LATEST)
                             .formatted(periodOperator),
                     mapper,
                     stockId, asOf, limit);
             // MUST: limit을 넘기지 않는다 — 이 갈래는 판 이력을 통째로 준다(위 javadoc).
             case KNOWN_ON -> jdbcTemplate.query(
-                    (line != null ? SELECT_FINANCIALS_KNOWN_ON_COMMON
+                    (krCommon ? SELECT_FINANCIALS_KNOWN_ON_COMMON_KR
+                            : line != null ? SELECT_FINANCIALS_KNOWN_ON_COMMON
                             : discontinued ? SELECT_FINANCIALS_KNOWN_ON_DISCONTINUED : SELECT_FINANCIALS_KNOWN_ON)
                             .formatted(periodOperator),
                     mapper,
@@ -560,8 +586,9 @@ public class IndicatorDataReader {
      * @param line {@code null}이면 행이 실은 주식수 그대로(관문 꺼짐 · 국내). 있으면 클래스 축 판정을 입힌다 — 주식수는 그 판정이
      *             정한 값, 숨김이면 상태로 막고, 분모 n을 싣는다.
      * @param discontinued 그 행 시장의 관문이 켜졌는가 — 켜졌을 때만 질의가 중단영업 두 컬럼을 싣는다
+     * @param krCommon 국내 관문 켬 · 국내 행 — 질의가 국내 보통주 몫 네 열을 싣는다(ADR-0192)
      */
-    private static FinancialFigures mapFigures(ResultSet rs, ShareClassLine line, boolean discontinued)
+    private static FinancialFigures mapFigures(ResultSet rs, ShareClassLine line, boolean discontinued, boolean krCommon)
             throws SQLException {
         BigDecimal shares = rs.getBigDecimal("shares_outstanding");
         ShareClassLine.State state = null;
@@ -615,7 +642,9 @@ public class IndicatorDataReader {
                 discontinued ? rs.getBigDecimal("discontinued_income") : null,
                 discontinued ? rs.getBigDecimal("discontinued_income_controlling") : null,
                 discontinued ? rs.getBigDecimal("discontinued_rule") : null,
-                line == null ? null : new CommonIncomeRead(rs.getBigDecimal("common_income"), rs.getString("common_basis"),
+                krCommon ? new CommonIncomeRead(rs.getBigDecimal("common_income"), rs.getString("common_basis"),
+                        rs.getString("common_branch"), rs.getBigDecimal("common_payout"), true)
+                        : line == null ? null : new CommonIncomeRead(rs.getBigDecimal("common_income"), rs.getString("common_basis"),
                         rs.getString("common_branch")));
     }
 }

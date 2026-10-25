@@ -97,6 +97,38 @@ class CommonIncomePerShareTest {
         assertThat(FinancialMath.commonNetIncomeOf(unread)).as("유도가 안 돈 행(관문 켬) — 값 없음").isNull();
     }
 
+    @Test
+    @DisplayName("국내 켬 — 배분 0(kr-ni)도 값을 싣고, 지배 NI가 빈 행에서도 판정이 정한 값으로 낸다(창 단위 연결 폴백을 안 탄다)")
+    void krNoAllocationCarriesItsValue() {
+        // 지배 NI가 빈 별도 기저 행 — 판정이 행 NI(별도 = 지배)를 값으로 박았다 · 250 × 4 = 1,000 → EPS 10.
+        List<FinancialFigures> quarters = new ArrayList<>();
+        LocalDate end = LocalDate.of(2025, 12, 31);
+        for (int i = 0; i < 4; i++) {
+            quarters.add(FinancialFiguresFixture.quarter(end.minusMonths(3L * i)).netIncome(new BigDecimal("250"))
+                    .netIncomeControlling(null).sharesOutstanding(BigDecimal.valueOf(100))
+                    .krCommon(new BigDecimal("250"), "T", "kr-ni", new BigDecimal("250")).build());
+        }
+        assertThat(epsTtm.calculate(context(quarters)).get(0).value()).isEqualByComparingTo("10");
+
+        // 한 분기라도 붙은 것이 없으면(스냅숏이 갈렸거나 유도 전) 그 창은 미표시 — 연결 NI로 안 내려간다.
+        quarters.set(1, FinancialFiguresFixture.from(quarters.get(1)).krCommon(null, null, null, null).build());
+        assertThat(epsTtm.calculate(context(quarters))).isEmpty();
+    }
+
+    @Test
+    @DisplayName("국내 켬 — 배당성향 분모는 판정이 정한 값(「지배 NI − 신종자본증권 몫」) · 못 정했으면 미표시 · 미국은 보통주 몫 그대로")
+    void krPayoutBaseIsTheJudgedDenominator() {
+        FinancialFigures kr = FinancialFiguresFixture.annual(LocalDate.of(2025, 12, 31)).netIncomeControlling(new BigDecimal("800"))
+                .krCommon(new BigDecimal("600"), "T", "exw", new BigDecimal("700")).build();
+        assertThat(FinancialMath.commonNetIncomeOf(kr)).isEqualByComparingTo("700");
+
+        FinancialFigures undecided = FinancialFiguresFixture.from(kr).krCommon(new BigDecimal("600"), "T", "exw", null).build();
+        assertThat(FinancialMath.commonNetIncomeOf(undecided)).isNull();
+
+        FinancialFigures us = FinancialFiguresFixture.from(kr).common(new BigDecimal("600"), "T", "decl").build();
+        assertThat(FinancialMath.commonNetIncomeOf(us)).isEqualByComparingTo("600");
+    }
+
     private static IndicatorContext context(List<FinancialFigures> quarters) {
         BigDecimal close = new BigDecimal("150");
         return new IndicatorContext(1L, List.of(new PriceBar(LocalDate.of(2026, 3, 2), close, close, close, close, close, 1000L,

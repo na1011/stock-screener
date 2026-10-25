@@ -4,10 +4,12 @@ import com.stockscreener.indicator.IndicatorCalendar;
 import com.stockscreener.pipeline.datasource.CollectedMarkets;
 import com.stockscreener.pipeline.collector.ShareBasisDeriver;
 import com.stockscreener.pipeline.collector.ShareClassDeriver;
+import com.stockscreener.pipeline.datasource.kr.xbrl.KrCommonIncomeDeriver;
 import com.stockscreener.pipeline.datasource.us.UsMarket;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -44,19 +46,34 @@ public class IndicatorReconciler {
     private final ShareClassDeriver shareClassDeriver;
     /** 미국 관문 설정 — 켜졌을 때만 클래스 축 판정을 기저 판정 앞에 돈다. */
     private final boolean usGate;
+    private final KrCommonIncomeDeriver krCommonIncomeDeriver;
+    /** 국내 관문 설정 — 켜졌을 때만 국내 재무 행에 보통주 몫을 붙인다(ADR-0192). */
+    private final boolean krGate;
 
+    @Autowired
     public IndicatorReconciler(IndicatorBackfillJob indicatorBackfillJob,
                                ShareBasisDeriver shareBasisDeriver,
                                GovernanceDeriveJob governanceDeriveJob,
                                IndicatorCalendar indicatorCalendar,
                                ShareClassDeriver shareClassDeriver,
-                               @Value("${stockscreener.gate.us}") boolean usGate) {
+                               @Value("${stockscreener.gate.us}") boolean usGate,
+                               KrCommonIncomeDeriver krCommonIncomeDeriver,
+                               @Value("${stockscreener.gate.kr}") boolean krGate) {
         this.indicatorBackfillJob = indicatorBackfillJob;
         this.shareBasisDeriver = shareBasisDeriver;
         this.governanceDeriveJob = governanceDeriveJob;
         this.indicatorCalendar = indicatorCalendar;
         this.shareClassDeriver = shareClassDeriver;
         this.usGate = usGate;
+        this.krCommonIncomeDeriver = krCommonIncomeDeriver;
+        this.krGate = krGate;
+    }
+
+    /** 국내 관문 밖 시험용 — 국내 유도 없이. */
+    public IndicatorReconciler(IndicatorBackfillJob indicatorBackfillJob, ShareBasisDeriver shareBasisDeriver,
+                               GovernanceDeriveJob governanceDeriveJob, IndicatorCalendar indicatorCalendar,
+                               ShareClassDeriver shareClassDeriver, boolean usGate) {
+        this(indicatorBackfillJob, shareBasisDeriver, governanceDeriveJob, indicatorCalendar, shareClassDeriver, usGate, null, false);
     }
 
     /**
@@ -100,6 +117,10 @@ public class IndicatorReconciler {
             shareClassDeriver.derive(UsMarket.CODE);
         }
         shareBasisDeriver.derive(UsMarket.CODE);
+        if (krGate) {
+            // 국내 보통주 몫(ADR-0192) — 재료 표 · 재무 행 · 기업행위 원장만 읽는다(외부 0콜). 거버넌스 유도 앞이라 그날의 판이 그날 붙는다.
+            krCommonIncomeDeriver.derive();
+        }
     }
 
     /**

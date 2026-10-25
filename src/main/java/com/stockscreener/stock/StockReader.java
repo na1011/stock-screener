@@ -181,12 +181,18 @@ public class StockReader {
             discontinued = !market.isEmpty() && (us ? usGate : krGate);
         }
         boolean withDiscontinued = discontinued;
-        // 미국 관문 켬 — 보통주 귀속 순이익(탐색 PERSHARE-NUM-PLAN-1024.md)을 함께 읽는다. 원장이 값으로 정한 중단 포함 몫만(배분 0이면
+        // 관문 켬 — 보통주 귀속 순이익(미국 ADR-0191 · 국내 ADR-0192)을 함께 읽는다. 원장이 값으로 정한 중단 포함 몫만(배분 0이면
         // 순이익과 같아 안 그린다 · 계속영업 몫이면 순이익과 기저가 달라 안 그린다).
-        boolean withCommon = withDiscontinued && us;
+        // 국내 관문 켬(ADR-0192)도 같다 — 낡음 열쇠는 지표와 같은 행 스냅숏이고(국내 report_code는 판을 안 가른다), 배분 0(kr-ni)은
+        // 값이 순이익과 같아 안 그린다.
+        boolean withCommon = withDiscontinued;
+        String commonMatch = us
+                ? "ci.report_code = financial_statement.report_code"
+                : "ci.published_snapshot = financial_statement.published_at AND ci.income_snapshot IS NOT DISTINCT FROM "
+                        + "coalesce(financial_statement.net_income_controlling, financial_statement.net_income) AND ci.branch <> 'kr-ni'";
         String extra = (withDiscontinued ? ", discontinued_income, discontinued_rule" : "")
                 + (withCommon ? ", (SELECT ci.common FROM financial_common_income ci WHERE ci.financial_statement_id = "
-                        + "financial_statement.id AND ci.report_code = financial_statement.report_code AND ci.basis = 'T') AS common_income"
+                        + "financial_statement.id AND " + commonMatch + " AND ci.basis = 'T') AS common_income"
                         : "");
         return jdbcTemplate.query("""
                 SELECT fiscal_year, fiscal_period, published_at, revision_no, report_code,
