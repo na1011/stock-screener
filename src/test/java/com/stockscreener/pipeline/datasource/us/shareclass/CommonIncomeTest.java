@@ -119,6 +119,43 @@ class CommonIncomeTest {
     }
 
     @Test
+    void ledgerEpsInTheWrongUnitIsNotACommonShare() {
+        // HAL 2022 Q1 — EPS를 290,000(= 0.29 × 10^6)으로 실었다 · NI 263M · W 899M(표지로 확인). 옛 판은 EPS × W = 2.6 × 10^14를 냈다.
+        Ledger l = quarter(263_000_000, 290_000, 899_000_000);
+        assertThat(judge(l).branch()).as("고쳐 쓰지 않고 못 정함").isEqualTo("none");
+    }
+
+    @Test
+    void aTinyIncomeDoesNotMakeAUnitFingerprint() {
+        // CLSK 2012 꼴 — NI −9,744가 반 센트 × W(약 18.5만)보다 작아 EPS를 10^-2로 줄이면 무엇이든 닫힌다. 지문이 아니라 값 갈래다.
+        Ledger l = quarter(-9_744, -0.01, 37_080_000);
+        assertThat(judge(l).branch()).isEqualTo("eps");
+    }
+
+    @Test
+    void declaredCommonIncomeInTheWrongUnitIsNotTaken() {
+        // CELH 2021 Q1 — 선언 NIC 585 · 지배 NI 585,000(천 단위로 실은 NIC) · EPS 없음.
+        IssuerFacts.Key k = new IssuerFacts.Key(A, Q);
+        Ledger wrong = new Ledger().filing(A, "10-Q", LocalDate.of(2026, 7, 30), 100_000_000d);
+        wrong.nic.put(k, 585d);
+        wrong.netIncome.put(k, 585_000d);
+        assertThat(judge(wrong).branch()).isEqualTo("none");
+
+        // GSAT 2023 Q2 꼴 — 우선주 배당이 NI보다 커 선언 NIC가 NI와 크게 갈려도 거듭제곱으로 안 맞으면 원장 값이다.
+        Ledger preferred = new Ledger().filing(A, "10-Q", LocalDate.of(2026, 7, 30), 100_000_000d);
+        preferred.nic.put(k, -2_635_000d);
+        preferred.netIncome.put(k, 9_000d);
+        assertThat(judge(preferred).branch()).isEqualTo("decl");
+    }
+
+    @Test
+    void aClassSumOrValueEchoingTheIncomeByAPowerOfTenIsTheUnitFingerprint() {
+        // HESM 2023 연간 — 클래스 몫의 합 118.582 · 지배 NI 118,600,000(백만 단위). ALB 2025 Q1 — 보통주 몫 −340,000 · NI 41,348,000(우선주).
+        assertThat(CommonIncome.scaledEcho(118.582, 118_600_000)).isTrue();
+        assertThat(CommonIncome.scaledEcho(-340_000, 41_348_000)).isFalse();
+    }
+
+    @Test
     void anUnverifiedDenominatorOnlyWitnesses() {
         // 가중평균이 표지와 10배 넘게 갈린다(천 단위 오태깅) — 값으로 안 쓴다.
         Ledger l = quarter(480_000_000, 9.80, 48_000);

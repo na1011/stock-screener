@@ -117,6 +117,24 @@ class CurrentPathDenominatorTest {
     }
 
     @Test
+    @DisplayName("기준 표지가 없는 공시에서 EPS × n이 분자 × 10^k로만 닫히면 n은 값 없음이다 — 고쳐 쓰지 않는다(NVMI 2026 20-F 30,108 · 천 단위)")
+    void uncoveredWrongUnitIsEmptied() {
+        assertThat(at(uncovered(30_108d), "2026-02-17").denominator()).as("옛 판은 30,108을 냈다").isNull();
+        assertThat(at(uncovered(30_108_000d), "2026-02-17").denominator()).as("단위가 맞으면 그대로").isEqualTo(30_108_000d);
+    }
+
+    /** 표지 없는 20-F 하나(인스턴스에도 축 없는 표지가 없다 · 앵커 후보라 「cur」 갈래) — NI 259,223,000 · EPS 8.61. */
+    private static List<IssuerTimeline.Verdict> uncovered(double weighted) {
+        String a = "0001178913-26-000504";
+        IssuerFacts.Key k = new IssuerFacts.Key(a, new ClassFacts.Period(LocalDate.of(2025, 1, 1), LocalDate.of(2025, 12, 31)));
+        IssuerFacts cf = new IssuerFacts(Map.of(a, new IssuerFacts.Filing("20-F", LocalDate.of(2026, 2, 17))), Map.of(k, weighted),
+                Map.of(k, 8.61), Map.of(), Map.of(k, 259_223_000d), Map.of());
+        IssuerTimeline.Instances noCover = accession -> new ClassFacts(Map.of(), Map.of(), "20-F");
+        return IssuerTimeline.standard().judge("NVMI", cf, Set.of(a), noCover, List.of(), LocalDate.of(2015, 1, 1),
+                IssuerFacts.INSTANCE_FROM);
+    }
+
+    @Test
     @DisplayName("앞 태그 값이 단위 오태깅이면 같은 기간 다음 태그(SharesIssuedBasic) 값이다(AMCR 2026 Q2 · 1:5 병합 뒤)")
     void laterTagReplacesAMistaggedValue() throws IOException {
         assertThat(at(judge(Case.of("amcr").split("2026-01-15", 0.2)), "2026-02-04").denominator()).isEqualTo(463_800_000d);

@@ -575,15 +575,18 @@ public final class IssuerTimeline {
             if (ref == null) {
                 // 표지가 클래스에 없는 보충 공시(companyfacts가 빠뜨린 정기 공시 · 「cur」 갈래) — 받은 인스턴스의 축 없는 표지로 선다.
                 if (!anchors.contains(a) || cf.coverShares().containsKey(a)) {
+                    uncoveredChecked(cf, w, a);
                     continue;
                 }
                 facts = load(instances, a);
                 if (facts == null || facts.isClassAnchor()) {
+                    // 클래스 축 앵커는 자기 판정(폐합)이 n을 정한다 — 여기서 비우면 Q4 입력의 원장 어긋남이 「안줌」으로 바뀐다(ECHO).
                     continue;
                 }
                 String axisless = facts.coverOf(ClassFactReader.SHARES_OUTSTANDING).get(AXISLESS);
                 ref = axisless == null ? null : Double.parseDouble(axisless);
                 if (ref == null || ref <= 0) {
+                    uncoveredChecked(cf, w, a);
                     continue;
                 }
                 refs.put(a, ref);
@@ -702,6 +705,39 @@ public final class IssuerTimeline {
         }
         // MUST NOT: 열쇠를 지우지 않는다 — 0은 지금 경로 분모가 「값 없음」으로, Q4 입력이 「없음」으로 읽는 값이다.
         return 0.0;
+    }
+
+    /**
+     * 기준 표지가 없는 공시의 값 확인 — 자릿수를 물을 표지가 없어도, EPS × n이 분자 × 10^k(k = ±2 · ±3 · ±6)로만 닫히면 n이나 EPS 중
+     * 하나를 단위를 틀리게 실은 것이다(NVMI 2026 20-F 30,108 — 천 단위). 어느 쪽인지 원장이 가려 주지 않으니 그 n은 0(값 없음)이다 —
+     * 고쳐 쓰지 않는다(2026-10-25 사용자 기준). 폐합이 참 · 불명 · 거듭제곱이 아닌 어긋남(배분)이면 둔다.
+     */
+    private void uncoveredChecked(IssuerFacts cf, Map<IssuerFacts.Key, Double> w, String a) {
+        for (IssuerFacts.Key k : new ArrayList<>(w.keySet())) {
+            if (!k.accession().equals(a)) {
+                continue;
+            }
+            Double v = w.get(k);
+            if (v == null || v <= 0 || !Boolean.FALSE.equals(witnessCloses(cf, k, v))) {
+                continue;
+            }
+            for (int s : UNIT_STEPS) {
+                double x = v * Math.pow(10, s);
+                if (Boolean.TRUE.equals(witnessCloses(cf, k, x)) && Math.abs(numeratorOf(cf, k)) > x * 0.005) {
+                    // 분자가 반 센트 × n보다 커야 지문이다 — 아니면 n을 줄이기만 해도 자명하게 닫힌다.
+                    w.put(k, 0.0);
+                    break;
+                }
+            }
+        }
+    }
+
+    /** 단위 오태깅의 지문 — 원장 값이 다른 원장 값과 이 거듭제곱만큼 어긋나 닫힌다(센트 · 천 · 백만). */
+    static final int[] UNIT_STEPS = {-6, -3, -2, 2, 3, 6};
+
+    /** 폐합이 읽는 분자 — 원장이 밝힌 분자, 없으면 대용({@link #witnessCloses}가 null이 아닐 때만 부른다). */
+    private static double numeratorOf(IssuerFacts cf, IssuerFacts.Key k) {
+        return cf.declaredNumerator().containsKey(k) ? cf.declaredNumerator().get(k) : cf.proxyNumerator().get(k);
     }
 
     /** EPS × n이 분자와 닫히는가 — companyfacts에는 선언 정밀도가 없어 대용 허용(τ · |분자|)과 EPS 반 센트. */

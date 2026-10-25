@@ -175,6 +175,10 @@ public final class CommonIncome {
         boolean witness = eps != null && w != null;
 
         if (m.nic() != null && (!witness || agrees(m.nic(), eps * w, eps, w))) {
+            if (ni != null && scaledEcho(m.nic(), ni)) {
+                // 선언 NIC가 지배 NI의 10^k배와 반올림 안에서 같다 — 단위를 틀리게 실은 값이라 못 정함(고쳐 쓰지 않는다).
+                return new Value(null, Basis.T, "none", filed);
+            }
             return new Value(m.nic(), Basis.T, "decl", filed, 0, ni);
         }
         if (witness && basis == Basis.T && ni != null && m.allocationTagged()) {
@@ -209,6 +213,11 @@ public final class CommonIncome {
             return new Value(m.limitedPartners(), Basis.T, "lp", filed, 0, ni);
         }
         if (witness && !classAnchor) {
+            if (verified && ni != null && unitMistagged(ni, eps, w)) {
+                // 값 갈래만 — EPS × W가 지배 NI × 10^k로만 닫힌다. EPS나 W를 단위를 틀리게 실은 공시(HAL 2021~22 EPS 720,000 · BBWI · HIG)라 몫을
+                // 못 정한다. 고쳐 쓰지 않는다(2026-10-25 사용자 기준). 거듭제곱이 아닌 어긋남은 배분이다(CQP GP 몫 · FIVE 상장 전 우선주).
+                return new Value(null, Basis.T, "none", filed);
+            }
             // 확인 안 된 W의 EPS × W는 값으로 안 쓴다 — 행 지배 NI가 그 안에서 닫힐 때만(배분 0의 증인 · 행 붙이기가 정한다).
             return new Value(eps * w, basis, verified ? "eps" : "epsw", filed, tolerance(eps, w, ni), ni);
         }
@@ -316,6 +325,10 @@ public final class CommonIncome {
         if (ni != null && Math.abs(sum - ni) <= tol + halfWidth(ni)) {
             return new Value(null, Basis.T, "ni", filed);
         }
+        if (ni != null && scaledEcho(sum, ni)) {
+            // 클래스 몫의 합이 지배 NI의 10^k배와 같다 — 클래스 EPS나 W를 단위를 틀리게 실은 공시(HESM 2023 · 2024 연간 118.582)라 못 정함.
+            return new Value(null, Basis.T, "none", filed);
+        }
         return new Value(sum, Basis.T, "cls", filed, tol, ni);
     }
 
@@ -382,6 +395,45 @@ public final class CommonIncome {
     }
 
     /** EPS × W와 닫히는가 — EPS 반 센트 × W + W 끝자리 반폭 × |EPS| + 값 끝자리 반폭(companyfacts에 선언 정밀도가 없다). */
+    /**
+     * EPS × W가 NI와는 안 닫히고, 셋 중 하나를 10^k(k = ±2 · ±3 · ±6)로 옮기면 닫히는가 — 단위 오태깅의 지문(값을 고치지 않고 못
+     * 정함으로). 옮긴 쪽의 반올림 폭으로 재야 한다 — HAL 2022 Q1 EPS 290,000(= 0.29 × 10^6)은 NI × 10^6과는 반올림 폭이 커져 안 닫힌다.
+     */
+    static boolean unitMistagged(double ni, double eps, double w) {
+        if (closes(ni, eps, w)) {
+            return false;
+        }
+        for (int s : IssuerTimeline.UNIT_STEPS) {
+            double k = Math.pow(10, s);
+            if (closesClearly(ni, eps * k, w) || closesClearly(ni, eps, w * k) || closesClearly(ni * k, eps, w)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 닫히되 자명하지 않은가 — 분자가 그 후보의 허용폭보다 커야 한다. 지배 NI가 반 센트 × W보다 작은 키(CLSK 2012 NI −9,744 · W 3,700만)는
+     * EPS를 10^-2로 줄이면 무엇이든 닫혀 지문이 아니다.
+     */
+    private static boolean closesClearly(double c, double eps, double w) {
+        return Math.abs(c) > tolerance(eps, w, c) && closes(c, eps, w);
+    }
+
+    /** {@code value} × 10^k(k = ±2 · ±3 · ±6)가 {@code ni}의 반올림 안에서 같은가 — 단위 오태깅의 지문. 배분 차이는 거듭제곱으로 안 맞는다. */
+    static boolean scaledEcho(double value, double ni) {
+        if (value == 0 || ni == 0) {
+            return false;
+        }
+        for (int s : IssuerTimeline.UNIT_STEPS) {
+            double x = value * Math.pow(10, s);
+            if (Math.abs(x - ni) <= halfWidth(ni) + Math.pow(10, s) * halfWidth(value) + 1e-9 * Math.abs(ni)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     static boolean closes(double c, double eps, double w) {
         return Math.abs(eps * w - c) <= tolerance(eps, w, c);
     }
