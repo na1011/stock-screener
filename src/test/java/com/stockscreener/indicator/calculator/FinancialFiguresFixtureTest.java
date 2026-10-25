@@ -60,6 +60,9 @@ class FinancialFiguresFixtureTest {
             seq++;
             if (type == int.class) {
                 args.add(2000 + seq);
+            } else if (type == boolean.class) {
+                // 기본값(false)과 달라야 복사가 빠진 것이 드러난다.
+                args.add(true);
             } else if (type == BigDecimal.class) {
                 args.add(BigDecimal.valueOf(seq));
             } else if (type == LocalDate.class) {
