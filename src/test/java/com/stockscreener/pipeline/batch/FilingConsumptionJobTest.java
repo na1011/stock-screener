@@ -224,9 +224,11 @@ class FilingConsumptionJobTest {
     @DisplayName("열린 행이 평일 5일을 넘으면 사유 머리별로 알린다 — 키를 못 정한 국내 행은 「우리 쪽」")
     void alertsOverdueRows() {
         long row = krRow(krStock, "20260925000001", null, null);
-        jdbc.update("UPDATE filing_consumption SET first_seen_at = now() - interval '20 days', "
-                + "last_reason = '보고서 이름에서 연월을 못 읽었다' WHERE id = ?", row);
-        jdbc.update("UPDATE universe_membership SET created_at = now() - interval '20 days' WHERE stock_id = ?", krStock);
+        // 잡은 고정한 TODAY로 평일을 센다 — 시각도 TODAY에 묶는다(now()에 묶으면 달력이 흐르며 날짜가 TODAY 쪽으로 다가와 시험이 썩는다 ·
+        // 2026-10-26 실행에서 10-06 → 10-14 사이 한글날이 껴 평일 5일로 붉었다).
+        jdbc.update("UPDATE filing_consumption SET first_seen_at = ?::date - interval '20 days', "
+                + "last_reason = '보고서 이름에서 연월을 못 읽었다' WHERE id = ?", TODAY.toString(), row);
+        jdbc.update("UPDATE universe_membership SET created_at = ?::date - interval '20 days' WHERE stock_id = ?", TODAY.toString(), krStock);
 
         job.run(TODAY, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
 
@@ -241,9 +243,11 @@ class FilingConsumptionJobTest {
     @DisplayName("편입 밖에서 잠든 기간은 지연으로 세지 않는다 — 오래전에 본 행도 막 편입됐으면 경보하지 않는다(대조군: 편입이 오래되면 경보)")
     void sleepingYearsAreNotOverdue() {
         long row = krRow(krStock, "20260925000001", null, null);
-        jdbc.update("UPDATE filing_consumption SET first_seen_at = now() - interval '20 days', "
-                + "last_reason = '보고서 이름에서 연월을 못 읽었다' WHERE id = ?", row);
-        jdbc.update("UPDATE universe_membership SET created_at = now() - interval '1 hour' WHERE stock_id = ?", krStock);
+        // 잡은 고정한 TODAY로 평일을 센다 — 시각도 TODAY에 묶는다(now()에 묶으면 달력이 흐르며 날짜가 TODAY 쪽으로 다가와 시험이 썩는다 ·
+        // 2026-10-26 실행에서 10-06 → 10-14 사이 한글날이 껴 평일 5일로 붉었다).
+        jdbc.update("UPDATE filing_consumption SET first_seen_at = ?::date - interval '20 days', "
+                + "last_reason = '보고서 이름에서 연월을 못 읽었다' WHERE id = ?", TODAY.toString(), row);
+        jdbc.update("UPDATE universe_membership SET created_at = ?::date - interval '1 hour' WHERE stock_id = ?", TODAY.toString(), krStock);
 
         job.run(TODAY, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
 
