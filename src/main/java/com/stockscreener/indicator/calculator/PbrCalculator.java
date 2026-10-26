@@ -77,8 +77,9 @@ public class PbrCalculator implements IndicatorCalculator {
             return List.of();
         }
 
-        // MUST: 분자가 시가총액이므로 분모는 지배주주 자본이다(ADR-0159).
-        BigDecimal equity = FinancialMath.equityAttributableToShareholders(series.latestPoint());
+        // MUST: 분자가 시가총액이므로 분모는 지배주주 자본이다(ADR-0159). 관문 켬 미국 행은 그중 보통주 몫이다 — 우선주 장부가 · GP 자본을
+        // 뺀다(탐색 PERSHARE-DEN-PLAN-1026.md v1.1). 못 정했으면 값이 없다.
+        BigDecimal equity = FinancialMath.commonEquity(series.latestPoint());
         if (equity == null || equity.signum() <= 0) {
             // 자본잠식이면 음수 PBR이 나와 "저평가"로 보인다. 값을 내지 않는다.
             return List.of();

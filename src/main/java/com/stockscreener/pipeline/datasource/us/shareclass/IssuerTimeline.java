@@ -32,9 +32,10 @@ public final class IssuerTimeline {
      * 아닌 20-F · 40-F 보통주(TRI · NU)에는 처음부터 안 서던 규칙이다. Q4 유도만 안 한다(연간 공시라 분기 n이 없다). 4 — 지금 경로
      * 분모(ADR-0189): 당기 기간만 · 인스턴스 축 맥락 · 원장 선언 대체 · 단위 확인 · 폐합 실패 입력 Q4의 출력 확인 · 16주 분기(2026-10-24).
      * 5 — 배율 복원을 걷음(2026-10-25). 6 — 표지 단위 판정(ADR-0193): 단위가 틀린 표지는 사다리 다음 칸 · 맞는 칸이 없으면 숨김 · 표지가
-     * 증인과 맞는 공시의 n이 표지에서 단위만큼 갈리면 n이 틀린 쪽(2026-10-26).
+     * 증인과 맞는 공시의 n이 표지에서 단위만큼 갈리면 n이 틀린 쪽(2026-10-26). 7 — 재무 행마다 보통주 자본(지배 자본 − 비보통 청구권 ·
+     * {@link CommonEquity} · 탐색 {@code PERSHARE-DEN-PLAN-1026.md} v1.1 · 2026-10-26).
      */
-    public static final int ENGINE_VERSION = 6;
+    public static final int ENGINE_VERSION = 7;
 
     /** 단일 클래스 연속 3개월 분모 변화 간격 120~200일의 p95(§10a · {@code single5.py}). */
     static final double TAU_TWO_QUARTERS = 0.1202;
@@ -548,6 +549,24 @@ public final class IssuerTimeline {
     /** 재무 행의 {@code report_code}가 될 수 있는 폼 — 정기 · 정정 · 6-K. */
     private static final Set<String> ROW_FORMS = Set.of("10-K", "10-Q", "20-F", "40-F", "10-K/A", "10-Q/A", "20-F/A", "40-F/A",
             "6-K", "6-K/A", "10-KT");
+
+    /**
+     * 보통주 자본 후보 — 우선주 · LP 비보통 청구권 신호({@link IssuerFacts#preferredSignal()})가 있는 발행사의 행 폼 공시 전부
+     * ({@link #DENOMINATOR_FROM} 뒤). 자본은 시점 잔액이라 공시마다 그 공시 인스턴스가 판정 재료다. companyfacts가 덮지 않는 보충 공시는
+     * 앵커 후보로 이미 받는다.
+     */
+    public static Set<String> equityCandidates(IssuerFacts cf) {
+        Set<String> out = new LinkedHashSet<>();
+        if (!cf.preferredSignal()) {
+            return out;
+        }
+        cf.filings().forEach((a, f) -> {
+            if (ROW_FORMS.contains(f.form()) && !f.filed().isBefore(DENOMINATOR_FROM)) {
+                out.add(a);
+            }
+        });
+        return out;
+    }
 
     public static Set<String> denominatorCandidates(IssuerFacts cf) {
         // 분할 원장 없이 정해진다 — 후보를 가르는 확인(값마다의 단위 · 원장 선언 대체)은 그 공시 자기 표지만 본다.

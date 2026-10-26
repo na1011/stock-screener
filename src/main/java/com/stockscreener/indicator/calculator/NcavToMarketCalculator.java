@@ -103,7 +103,8 @@ public class NcavToMarketCalculator implements IndicatorCalculator {
         // 저량이다. 최근 분기 잔액 하나를 쓴다 — 4분기를 더하면 4배가 된다.
         FinancialFigures latest = series.latestPoint();
         BigDecimal currentAssets = latest.currentAssets();
-        BigDecimal totalLiabilities = FinancialMath.totalLiabilitiesOf(latest);
+        // 관문 켬 미국 행은 보통주보다 앞서는 청구권(우선주 · 메자닌)까지 뺀다 — 분모가 보통주 시가총액이다(탐색 PERSHARE-DEN-PLAN-1026.md v1.1).
+        BigDecimal totalLiabilities = FinancialMath.claimsAheadOfCommon(latest);
         if (currentAssets == null || totalLiabilities == null) {
             return List.of();
         }

@@ -323,6 +323,12 @@ final class FinancialFiguresFixture {
         return this;
     }
 
+    /** 미국 관문 켬 행 — 보통주 자본 재료를 붙인다(분자는 배분 0 · 탐색 PERSHARE-DEN-PLAN-1026.md). {@code nonCommon} null이면 못 정함. */
+    FinancialFiguresFixture commonEquity(BigDecimal nonCommon, BigDecimal ncavNonCommon, String branch) {
+        this.common = new com.stockscreener.indicator.CommonIncomeRead(null, "T", "ni", nonCommon, ncavNonCommon, branch);
+        return this;
+    }
+
     /** 국내 관문 켬 행(ADR-0192) — 판정이 정한 배당성향 분모를 함께 싣는다. */
     FinancialFiguresFixture krCommon(BigDecimal value, String basis, String branch, BigDecimal payoutBase) {
         this.common = new com.stockscreener.indicator.CommonIncomeRead(value, basis, branch, payoutBase, true);

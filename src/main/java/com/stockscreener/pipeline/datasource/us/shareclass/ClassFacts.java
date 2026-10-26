@@ -22,9 +22,26 @@ import java.util.Map;
  */
 public record ClassFacts(Map<String, LinkedHashMap<MemberPeriod, Measured>> durations,
                          Map<String, LinkedHashMap<String, String>> cover,
-                         String documentType) {
+                         String documentType,
+                         Map<String, LinkedHashMap<Slot, Measured>> equity) {
 
     public static final String AXISLESS = "-";
+
+    public ClassFacts(Map<String, LinkedHashMap<MemberPeriod, Measured>> durations, Map<String, LinkedHashMap<String, String>> cover,
+                      String documentType) {
+        this(durations, cover, documentType, new LinkedHashMap<>());
+    }
+
+    /**
+     * 보통주 자본 재료의 칸(탐색 {@code PERSHARE-DEN-PLAN-1026.md} v1.1) — 축 없으면 {@link #AXISLESS}, 축 하나면 {@code 축=구성원}.
+     * 시점 팩트는 {@code start}가 null이다.
+     */
+    public record Slot(String key, LocalDate start, LocalDate end) {
+    }
+
+    public Map<Slot, Measured> equityOf(String concept) {
+        return equity.getOrDefault(concept, new LinkedHashMap<>());
+    }
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
@@ -78,6 +95,15 @@ public record ClassFacts(Map<String, LinkedHashMap<MemberPeriod, Measured>> dura
             ArrayNode rows = c.putArray(concept);
             members.forEach((member, text) -> rows.addArray().add(member).add(text));
         });
+        // 자본 재료가 없는 공시는 판 7 저장 형태와 같은 글자다 — 분모 · 분자 재료가 판 8에서도 그대로인지 맞대는 자리(계획 5 ⑥).
+        if (!equity.isEmpty()) {
+            ObjectNode q = root.putObject("equity");
+            equity.forEach((concept, facts) -> {
+                ArrayNode rows = q.putArray(concept);
+                facts.forEach((slot, m) -> rows.addArray().add(slot.key()).add(slot.start() == null ? null : slot.start().toString())
+                        .add(slot.end().toString()).add(m.value()).add(m.halfWidth()));
+            });
+        }
         return MAPPER.writeValueAsString(root);
     }
 
@@ -100,7 +126,16 @@ public record ClassFacts(Map<String, LinkedHashMap<MemberPeriod, Measured>> dura
             }
             cover.put(e.getKey(), members);
         }
+        Map<String, LinkedHashMap<Slot, Measured>> equity = new LinkedHashMap<>();
+        for (Map.Entry<String, JsonNode> e : root.path("equity").properties()) {
+            LinkedHashMap<Slot, Measured> facts = new LinkedHashMap<>();
+            for (JsonNode x : e.getValue()) {
+                facts.put(new Slot(x.get(0).asString(), x.get(1).isNull() ? null : LocalDate.parse(x.get(1).asString()),
+                        LocalDate.parse(x.get(2).asString())), new Measured(x.get(3).asDouble(), x.get(4).asDouble()));
+            }
+            equity.put(e.getKey(), facts);
+        }
         JsonNode type = root.path("documentType");
-        return new ClassFacts(durations, cover, type.isNull() || type.isMissingNode() ? null : type.asString());
+        return new ClassFacts(durations, cover, type.isNull() || type.isMissingNode() ? null : type.asString(), equity);
     }
 }

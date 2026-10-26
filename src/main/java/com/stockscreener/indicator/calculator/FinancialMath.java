@@ -1,5 +1,6 @@
 package com.stockscreener.indicator.calculator;
 
+import com.stockscreener.indicator.CommonIncomeRead;
 import com.stockscreener.indicator.FinancialFigures;
 import com.stockscreener.indicator.ShareBasis;
 import com.stockscreener.indicator.IndicatorContext;
@@ -121,6 +122,67 @@ final class FinancialMath {
     static BigDecimal equityAttributableToShareholders(FinancialFigures figures) {
         BigDecimal controlling = figures.totalEquityControlling();
         return controlling != null ? controlling : figures.totalEquity();
+    }
+
+    /**
+     * <b>주당 지표의 자본 — 보통주 몫</b>(미국 관문 켬 · 탐색 {@code PERSHARE-DEN-PLAN-1026.md} v1.1). 분자인 시가총액은 보통주에만 값을 매기는데
+     * 지배 자본은 우선주 장부가 · GP 자본 · 우선 단위를 품는다(VST 우선주 2,476M · CQP GP −2,938M). 그래서 지배 자본 − 비보통 청구권이다.
+     *
+     * <ul>
+     *   <li>이 규칙으로 안 읽은 행({@code common == null} 또는 {@link CommonIncomeRead#equityRead()} 거짓 — 관문 꺼짐 · 국내 · 클래스 축 줄
+     *       없음)은 {@code base} 그대로다.</li>
+     *   <li>비보통 청구권을 못 정했으면 {@code null}(미표시) — 지배 자본으로 메우면 그럴듯한 틀린 값이다.</li>
+     *   <li>비보통 청구권이 0이면 {@code base} 그대로(지배 ?: 총자본 — ADR-0159 축이고 이 규칙이 안 바꾼다).</li>
+     *   <li>0이 아닌데 지배 자본 기저가 아니면 {@code null} — 총자본 − 우선주는 비지배를 섞는다(NRG · AVGO 꼴).</li>
+     * </ul>
+     *
+     * @param base               이 지표가 고른 자본 기저(지배 자본 또는 총자본)
+     * @param controllingBasis   {@code base}가 지배 자본인가
+     */
+    static BigDecimal commonEquity(FinancialFigures figures, BigDecimal base, boolean controllingBasis) {
+        CommonIncomeRead c = figures.common();
+        if (c == null || !c.equityRead()) {
+            return base;
+        }
+        if (!c.equityDecided()) {
+            return null;
+        }
+        if (c.nonCommon().signum() == 0) {
+            return base;
+        }
+        if (!controllingBasis || base == null) {
+            return null;
+        }
+        return base.subtract(c.nonCommon());
+    }
+
+    /** {@link #commonEquity(FinancialFigures, BigDecimal, boolean)}의 PBR 기저 — 지배 자본, 없으면 총자본. */
+    static BigDecimal commonEquity(FinancialFigures figures) {
+        return commonEquity(figures, equityAttributableToShareholders(figures), figures.totalEquityControlling() != null);
+    }
+
+    /**
+     * <b>NCAV가 유동자산에서 빼는 청구권</b> — 총부채 + 보통주보다 앞서는 청구권(그레이엄: 「all liabilities and claims ranking ahead of the
+     * common」). 관문 켬 미국 행은 영구자본 우선주 · 우선 단위와 메자닌(재무 행의 「자산 − 부채 − 자본」 간극 — CELH 1,760M · MSTR 6,920M)을
+     * 더한다. 총부채가 「자산 − 자본」 폴백이면 메자닌이 이미 그 안에 있어 다시 안 뺀다. 우선주를 못 정했으면 {@code null}이다.
+     */
+    static BigDecimal claimsAheadOfCommon(FinancialFigures figures) {
+        BigDecimal liabilities = totalLiabilitiesOf(figures);
+        CommonIncomeRead c = figures.common();
+        if (liabilities == null || c == null || !c.equityRead()) {
+            return liabilities;
+        }
+        if (!c.equityDecided() || c.ncavNonCommon() == null) {
+            return null;
+        }
+        BigDecimal claims = liabilities.add(c.ncavNonCommon());
+        if (figures.totalLiabilities() != null && figures.totalAssets() != null && figures.totalEquity() != null) {
+            BigDecimal mezzanine = figures.totalAssets().subtract(figures.totalLiabilities()).subtract(figures.totalEquity());
+            if (mezzanine.signum() > 0) {
+                claims = claims.add(mezzanine);
+            }
+        }
+        return claims;
     }
 
     /**

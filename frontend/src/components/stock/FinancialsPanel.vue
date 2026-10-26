@@ -119,7 +119,12 @@ function label(row: FinancialPeriod): string {
                 {{ formatAmount(row.operatingCashFlow, row.currencyCode) }}
               </td>
               <td class="financials__num">{{ formatAmount(row.totalAssets, row.currencyCode) }}</td>
-              <td class="financials__num">{{ formatAmount(row.totalEquity, row.currencyCode) }}</td>
+              <td class="financials__num">
+                {{ formatAmount(row.totalEquity, row.currencyCode) }}
+                <span v-if="row.commonEquity != null" class="financials__yoy">
+                  보통주 {{ formatAmount(row.commonEquity, row.currencyCode) }}
+                </span>
+              </td>
               <td>{{ row.publishedAt ? formatDate(row.publishedAt) : MISSING }}</td>
             </tr>
           </tbody>

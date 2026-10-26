@@ -73,8 +73,10 @@ public class PbrMedian5yCalculator implements IndicatorCalculator {
             if (figures == null) {
                 return null;
             }
-            BigDecimal equity = controlling
-                    ? figures.totalEquityControlling() : figures.totalEquity();
+            // 관문 켬 미국 행은 보통주 몫이다(탐색 PERSHARE-DEN-PLAN-1026.md v1.1). 못 정한 봉은 표본에서 빠진다 — 자본잠식 봉과 같고, 표본이
+            // 모자라면 중앙값 자체가 안 선다(MIN_SAMPLES). 창 전체를 지우면 못 정한 행 하나가 5년을 지운다.
+            BigDecimal equity = FinancialMath.commonEquity(figures,
+                    controlling ? figures.totalEquityControlling() : figures.totalEquity(), controlling);
             if (equity == null || equity.signum() <= 0) {
                 // 자본잠식 구간의 음수 PBR은 중앙값을 끌어내려 「싸다」로 읽힌다.
                 return null;

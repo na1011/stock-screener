@@ -124,6 +124,12 @@ public class IndicatorDataReader {
                  AND ci.report_code = financial_statement.report_code) AS common_basis
             , (SELECT ci.branch FROM financial_common_income ci WHERE ci.financial_statement_id = financial_statement.id
                  AND ci.report_code = financial_statement.report_code) AS common_branch
+            , (SELECT ci.non_common FROM financial_common_income ci WHERE ci.financial_statement_id = financial_statement.id
+                 AND ci.report_code = financial_statement.report_code) AS equity_non_common
+            , (SELECT ci.ncav_non_common FROM financial_common_income ci WHERE ci.financial_statement_id = financial_statement.id
+                 AND ci.report_code = financial_statement.report_code) AS equity_ncav_non_common
+            , (SELECT ci.equity_branch FROM financial_common_income ci WHERE ci.financial_statement_id = financial_statement.id
+                 AND ci.report_code = financial_statement.report_code) AS equity_branch
             """;
 
     /**
@@ -647,6 +653,7 @@ public class IndicatorDataReader {
                 krCommon ? new CommonIncomeRead(rs.getBigDecimal("common_income"), rs.getString("common_basis"),
                         rs.getString("common_branch"), rs.getBigDecimal("common_payout"), true)
                         : line == null ? null : new CommonIncomeRead(rs.getBigDecimal("common_income"), rs.getString("common_basis"),
-                        rs.getString("common_branch")));
+                        rs.getString("common_branch"), rs.getBigDecimal("equity_non_common"), rs.getBigDecimal("equity_ncav_non_common"),
+                        rs.getString("equity_branch")));
     }
 }

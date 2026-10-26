@@ -229,27 +229,39 @@ public class ShareClassStore {
     }
 
     /**
-     * 재무 행마다 보통주 귀속 이익을 갈아 넣는다 — 바뀐 행만 쓴다. 행이 지워지면 표가 같이 지운다(FK).
+     * 재무 행마다 보통주 귀속 이익과 보통주 자본 재료(탐색 {@code PERSHARE-DEN-PLAN-1026.md} v1.1)를 갈아 넣는다 — 바뀐 행만 쓴다. 행이 지워지면
+     * 표가 같이 지운다(FK).
      *
      * @return 쓴 행 수
      */
-    public int replaceCommonIncome(Map<Long, CommonIncomeRows.Resolved> rows) {
+    public int replaceCommonIncome(Map<Long, CommonIncomeRows.Resolved> rows, Map<Long, CommonEquityRows.Resolved> equity) {
         int written = 0;
         for (Map.Entry<Long, CommonIncomeRows.Resolved> e : rows.entrySet()) {
             CommonIncomeRows.Resolved r = e.getValue();
+            CommonEquityRows.Resolved q = equity.get(e.getKey());
             written += jdbcTemplate.update("""
-                    INSERT INTO financial_common_income (financial_statement_id, report_code, common, basis, branch, engine_version)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                    INSERT INTO financial_common_income (financial_statement_id, report_code, common, basis, branch, engine_version,
+                                                         non_common, ncav_non_common, equity_branch)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT (financial_statement_id) DO UPDATE SET report_code = EXCLUDED.report_code, common = EXCLUDED.common,
-                        basis = EXCLUDED.basis, branch = EXCLUDED.branch, engine_version = EXCLUDED.engine_version, derived_at = now()
+                        basis = EXCLUDED.basis, branch = EXCLUDED.branch, engine_version = EXCLUDED.engine_version,
+                        non_common = EXCLUDED.non_common, ncav_non_common = EXCLUDED.ncav_non_common,
+                        equity_branch = EXCLUDED.equity_branch, derived_at = now()
                     WHERE (financial_common_income.report_code, financial_common_income.common, financial_common_income.basis,
-                           financial_common_income.branch, financial_common_income.engine_version)
-                      IS DISTINCT FROM (EXCLUDED.report_code, EXCLUDED.common, EXCLUDED.basis, EXCLUDED.branch, EXCLUDED.engine_version)
+                           financial_common_income.branch, financial_common_income.engine_version, financial_common_income.non_common,
+                           financial_common_income.ncav_non_common, financial_common_income.equity_branch)
+                      IS DISTINCT FROM (EXCLUDED.report_code, EXCLUDED.common, EXCLUDED.basis, EXCLUDED.branch, EXCLUDED.engine_version,
+                           EXCLUDED.non_common, EXCLUDED.ncav_non_common, EXCLUDED.equity_branch)
                     """, e.getKey(), r.row().reportCode() == null ? "" : r.row().reportCode(),
                     r.common() == null ? null : r.common().setScale(2, java.math.RoundingMode.HALF_UP), r.basis().name(),
-                    r.branch(), IssuerTimeline.ENGINE_VERSION);
+                    r.branch(), IssuerTimeline.ENGINE_VERSION, money(q == null ? null : q.nonCommon()),
+                    money(q == null ? null : q.ncavNonCommon()), q == null ? null : q.branch());
         }
         return written;
+    }
+
+    private static java.math.BigDecimal money(Double v) {
+        return v == null ? null : java.math.BigDecimal.valueOf(v).setScale(2, java.math.RoundingMode.HALF_UP);
     }
 
     /** 시장의 활성 줄마다 판정과 분할 원장 — 순위 판독기·보류가 한 번에 읽는다. 판정이 없는 줄은 키가 없다. */

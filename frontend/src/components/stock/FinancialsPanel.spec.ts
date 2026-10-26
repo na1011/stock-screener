@@ -35,6 +35,7 @@ const period = (over: Partial<FinancialPeriod>): FinancialPeriod => ({
   netIncomeYoy: null,
   discontinuedIncome: null,
   commonIncome: null,
+  commonEquity: null,
   ...over,
 })
 
@@ -83,5 +84,15 @@ describe('FinancialsPanel — 금액은 행의 통화로 그린다', () => {
 
     expect(html).toContain('—')
     expect(html).not.toContain('$0')
+  })
+
+  it('보통주 자본은 뺄 것이 있는 행만 자본총계 아래에 그린다 — PBR 분모가 이 몫이다', async () => {
+    const html = await render([
+      period({ fiscalYear: 2025, currencyCode: 'USD', totalEquity: 5.48e9, commonEquity: 3.0e9 }),
+      period({ fiscalYear: 2024, currencyCode: 'USD', totalEquity: 5.1e9, commonEquity: null }),
+    ])
+
+    expect(html).toContain('보통주 $3.00B')
+    expect(html.match(/보통주 \$/g)).toHaveLength(1)
   })
 })

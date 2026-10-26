@@ -128,6 +128,8 @@ public class ShareClassCollector {
         targetsOf.addAll(com.stockscreener.pipeline.datasource.us.shareclass.IssuerTimeline.denominatorCandidates(cf));
         // 보통주 귀속 이익 후보 — companyfacts만으로 당기 보통주 몫이 안 서는 공시(탐색 PERSHARE-NUM-PLAN-1024.md v2.1).
         targetsOf.addAll(com.stockscreener.pipeline.datasource.us.shareclass.IssuerTimeline.numeratorCandidates(cf));
+        // 보통주 자본 후보 — 우선주 · LP 신호 발행사의 행 폼 공시(탐색 PERSHARE-DEN-PLAN-1026.md v1.1). 잔액은 그 공시 인스턴스가 재료다.
+        targetsOf.addAll(com.stockscreener.pipeline.datasource.us.shareclass.IssuerTimeline.equityCandidates(cf));
         for (String accession : targetsOf) {
             IssuerFacts.Filing filing = cf.filings().get(accession);
             targets++;

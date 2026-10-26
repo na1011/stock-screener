@@ -53,8 +53,11 @@ public final class ClassFactReader {
      * 7 — 보통주 귀속 이익 재료({@link #NUMERATOR_MATERIAL} · 우선주 배당 · 참가증권 · GP · LP 배분 · LP 단위 EPS · 비지배)를 싣고, 총 EPS도
      * {@link #DIMENSIONED} 칸에 싣는다 — 보충 · 앵커 공시는 companyfacts에 없어 인스턴스가 유일한 재료이고, EPS를 LP 클래스 축 보통 단위에만
      * 싣는 발행사(PAA)가 있다(탐색 {@code PERSHARE-NUM-PLAN-1024.md} v2.1 · 2026-10-25). 판정은 그 칸의 가중평균만 읽는다.
+     * 8 — 보통주 자본 재료({@link #EQUITY_MATERIAL} · 자본변동표 우선주 · GP 성분 · 우선주 장부가 · 청산가 · 주식수 · LP 클래스 자본 ·
+     * 메자닌 · 비지배 우선주 · 부채 · 합계와 우선주 상환 · 전환 흐름)를 {@link ClassFacts#equity()} 칸에 축 없음 · 축 하나 그대로 싣는다
+     * (탐색 {@code PERSHARE-DEN-PLAN-1026.md} v1.1 · 2026-10-26). 그 재료가 없는 공시의 저장 글자는 판 7과 같다.
      */
-    public static final int READER_VERSION = 7;
+    public static final int READER_VERSION = 8;
 
     public static final String SHARES_OUTSTANDING = "EntityCommonStockSharesOutstanding";
     public static final String TRADING_SYMBOL = "TradingSymbol";
@@ -101,6 +104,31 @@ public final class ClassFactReader {
             List.of(GENERAL_PARTNER, LIMITED_PARTNERS, NONCONTROLLING, "NetIncomeLoss", "ProfitLoss", DILUTED_EPS, DILUTED_WEIGHTED))
             .flatMap(List::stream).toList();
     public static final List<String> NUMERATOR_TAGS = List.of(DECLARED_NUMERATOR, "NetIncomeLoss", "ProfitLoss");
+    /** 지배 자본 · 대차대조표 항등식(메자닌 간극) 재료 — 시점. */
+    public static final List<String> EQUITY_TOTALS = List.of("StockholdersEquity",
+            "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest", "PartnersCapital",
+            "PartnersCapitalIncludingPortionAttributableToNoncontrollingInterest", "MembersEquity", "MinorityInterest",
+            "PartnersCapitalAttributableToNoncontrollingInterest", "Liabilities", "LiabilitiesAndStockholdersEquity");
+    /** 우선주 · LP 비보통 청구권 재료 — 시점(조건 태그는 기간 맥락으로도 실린다). */
+    public static final List<String> PREFERRED_MATERIAL = List.of("PreferredStockValue", "PreferredStockValueOutstanding",
+            "PreferredStockIncludingAdditionalPaidInCapital", "PreferredStockIncludingAdditionalPaidInCapitalNetOfDiscount",
+            "PreferredStockLiquidationPreferenceValue", "PreferredStockLiquidationPreference", "PreferredStockParOrStatedValuePerShare",
+            "PreferredStockSharesOutstanding", "PreferredStockRedemptionPricePerShare", "PreferredStockRedemptionAmount",
+            "PreferredStockDividendRatePercentage", "PreferredStockDividendRatePerDollarAmount",
+            "PreferredStockConvertibleConversionRatio", "PreferredStockConversionPrice", "PreferredStockConvertibleConversionPrice",
+            "PreferredStockConvertibleSharesIssuable", "ConvertiblePreferredStockSharesIssuedUponConversion",
+            "IncrementalCommonSharesAttributableToConversionOfPreferredStock",
+            "GeneralPartnersCapitalAccount", "PreferredUnitsPreferredPartnersCapitalAccounts", "LimitedPartnersCapitalAccount",
+            "LimitedPartnersCapitalAccountUnitsOutstanding", "WeightedAverageLimitedPartnershipUnitsOutstanding",
+            "TemporaryEquityCarryingAmountAttributableToParent",
+            "TemporaryEquityCarryingAmountIncludingPortionAttributableToNoncontrollingInterests",
+            "RedeemableNoncontrollingInterestEquityPreferredCarryingAmount", "RedeemableNoncontrollingInterestEquityPreferredRedemptionValue",
+            "MinorityInterestAmountRepresentedByPreferredStock",
+            "PaymentsForRepurchaseOfPreferredStockAndPreferenceStock", "PaymentsForRedemptionOfPreferredStock",
+            "StockRedeemedOrCalledDuringPeriodValue", "ConversionOfStockAmountConverted1");
+    /** 보통주 자본 재료 전부 — 판독기가 {@link ClassFacts#equity()}에 싣는 개념(판 8). */
+    public static final List<String> EQUITY_MATERIAL = java.util.stream.Stream.of(EQUITY_TOTALS, PREFERRED_MATERIAL)
+            .flatMap(List::stream).toList();
 
     private static final Set<String> COVER = Set.of(SHARES_OUTSTANDING, TRADING_SYMBOL, SECURITY_TITLE);
     /**
@@ -110,6 +138,9 @@ public final class ClassFactReader {
     private static final Set<String> LISTING_COVER = Set.of(TRADING_SYMBOL, SECURITY_EXCHANGE, SECURITY_TITLE, DEPOSITORY_RATIO,
             SHARES_OUTSTANDING);
     private static final Set<String> DURATION = Set.copyOf(concat(WEIGHTED_TAGS, EPS_TAGS, NUMERATOR_TAGS, NUMERATOR_MATERIAL));
+    private static final Set<String> EQUITY = Set.copyOf(EQUITY_MATERIAL);
+    /** 자본 재료에서 버리는 축 — 다른 판 · 다른 실체(위 {@link #OTHER_VERSION_AXES}) · 소유 축(자회사 · 투자 대상의 단위 · VG · WES). */
+    private static final String OWNERSHIP_AXIS = "OwnershipAxis";
     /** LP 축을 클래스 축으로 받는 개념 — LP 단위 가중평균과 그 합계 폴백뿐이다(법인 태그는 안 넓힌다 — REIT 운영 파트너십 단위). */
     private static final Set<String> LP_UNIT_TAGS = Set.copyOf(concat(List.of("WeightedAverageLimitedPartnershipUnitsOutstanding"),
             WEIGHTED_FALLBACK_TAGS));
@@ -200,6 +231,7 @@ public final class ClassFactReader {
         Map<String, Context> contexts = new HashMap<>();
         Map<String, LinkedHashMap<ClassFacts.MemberPeriod, ClassFacts.Measured>> durations = new LinkedHashMap<>();
         Map<String, LinkedHashMap<String, String>> cover = new LinkedHashMap<>();
+        Map<String, LinkedHashMap<ClassFacts.Slot, ClassFacts.Measured>> equity = new LinkedHashMap<>();
         // 저장 표지의 넓힌 꼴(거래소 축 · 보통주 구성요소 축)로만 온 기호 · 증권 이름 — 구성원마다 문서 순서로 모은다
         Map<String, LinkedHashMap<String, LinkedHashSet<String>>> widened = new LinkedHashMap<>();
         List<Late> late = new ArrayList<>();
@@ -238,7 +270,7 @@ public final class ClassFactReader {
                         documentType = r.getElementText().trim();
                         continue;
                     }
-                    if (!coverConcepts.contains(local) && !DURATION.contains(local)
+                    if (!coverConcepts.contains(local) && !DURATION.contains(local) && !(gaap && coverConcepts == COVER && EQUITY.contains(local))
                             || coverConcepts != COVER && WEIGHTED_FALLBACK_TAGS.contains(local)) {
                         continue;
                     }
@@ -264,6 +296,12 @@ public final class ClassFactReader {
             String local = raw.concept();
             String text = raw.text();
             String decimals = raw.decimals();
+            if (coverConcepts == COVER && EQUITY.contains(local)) {
+                unreadable += equity(equity, local, c, text, decimals);
+                if (!DURATION.contains(local)) {
+                    continue;
+                }
+            }
             if (coverConcepts == COVER && (WEIGHTED_TAGS.contains(local) || TOTAL_EPS.contains(local))
                     && c.start() != null && c.end() != null && c.dims().size() == 1
                     && !OTHER_VERSION_AXES.contains(c.dims().keySet().iterator().next())
@@ -394,7 +432,37 @@ public final class ClassFactReader {
         widened.forEach((concept, byMember) -> byMember.forEach((member, texts) ->
                 cover.computeIfAbsent(concept, k -> new LinkedHashMap<>()).putIfAbsent(member,
                         TRADING_SYMBOL.equals(concept) ? String.join(", ", texts) : texts.iterator().next())));
-        return new Result(new ClassFacts(durations, cover, documentType), unreadable);
+        return new Result(new ClassFacts(durations, cover, documentType, equity), unreadable);
+    }
+
+    /**
+     * 보통주 자본 재료 하나를 싣는다 — 축 없음은 {@link ClassFacts#AXISLESS}, 축 하나는 {@code 축=구성원}. 두 축 이상 · 다른 판 · 다른 실체 ·
+     * 소유 축 · 형 붙은 차원은 안 싣는다(같은 칸의 값이 그 실체의 것이 아니다). 같은 칸이 두 번 나오면 문서 순서 첫 값이다.
+     *
+     * @return 수로 안 읽혀 건너뛰면 1
+     */
+    private static int equity(Map<String, LinkedHashMap<ClassFacts.Slot, ClassFacts.Measured>> equity, String concept, Context c,
+                              String text, String decimals) {
+        if (c.end() == null || c.dims().size() > 1) {
+            return 0;
+        }
+        String key = ClassFacts.AXISLESS;
+        if (c.dims().size() == 1) {
+            String axis = c.dims().keySet().iterator().next();
+            String member = c.dims().get(axis);
+            if (OTHER_VERSION_AXES.contains(axis) || OWNERSHIP_AXIS.equals(axis) || "typed".equals(member)) {
+                return 0;
+            }
+            key = axis + "=" + member;
+        }
+        ClassFacts.Measured measured;
+        try {
+            measured = new ClassFacts.Measured(Double.parseDouble(text), halfWidth(decimals));
+        } catch (NumberFormatException e) {
+            return 1;
+        }
+        equity.computeIfAbsent(concept, k -> new LinkedHashMap<>()).putIfAbsent(new ClassFacts.Slot(key, c.start(), c.end()), measured);
+        return 0;
     }
 
     /**

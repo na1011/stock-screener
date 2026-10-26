@@ -606,6 +606,8 @@ export interface FinancialPeriod {
   discontinuedIncome: number | null
   /** 보통주 귀속 순이익(미국 관문 켬 · 원장이 우선주 · 참가증권 · GP 배분을 뺀 값으로 정한 행만). PER · EPS의 분자다. */
   commonIncome: number | null
+  /** 보통주 자본(미국 관문 켬 · 지배 자본 − 우선주 · GP 자본). 뺄 것이 있는 행만 값이 있다. PBR의 분모다. */
+  commonEquity: number | null
 }
 
 /** 화면이 반드시 함께 그려야 하는 고지. 서버가 문구를 소유한다. */

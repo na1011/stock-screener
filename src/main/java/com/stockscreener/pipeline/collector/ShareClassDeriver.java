@@ -2,6 +2,8 @@ package com.stockscreener.pipeline.collector;
 
 import com.stockscreener.pipeline.datasource.us.shareclass.ClassFactReader;
 import com.stockscreener.pipeline.datasource.us.shareclass.ClassFacts;
+import com.stockscreener.pipeline.datasource.us.shareclass.CommonEquity;
+import com.stockscreener.pipeline.datasource.us.shareclass.CommonEquityRows;
 import com.stockscreener.pipeline.datasource.us.shareclass.CommonIncome;
 import com.stockscreener.pipeline.datasource.us.shareclass.CommonIncomeRows;
 import com.stockscreener.pipeline.datasource.us.shareclass.IssuerFacts;
@@ -82,8 +84,8 @@ public class ShareClassDeriver {
     }
 
     private int[] deriveLine(ShareClassStore.Input input, IssuerTimeline timeline, Map<Long, Map<String, ClassFacts>> factsByCik) {
-        IssuerFacts cf = IssuerFacts.fromCompanyFacts(MAPPER.readTree(input.companyFacts()))
-                .withFilings(store.supplementedFilings(input.cik()));
+        IssuerFacts companyFacts = IssuerFacts.fromCompanyFacts(MAPPER.readTree(input.companyFacts()));
+        IssuerFacts cf = companyFacts.withFilings(store.supplementedFilings(input.cik()));
         Map<String, ClassFacts> facts = factsByCik.computeIfAbsent(input.cik(), store::okFacts);
         List<IssuerTimeline.Verdict> judged = timeline.judge(input.symbol(), cf, cf.anchorCandidates(), facts::get,
                 store.splits(input.stockId()), HISTORY_FROM, IssuerFacts.INSTANCE_FROM);
@@ -96,7 +98,7 @@ public class ShareClassDeriver {
             }
         }
         int[] replaced = store.replaceVerdicts(input.stockId(), input.cik(), rows);
-        commonIncome(input, cf, timeline, facts, judged);
+        commonIncome(input, cf, companyFacts.filings().keySet(), timeline, facts, judged);
         return new int[]{rows.size(), hidden, replaced[0], replaced[1]};
     }
 
@@ -104,8 +106,8 @@ public class ShareClassDeriver {
      * 재무 행마다 보통주 귀속 이익(주당 지표 분자 · 탐색 {@code PERSHARE-NUM-PLAN-1024.md} v2.1) — 판정과 같은 재료 · 같은 판정의 n으로
      * 공시 × 기간 값을 정하고 행의 판에 맞춰 붙인다. 판정과 한 트랜잭션이라 둘이 갈린 채 남지 않는다.
      */
-    private void commonIncome(ShareClassStore.Input input, IssuerFacts cf, IssuerTimeline timeline, Map<String, ClassFacts> facts,
-                              List<IssuerTimeline.Verdict> judged) {
+    private void commonIncome(ShareClassStore.Input input, IssuerFacts cf, java.util.Set<String> companyFactsFilings, IssuerTimeline timeline,
+                              Map<String, ClassFacts> facts, List<IssuerTimeline.Verdict> judged) {
         Map<IssuerFacts.Key, CommonIncome.Value> keys =
                 timeline.commonIncomes(cf, cf.anchorCandidates(), facts::get, store.splits(input.stockId()), judged);
         Map<Long, CommonIncomeRows.Row> rows = store.financialRows(input.stockId());
@@ -116,7 +118,14 @@ public class ShareClassDeriver {
         for (int i = 0; i < ids.size(); i++) {
             byId.put(ids.get(i), resolved.get(i));
         }
-        store.replaceCommonIncome(byId);
+        // 보통주 자본(탐색 PERSHARE-DEN-PLAN-1026.md v1.1) — 같은 저장 인스턴스 재료로 (공시, 날짜)마다 비보통 청구권을 정하고 같은 행에 붙인다.
+        List<CommonEquityRows.Resolved> equity = CommonEquityRows.resolve(new ArrayList<>(rows.values()), CommonEquity.judge(facts),
+                cf.filings(), companyFactsFilings, cf.preferredSignal());
+        Map<Long, CommonEquityRows.Resolved> equityById = new LinkedHashMap<>();
+        for (int i = 0; i < ids.size(); i++) {
+            equityById.put(ids.get(i), equity.get(i));
+        }
+        store.replaceCommonIncome(byId, equityById);
     }
 
     static ShareClassStore.VerdictRow row(IssuerTimeline.Verdict v, IssuerFacts cf, ClassFacts facts) {

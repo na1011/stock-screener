@@ -47,6 +47,8 @@ public record StockFinancialsResponse(
      *                     PER · EPS가 계속영업 이익을 쓰므로, 순이익과 그 지표가 어긋나는 이유를 같은 화면에 보인다
      * @param commonIncome 보통주 귀속 순이익(중단 포함 · 미국 관문 켬 · 탐색 {@code PERSHARE-NUM-PLAN-1024.md}). 원장이 우선주 배당 · 참가증권 ·
      *                     GP 배분을 뺀 값으로 정한 행만 — PER · EPS의 분자가 이 몫이라 순이익과 어긋나는 이유를 같은 화면에 보인다
+     * @param commonEquity 보통주 자본(지배 자본 − 우선주 장부가 · GP 자본 · 우선 단위 · 미국 관문 켬 · 탐색 {@code PERSHARE-DEN-PLAN-1026.md} v1.1).
+     *                     뺄 것이 있는 행만 — PBR의 분모가 이 몫이라 자본총계와 어긋나는 이유를 같은 화면에 보인다
      * @param revenueYoy   전년 <b>동기</b> 대비 증감률(%). 분기를 직전 분기와 비교하면
      *                     계절성 있는 업종에서 뜻이 없다. <b>통화가 갈린 쌍에서는 null이다</b> —
      *                     환산 없이 뺀 값은 증감률이 아니다
@@ -69,7 +71,8 @@ public record StockFinancialsResponse(
             BigDecimal operatingIncomeYoy,
             BigDecimal netIncomeYoy,
             BigDecimal discontinuedIncome,
-            BigDecimal commonIncome) {
+            BigDecimal commonIncome,
+            BigDecimal commonEquity) {
     }
 
     /**

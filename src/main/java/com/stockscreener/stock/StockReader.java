@@ -193,7 +193,12 @@ public class StockReader {
         String extra = (withDiscontinued ? ", discontinued_income, discontinued_rule" : "")
                 + (withCommon ? ", (SELECT ci.common FROM financial_common_income ci WHERE ci.financial_statement_id = "
                         + "financial_statement.id AND " + commonMatch + " AND ci.basis = 'T') AS common_income"
+                        : "")
+                // 미국 관문 켬 — 보통주 자본(지배 자본 − 우선주 · GP 자본 · 탐색 PERSHARE-DEN-PLAN-1026.md v1.1). 뺄 것이 있는 행만 그린다.
+                + (withCommon && us ? ", total_equity_controlling, (SELECT ci.non_common FROM financial_common_income ci WHERE "
+                        + "ci.financial_statement_id = financial_statement.id AND " + commonMatch + ") AS equity_non_common"
                         : "");
+        boolean withEquity = withCommon && us;
         return jdbcTemplate.query("""
                 SELECT fiscal_year, fiscal_period, published_at, revision_no, report_code,
                        currency_code,
@@ -221,8 +226,14 @@ public class StockReader {
                         // 판정 규칙으로 읽은 행만 — 안 읽은 행의 null을 「중단영업 없음」으로 그리지 않는다(F2b).
                         withDiscontinued && rs.getObject("discontinued_rule") != null
                                 ? rs.getBigDecimal("discontinued_income") : null,
-                        withCommon ? rs.getBigDecimal("common_income") : null),
+                        withCommon ? rs.getBigDecimal("common_income") : null,
+                        withEquity ? commonEquity(rs.getBigDecimal("total_equity_controlling"), rs.getBigDecimal("equity_non_common")) : null),
                 stockId, limit);
+    }
+
+    /** 보통주 자본 — 뺄 것이 0이 아니고 지배 자본이 있을 때만(지표 {@code FinancialMath.commonEquity}와 같은 갈래 · 못 정함 · 0은 안 그린다). */
+    private static BigDecimal commonEquity(BigDecimal controlling, BigDecimal nonCommon) {
+        return controlling == null || nonCommon == null || nonCommon.signum() == 0 ? null : controlling.subtract(nonCommon);
     }
 
     /**
@@ -491,7 +502,7 @@ public class StockReader {
                                BigDecimal revenue, BigDecimal operatingIncome, BigDecimal netIncome,
                                BigDecimal operatingCashFlow, BigDecimal totalAssets,
                                BigDecimal totalLiabilities, BigDecimal totalEquity,
-                               BigDecimal discontinuedIncome, BigDecimal commonIncome) {
+                               BigDecimal discontinuedIncome, BigDecimal commonIncome, BigDecimal commonEquity) {
     }
 
     /** 업종 자체의 크기. 지표별 표본은 {@code _SECTOR_N}이 따로 답한다. */

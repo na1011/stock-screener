@@ -23,7 +23,17 @@ public record IssuerFacts(Map<String, Filing> filings,
                           Map<Key, Double> proxyNumerator,
                           Map<String, Double> coverShares,
                           Witnesses witnesses,
-                          Numerators numerators) {
+                          Numerators numerators,
+                          boolean preferredSignal) {
+
+    /**
+     * @param preferredSignal 우선주 · LP 비보통 청구권 신호({@link CommonEquity#SIGNAL})가 {@code IssuerTimeline.DENOMINATOR_FROM} 뒤 공시에
+     *                        0 아닌 값으로 실렸는가 — 거짓이면 보통주 자본은 지배 자본 그대로다(그 발행사의 행은 판정 {@code none})
+     */
+    public IssuerFacts(Map<String, Filing> filings, Map<Key, Double> weighted, Map<Key, Double> eps, Map<Key, Double> declaredNumerator,
+                       Map<Key, Double> proxyNumerator, Map<String, Double> coverShares, Witnesses witnesses, Numerators numerators) {
+        this(filings, weighted, eps, declaredNumerator, proxyNumerator, coverShares, witnesses, numerators, false);
+    }
 
     public IssuerFacts(Map<String, Filing> filings, Map<Key, Double> weighted, Map<Key, Double> eps,
                        Map<Key, Double> declaredNumerator, Map<Key, Double> proxyNumerator, Map<String, Double> coverShares) {
@@ -162,7 +172,25 @@ public record IssuerFacts(Map<String, Filing> filings,
                         pick(gaap, List.of("NetIncomeLoss"), "USD"), pick(gaap, List.of("ProfitLoss"), "USD"),
                         pick(gaap, List.of(ClassFactReader.NONCONTROLLING), "USD"), pick(gaap, ClassFactReader.PREFERRED_DIVIDENDS, "USD"),
                         pick(gaap, ClassFactReader.PARTICIPATING, "USD"), pick(gaap, List.of(ClassFactReader.GENERAL_PARTNER), "USD"),
-                        pick(gaap, List.of(ClassFactReader.LIMITED_PARTNERS), "USD")));
+                        pick(gaap, List.of(ClassFactReader.LIMITED_PARTNERS), "USD")),
+                preferredSignal(root.path("facts")));
+    }
+
+    /** {@link CommonEquity#SIGNAL} · {@link CommonEquity#SIGNAL_IFRS} 중 하나가 {@code DENOMINATOR_FROM} 뒤 공시에 0 아닌 값으로 실렸는가. */
+    static boolean preferredSignal(JsonNode facts) {
+        for (String taxonomy : List.of("us-gaap", "ifrs-full")) {
+            for (String tag : "us-gaap".equals(taxonomy) ? CommonEquity.SIGNAL : CommonEquity.SIGNAL_IFRS) {
+                for (Map.Entry<String, JsonNode> unit : facts.path(taxonomy).path(tag).path("units").properties()) {
+                    for (JsonNode x : unit.getValue()) {
+                        if (x.path("val").asDouble() != 0 && x.hasNonNull("filed")
+                                && !LocalDate.parse(x.path("filed").asString()).isBefore(IssuerTimeline.DENOMINATOR_FROM)) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        return false;
     }
 
     /**
@@ -214,9 +242,20 @@ public record IssuerFacts(Map<String, Filing> filings,
             }
         }
         for (String tag : concat(WEIGHTED, WEIGHTED_CONFIRMED, ClassFactReader.EPS_TAGS, List.of(ClassFactReader.DECLARED_NUMERATOR), PROXY,
-                List.of(DILUTED, PRO_FORMA, EPS_DILUTED, EPS_BASIC_AND_DILUTED, DILUTED_NUMERATOR), ClassFactReader.NUMERATOR_MATERIAL)) {
+                List.of(DILUTED, PRO_FORMA, EPS_DILUTED, EPS_BASIC_AND_DILUTED, DILUTED_NUMERATOR), ClassFactReader.NUMERATOR_MATERIAL,
+                CommonEquity.SIGNAL)) {
             if (gaap.has(tag)) {
                 prunedGaap.set(tag, gaap.get(tag));
+            }
+        }
+        JsonNode ifrs = root.path("facts").path("ifrs-full");
+        ObjectNode prunedIfrs = null;
+        for (String tag : CommonEquity.SIGNAL_IFRS) {
+            if (ifrs.has(tag)) {
+                if (prunedIfrs == null) {
+                    prunedIfrs = facts.putObject("ifrs-full");
+                }
+                prunedIfrs.set(tag, ifrs.get(tag));
             }
         }
         JsonNode cover = root.path("facts").path("dei").path(ClassFactReader.SHARES_OUTSTANDING);
@@ -234,12 +273,12 @@ public record IssuerFacts(Map<String, Filing> filings,
     public IssuerFacts withFilings(Map<String, Filing> extra) {
         Map<String, Filing> merged = new LinkedHashMap<>(filings);
         extra.forEach(merged::putIfAbsent);
-        return new IssuerFacts(merged, weighted, eps, declaredNumerator, proxyNumerator, coverShares, witnesses, numerators);
+        return new IssuerFacts(merged, weighted, eps, declaredNumerator, proxyNumerator, coverShares, witnesses, numerators, preferredSignal);
     }
 
     /** 분모 값만 바꾼 사본(지금 경로 재료를 고친 판 · {@code IssuerTimeline}). */
     public IssuerFacts withWeighted(Map<Key, Double> replaced) {
-        return new IssuerFacts(filings, replaced, eps, declaredNumerator, proxyNumerator, coverShares, witnesses, numerators);
+        return new IssuerFacts(filings, replaced, eps, declaredNumerator, proxyNumerator, coverShares, witnesses, numerators, preferredSignal);
     }
 
     /**
