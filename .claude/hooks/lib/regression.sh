@@ -194,6 +194,40 @@ echo "── deny 는 새 ask 보다도 먼저다 ──"
 check deny "pkill 과 파괴 삭제가 같이 있으면"  "pkill -f java && rm -rf build" guard
 check deny "pg_restore -d 와 파괴 SQL"         'pg_restore -d s /tmp/x.dump && psql -d x -c "drop table y"' guard
 
+echo "── 드라이런 재료 삭제 (scratchpad rm -rf · stock_screener_gate_ dropdb) ──"
+# 통과는 scratchpad 아래 절대경로 리터럴과 `stock_screener_gate_` DB 하나뿐이다. 나머지 줄은 그 예외가
+# 넓어지지 않았는지 잰다 — 원래 가드에서는 위 여섯 pass 줄만 deny였다(2026-10-26 대조군).
+# 링크 판정은 실제 파일을 봐야 하므로 판정 대상 꼴(`/tmp/claude-<uid>/…/scratchpad`)의 픽스처를 만든다.
+fx_root="/tmp/claude-$(id -u)/hook-regression-$$"
+fx="$fx_root/s/scratchpad"; fx_out=$(mktemp -d)
+mkdir -p "$fx/den/sub"; ln -s "$fx_out" "$fx/escape"
+check pass "scratchpad 아래 파일·디렉터리"     "rm -rf $fx/den $fx/den/sub" guard
+check pass "/private 접두 · 2>/dev/null"       "rm -rf /private$fx/den 2>/dev/null" guard
+check pass "없는 대상(no-op)"                  "rm -rf $fx/nothing/here" guard
+check pass "&& 뒤 · ls 와 함께"                "ls $fx && rm -rf $fx/den" guard
+check deny "scratchpad 자체"                   "rm -rf $fx" guard
+check deny ".. 로 빠져나감"                    "rm -rf $fx/../../x" guard
+check deny "글롭"                              "rm -rf $fx/*" guard
+check deny "변수"                              'rm -rf $D/den' guard
+check deny "상대경로"                          "rm -rf den" guard
+check deny "따옴표 경로"                       "rm -rf \"$fx/den\"" guard
+check deny "링크로 밖을 가리킴"                "rm -rf $fx/escape/x" guard
+check deny "대상 섞임"                         "rm -rf $fx/den /tmp/x" guard
+check deny "-- 뒤 상대 대상"                   "rm -rf $fx/den -- -x" guard
+check deny "xargs (stdin 대상)"                "find $fx -name a | xargs rm -rf" guard
+check deny "scratchpad 아닌 tmp 경로"          "rm -rf /tmp/claude-$(id -u)/x/y/notscratch/z" guard
+check deny "scratchpad 깊이 흉내"              "rm -rf /tmp/claude-$(id -u)/a/scratchpad/z" guard
+check deny "드라이런 삭제 + force push"        "rm -rf $fx/den && git push --force" guard
+check pass "드라이런 DB"                       "dropdb stock_screener_gate_den1" guard
+check pass "드라이런 DB --if-exists · 절대경로" "/opt/homebrew/bin/dropdb --if-exists stock_screener_gate_x" guard
+check deny "공유 시험 DB"                      "dropdb stock_screener_test" guard
+check deny "접두 흉내"                         "dropdb stock_screener_gatex" guard
+check deny "둘을 함께"                         "dropdb stock_screener_gate_a stock_screener" guard
+check deny "값을 받는 플래그"                  "dropdb -U me stock_screener_gate_a" guard
+check deny "변수 이름"                         'dropdb $DB' guard
+check deny "psql drop database 는 그대로"      'psql -d postgres -c "drop database stock_screener_gate_a"' guard
+rm -rf "$fx_root" "$fx_out"
+
 echo "── 적재 인자 알림 ──"
 check 침묵 "적재 명령을 문서화한 커밋 메시지"  "$(hd 'git commit -F - <<MSG' 'docs: 절차' '' "./gradlew bootRun --args='--spring.profiles.active=bootstrap --job=initial-load'" 'MSG')" bootstrap
 check 발화 "실제 적재 실행(플래그 없음)"        "./gradlew bootRun --args='--spring.profiles.active=bootstrap --job=initial-load'" bootstrap

@@ -7,13 +7,13 @@
 # "이것이 따옴표 안인가"를 구분할 수 없어 `echo "rm -rf ..."` 같은 단순 언급까지 차단하고
 # 정작 `rm -rfd`는 놓친다. 그래서 따옴표를 걷어내고 명령 경계로 쪼갠 뒤 판정한다.
 #
-# 활성 등록은 `~/.claude/hooks/`의 사본 하나뿐이고, `.claude/hooks/`의 사본은 버전관리·드리프트
-# 대조용이며 등록하지 않는다. `~/.claude`는 git도 백업도 없어 전역 사본만 두면 파일이 날아갔을
-# 때 되살릴 곳이 없다. 등록 형태도 여기 적는다 — 파일과 등록이 같은 자리에 있으면 갈릴 수 없다.
-# `~/.claude/settings.json`의 `hooks`에:
+# 등록은 이 저장소의 `.claude/settings.json` 하나다(2026-10-26 사용자: *"중복 선언된 곳은 한 곳만
+# 선언해. 글로벌 설정과 프로젝트 설정이 겹친다면 프로젝트 설정으로."*). 그 전에는 전역
+# `~/.claude/settings.json`에도 같은 파일의 사본이 등록돼 한 호출에 두 번 돌았다. 전역 등록과 사본을
+# 걷었으므로 **이 하네스가 없는 프로젝트와 저장소 밖 세션에서는 이 가드가 돌지 않는다.**
 #
-#   "PreToolUse": [ { "matcher": "Bash",
-#     "hooks": [ { "type": "command", "command": "$HOME/.claude/hooks/guard-destructive.sh" } ] } ]
+# 드라이런 재료는 지울 수 있다 — 세션 scratchpad 아래만 지우는 `rm -rf`와 `stock_screener_gate_`
+# DB의 `dropdb`는 통과한다(`scratch_only_rm` · `dry_run_dropdb`). 그 밖은 지금처럼 deny다.
 set -euo pipefail
 
 # jq가 없으면 판정할 수 없다. 안전망이 워크플로우를 막지 않도록 조용히 통과시킨다.
@@ -98,6 +98,70 @@ short_flags_of() {
   echo "$out"
 }
 
+# `rm -rf`의 대상이 **전부** Claude Code 세션 scratchpad 아래인지 본다 — 드라이런 재료가 모이는 자리다.
+# 2026-10-26 사용자: *"드라이런 재료가 모이는 디렉토리에 한해서만 rm rf 와 같은 권한을 부여할 수 있어?"*
+# (10-16 *"드라이런 재료들은 필요 없어지면 제 때 제 때 너 스스로 지워."*의 연장).
+#
+# 좁게 판정한다 — 하나라도 확신이 없으면 false이고, 호출한 자리가 지금처럼 deny로 떨어진다.
+#   - 대상은 **절대경로 리터럴**만이다. `$`·글롭·`~`·따옴표·상대경로는 실행 때 무엇으로 펼쳐질지
+#     훅이 모른다. 대상이 없는 `xargs rm -rf`(stdin에서 받는다)도 같은 이유로 false다.
+#   - `.`·`..` 경로 성분은 false다. scratchpad 자체(그 아래 성분이 없는 것)도 false다.
+#   - 부모 디렉터리를 물리 경로로 풀어 scratchpad의 물리 경로 아래인지 본다 — 안에 심은 심볼릭
+#     링크가 저장소를 가리키면 글자로는 scratchpad인데 실제로는 밖을 지운다.
+# MUST NOT: `for tok in $seg`보다 글롭 검사를 늦추지 않는다 — 단어 분할이 글롭을 **훅의 cwd에서**
+# 펼쳐, 펼쳐진 이름이 검사를 통과한다.
+scratch_only_rm() {
+  local seg="$1" tok seen_rm=false ddash=false n=0 root parent phys rootphys
+  [[ "$seg" == *[\*\?\[]* ]] && return 1
+  for tok in $seg; do
+    if [ "$seen_rm" = false ]; then
+      case "$tok" in *=*) ;; *) [ "$(basename -- "$tok")" = rm ] && seen_rm=true ;; esac
+      continue
+    fi
+    if [ "$ddash" = false ]; then
+      case "$tok" in
+        --) ddash=true; continue ;;
+        -*) continue ;;
+        '>'*|[0-9]'>'*) continue ;;
+      esac
+    fi
+    [[ "$tok" =~ ^/[A-Za-z0-9._/@+-]+$ ]] || return 1
+    [[ "$tok" =~ (^|/)\.\.?(/|$) ]] && return 1
+    [[ "$tok" =~ ^((/private)?/tmp/claude-[0-9]+/[^/]+/[^/]+/scratchpad)/[^/]+ ]] || return 1
+    root="${BASH_REMATCH[1]}"
+    parent=$(dirname -- "$tok")
+    if [ -d "$parent" ]; then
+      phys=$(cd -- "$parent" && pwd -P) || return 1
+      rootphys=$(cd -- "$root" && pwd -P) || return 1
+      case "$phys/" in "$rootphys"/*) ;; *) return 1 ;; esac
+    fi
+    n=$((n+1))
+  done
+  [ "$n" -gt 0 ]
+}
+
+# `dropdb`의 대상이 드라이런 DB 하나인지 본다. 표지는 `stock_screener_gate_` 접두다 —
+# `ops/apply-window/small-db.sh`가 그 이름만 만들게 강제하고 「판정이 끝나면 지울 재료라는 표지」로
+# 적어 둔 규약이다. 운영 `stock_screener`와 공유 시험 DB `stock_screener_test`는 접두가 달라 안 맞는다.
+# 값을 받는 플래그(`-h host`·`-U user`)의 값은 위치 인자로 세여 둘이 되므로 false다 — 좁게 둔다.
+# `psql -c "drop database …"`는 여기 오지 않는다(§1b가 deny) — 드라이런 DB도 `dropdb`로 지운다.
+dry_run_dropdb() {
+  local seg="$1" tok seen=false n=0 name=""
+  [[ "$seg" == *[\*\?\[\$]* ]] && return 1
+  for tok in $seg; do
+    if [ "$seen" = false ]; then
+      case "$tok" in *=*) ;; *) [ "$(basename -- "$tok")" = dropdb ] && seen=true ;; esac
+      continue
+    fi
+    case "$tok" in
+      -*) continue ;;
+      '>'*|[0-9]'>'*) continue ;;
+    esac
+    name="$tok"; n=$((n+1))
+  done
+  [ "$n" -eq 1 ] && [[ "$name" =~ ^stock_screener_gate_[a-z0-9_]+$ ]]
+}
+
 has_long_flag() {
   echo " $1 " | grep -qE "[[:space:]]${2}([[:space:]]|=|$)"
 }
@@ -143,6 +207,7 @@ while IFS= read -r seg; do
          || { has_long_flag "$seg" '--recursive' && has_long_flag "$seg" '--force'; } \
          || { [[ "$flags" == *r* ]] && has_long_flag "$seg" '--force'; } \
          || { has_long_flag "$seg" '--recursive' && [[ "$flags" == *f* ]]; }; then
+        scratch_only_rm "$seg" && continue
         is_destructive=true; break
       fi
       ;;
@@ -164,7 +229,8 @@ while IFS= read -r seg; do
       fi
       ;;
     dropdb)
-      # 덤프가 없으면 되돌릴 수 없고, 이 저장소에 정당한 호출이 하나도 없다.
+      # 덤프가 없으면 되돌릴 수 없다. 정당한 호출은 드라이런 DB를 지우는 것 하나다.
+      dry_run_dropdb "$seg" && continue
       is_destructive=true; break
       ;;
     pkill|killall)
