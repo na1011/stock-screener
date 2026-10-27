@@ -65,6 +65,7 @@ check() {
       home=$(mktemp -d)
       out=$(jq -n --arg c "$cmd" '{tool_input:{command:$c}}' \
             | HOME="$home" "$HOOKS/guard-rebuild-without-dump.sh" 2>/dev/null)
+      rm -rf "$home"
       if [ -z "$out" ]; then got="pass"
       else got=$(printf '%s' "$out" | jq -r '.hookSpecificOutput.permissionDecision // "pass"'); fi ;;
     rebuild-dump)
@@ -73,6 +74,7 @@ check() {
       : > "$home/Library/Application Support/stock-screener/dumps/fixture.dump"
       out=$(jq -n --arg c "$cmd" '{tool_input:{command:$c}}' \
             | HOME="$home" "$HOOKS/guard-rebuild-without-dump.sh" 2>/dev/null)
+      rm -rf "$home"
       if [ -z "$out" ]; then got="pass"
       else got=$(printf '%s' "$out" | jq -r '.hookSpecificOutput.permissionDecision // "pass"'); fi ;;
   esac
