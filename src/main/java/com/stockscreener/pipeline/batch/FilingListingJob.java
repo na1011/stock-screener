@@ -23,7 +23,8 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 원장 공시 목록을 받아 소비 장부에 쌓는다(ADR-0176 · 재무 동기 2부 1차). 평일 14:16 크론과 {@code --job=filing-listing}이 부른다.
+ * 원장 공시 목록을 받아 소비 장부에 쌓는다(ADR-0176 · 재무 동기 2부 1차). 평일 13:30 일일 갱신 앞 · 14:16 크론과 {@code --job=filing-listing}이
+ * 부른다.
  *
  * <p><b>값을 바꾸는 표를 읽지도 쓰지도 않는다</b> — 쓰는 것은 {@code filing_listing_day}·{@code filing_consumption} 둘뿐이고,
  * 장부 행을 먹는 소비 단계는 아직 없다(2차).

@@ -314,6 +314,8 @@ class FilingConsumptionJobTest {
         assertThat(alerts).noneSatisfy(a -> assertThat(a.title()).contains("시도 상한"));
 
         candidateRow("0099000012-26-000002", "10-Q");
+        // 다음 평일 — 시도 수는 시도한 날(KST) 수라 같은 날 다시 물으면 안 오른다(아래 sameDayRetryCountsOnce).
+        jdbc.update("UPDATE filing_consumption SET last_attempt_at = last_attempt_at - interval '1 day' WHERE id = ?", row);
         job.runCandidates(TODAY, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
         assertThat(financialSource.fetchedStockIds).as("새 공시가 그 종목을 깨운다").hasSize(fetched + 1);
         assertThat(attemptsOf(row)).as("깨어난 종목의 옛 행도 다시 판정한다")
@@ -346,6 +348,19 @@ class FilingConsumptionJobTest {
         assertThat(groundOf(row)).isNull();
         assertThat(jdbc.queryForObject("SELECT last_reason FROM filing_consumption WHERE id = ?", String.class, row))
                 .startsWith(SecFilingConsumption.OUR_SIDE);
+        assertThat(attemptsOf(row)).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("같은 날 두 번 시도해도 시도 수는 하나다 — 소비가 13:30 앞과 14:16에 돌고, 후보 상한은 평일 수다")
+    void sameDayRetryCountsOnce() {
+        long row = candidateRow("0099000012-26-000001", "6-K");
+        financialSource.failingWith(usCandidate, new com.stockscreener.pipeline.datasource.DataSourceException(
+                com.stockscreener.pipeline.datasource.DataSourceException.Kind.NOT_FOUND, "fake", "HTTP 404"));
+
+        job.runCandidates(TODAY, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+        job.runCandidates(TODAY, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+
         assertThat(attemptsOf(row)).isEqualTo(1);
     }
 

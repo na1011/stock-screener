@@ -124,6 +124,8 @@ class PipelineSchedulerChainTest {
 
         when(indicatorBackfillJob.rewriteOriginLayer(any(), any(), anyList())).thenReturn(BatchStatus.SUCCESS);
         when(indicatorBackfillJob.rebuildDerived(any(), any())).thenReturn(BatchStatus.SUCCESS);
+        // 평상시: 13:30 앞 소비가 먹인 것이 없다.
+        givenConsumption(List.of(), List.of(), List.of());
 
         // MUST: IndicatorReconciler를 목으로 바꾸지 않는다. 「① 실패면 ② 안 돎」·「상한 없음」·「유도가 먼저」를
         // 단언하는 곳이 이 시험인데, 목을 주면 그 단언이 전부 스케줄러 밖으로 나가 죽는다 —
@@ -185,6 +187,68 @@ class PipelineSchedulerChainTest {
 
         assertThatThrownBy(() -> scheduler(true).runFilingListing()).isSameAs(boom);
         verify(filingConsumptionJob).runCandidates(any(), eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER));
+    }
+
+    @Test
+    @DisplayName("13:30은 목록 → 소비 → 국내 재료 → 유도 → 일일 갱신 → 좁힌 화해 순서다 — 최신일 지표·워치리스트가 전날 공시를 싣는다")
+    void dailyUpdateConsumesFilingsFirst() {
+        givenConsumption(List.of("005930", "GOOGL"), List.of("005930"), List.of("GOOGL"));
+
+        scheduler.runDailyUpdate();
+
+        InOrder order = inOrder(filingListingJob, filingConsumptionJob, krXbrlCollectJob, shareBasisDeriver,
+                governanceDeriveJob, dailyUpdateJob, indicatorBackfillJob);
+        order.verify(filingListingJob).run(any(), eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER));
+        order.verify(filingConsumptionJob).runAndReport(any(), eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER));
+        order.verify(krXbrlCollectJob).runForLoadedStatements(any(), eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER),
+                eq(List.of("005930")));
+        order.verify(shareBasisDeriver).derive("US");
+        order.verify(governanceDeriveJob).run(eq(TARGET_DATE), eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER), eq(List.of()));
+        order.verify(dailyUpdateJob).run(TARGET_DATE, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+        // 좁힌 화해 — 원본층은 지운 종목만, 파생층은 창 전체(14:00 사슬과 같은 꼴)
+        order.verify(indicatorBackfillJob).rewriteOriginLayer(eq(TARGET_DATE), any(), eq(List.of("GOOGL")));
+        order.verify(indicatorBackfillJob).rebuildDerived(eq(TARGET_DATE), any());
+    }
+
+    @Test
+    @DisplayName("13:30 앞 소비가 먹인 것이 없으면 유도도 화해도 안 돈다 — 거버넌스 사실을 하루 두 번 지우고 넣지 않는다")
+    void dailyUpdateSkipsDeriveWhenNothingWasFed() {
+        scheduler.runDailyUpdate();
+
+        verify(dailyUpdateJob).run(TARGET_DATE, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+        verifyNoInteractions(shareBasisDeriver, governanceDeriveJob, indicatorBackfillJob);
+    }
+
+    @Test
+    @DisplayName("13:30 앞 목록이 던져도 시세는 받고, 끝에서 그 예외를 다시 던진다")
+    void listingFailureStillRunsDailyUpdate() {
+        IllegalStateException boom = new IllegalStateException("목록 고장");
+        when(filingListingJob.run(any(), any())).thenThrow(boom);
+
+        assertThatThrownBy(() -> scheduler.runDailyUpdate()).isSameAs(boom);
+
+        verify(dailyUpdateJob).run(TARGET_DATE, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+    }
+
+    @Test
+    @DisplayName("일일 갱신이 던지면 그것이 주 예외다 — 앞 단계 예외는 그 아래에 단다")
+    void dailyUpdateFailureIsThePrimaryError() {
+        IllegalStateException listing = new IllegalStateException("목록 고장");
+        IllegalStateException daily = new IllegalStateException("시세 고장");
+        when(filingListingJob.run(any(), any())).thenThrow(listing);
+        when(dailyUpdateJob.run(any(), any())).thenThrow(daily);
+
+        assertThatThrownBy(() -> scheduler.runDailyUpdate()).isSameAs(daily).hasSuppressedException(listing);
+    }
+
+    @Test
+    @DisplayName("13:30 앞 소비가 종료 신호로 끊기면 일일 갱신을 시작하지 않는다 — 내려가는 프로세스가 쿼터를 더 태우지 않는다")
+    void shutdownBeforeDailyUpdateSkipsIt() {
+        when(filingConsumptionJob.runAndReport(any(), any())).thenThrow(new BatchShutdownException("종료"));
+
+        scheduler.runDailyUpdate();
+
+        verifyNoInteractions(dailyUpdateJob);
     }
 
     @Test
@@ -807,11 +871,17 @@ class PipelineSchedulerChainTest {
                 .isEqualTo(BatchExecutionRecorder.DeclaredScope.FULL);
         BatchExecutionRecorder.TriggeredBy scheduled = BatchExecutionRecorder.TriggeredBy.SCHEDULER;
 
-        // 13:30
+        // 13:30 — 앞 단계의 공시 목록·소비도 정기 실행이다(14:16과 같은 인자)
         scheduler.runDailyUpdate();
         ArgumentCaptor<LocalDate> dailyDate = ArgumentCaptor.forClass(LocalDate.class);
         verify(dailyUpdateJob).run(dailyDate.capture(), eq(scheduled));
         current.accept(dailyDate.getValue());
+        ArgumentCaptor<LocalDate> listingDate = ArgumentCaptor.forClass(LocalDate.class);
+        verify(filingListingJob).run(listingDate.capture(), eq(scheduled));
+        current.accept(listingDate.getValue());
+        ArgumentCaptor<LocalDate> consumptionDate = ArgumentCaptor.forClass(LocalDate.class);
+        verify(filingConsumptionJob).runAndReport(consumptionDate.capture(), eq(scheduled));
+        current.accept(consumptionDate.getValue());
 
         // 14:00 사슬 — 무효화가 있는 날(사슬 안 화해까지 탄다)
         givenInvalidation("005440", LocalDate.parse("2020-01-02"));
@@ -906,6 +976,11 @@ class PipelineSchedulerChainTest {
         ArgumentCaptor<LocalDate> rebalanceDate = ArgumentCaptor.forClass(LocalDate.class);
         verify(universeRebalanceJob).run(rebalanceDate.capture(), eq(scheduled));
         current.accept(rebalanceDate.getValue());
+    }
+
+    private void givenConsumption(List<String> fed, List<String> fedKr, List<String> invalidated) {
+        when(filingConsumptionJob.runAndReport(any(), any()))
+                .thenReturn(new FilingConsumptionJob.Report(BatchStatus.SUCCESS, fed, fedKr, invalidated));
     }
 
     private void givenInvalidation() {

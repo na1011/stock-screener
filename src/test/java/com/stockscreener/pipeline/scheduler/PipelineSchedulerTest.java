@@ -170,7 +170,8 @@ class PipelineSchedulerTest {
         assertThat(chain).isNotNull();
         assertThat(chain.toLocalDate()).isEqualTo(daily.toLocalDate());
         assertThat(chain.toLocalTime()).isAfter(daily.toLocalTime());
-        // 일일 갱신이 실측 13분 36초다. 여유가 그보다 넉넉해야 밀리지 않는다.
+        // 풀이 1이라 겹치지는 않는다 — 이 간격은 「보통 날 밀리지 않는다」의 하한이다. 일일 갱신은 2026-10 정기 성공 22회가
+        // 14분 22초~27분 41초라 긴 날은 이미 14시를 넘는다(값은 안 틀린다 · PipelineScheduler.runCorporateActionChain).
         assertThat(java.time.Duration.between(daily, chain).toMinutes())
                 .isGreaterThanOrEqualTo(15);
     }

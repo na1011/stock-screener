@@ -187,21 +187,69 @@ public class PipelineScheduler {
      * 오전 5~6시에 닫는다. 붙일 때 별도 스케줄이 필요하다.
      *
      * <p>MUST NOT: 여기서 초기 적재 여부를 분기하지 않는다.
+     *
+     * <h2>일일 갱신 앞에서 전날 공시를 먼저 먹인다</h2>
+     * <p>순서는 목록 → 소비 → (먹인 국내 종목의) 보통주 몫 재료 → (먹인 종목이 있으면) 입력 유도 → 일일 갱신 → (소비가 지운 종목이
+     * 있으면) 좁힌 화해다. <b>일일 갱신이 최신일 지표와 워치리스트를 쓰는데, 그 전날 공시가 14:16에야 소비되면 그 종목의 최신일 행이
+     * 14:20 화해 전까지 직전 분기 재무로 계산되고 워치리스트는 그 값으로 하루 한 번 판정된다</b>(2026-10-30 실측: GOOGL 10-Q
+     * filingDate 10-29 · 10-29 행이 13:40에 종가 283.82 × Q2 TTM EPS 19.9677로 쓰였고 15:16 화해가 Q3로 고쳤다). 미국 일일 색인은
+     * 그날 미 동부 22:01~22:16(KST 다음 날 11:01~11:16)에 올라와 13:30이면 전날까지 닫힌다(5일 실측 · {@code sec-edgar-daily-index.md}).
+     * <ul>
+     *   <li><b>유도까지 앞에 두는 이유</b>: 새 판의 주식수 기저 판정은 {@code NULL}(= OK)이고 거버넌스 사실은 FY 판에서 짓는다 —
+     *       유도 없이 일일 갱신을 돌리면 새 재무와 어제 판정·사실이 섞인 행이 워치리스트에 실린다. 유도는 저장분만 읽어 외부 0콜이다.</li>
+     *   <li><b>재료를 좁혀 받는 이유</b>: 국내 관문 켬에서 보통주 몫이 안 붙은 새 판은 미표시다. 정기 받기(14:16 끝)는 상한이 밀린 판에
+     *       먼저 쓰여 방금 먹인 판을 보장하지 않으므로 먹인 국내 종목만 상한 없이 받는다(값을 안 바꾸는 재료 표).</li>
+     *   <li><b>좁힌 화해</b>: 소비 FR이 정정을 만나면 그 종목 지표를 창 전체로 지운다. 일일 갱신은 원본층 창과 최신일 파생층만 다시
+     *       쓰므로 과거 날짜 백분위가 14:20까지 빈다 — 14:00 사슬과 같은 꼴로 그 자리에서 채운다.</li>
+     * </ul>
+     * <p>앞 단계의 실패는 시세를 막지 않는다 — 모아 두고 일일 갱신 뒤에 던진다. 일일 갱신이 던지면 그것이 주 예외이고 앞 단계 예외는
+     * 그 아래에 단다. 종료 신호는 그 자리에서 끝낸다(ADR-0078).
      */
     @Scheduled(cron = "0 30 13 * * MON-FRI", zone = "Asia/Seoul")
     public void runDailyUpdate() {
         try {
             underWriteLock("runDailyUpdate", () -> {
-                LocalDate targetDate = DailyUpdateJob.targetDateFor(LocalDate.now(KR_ZONE));
+                LocalDate today = LocalDate.now(KR_ZONE);
+                LocalDate targetDate = DailyUpdateJob.targetDateFor(today);
+                RuntimeException held = null;
+                FilingConsumptionJob.Report consumption = null;
+                try {
+                    filingListingJob.run(today, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+                    consumption = filingConsumptionJob.runAndReport(today, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+                    krXbrlCollectJob.runForLoadedStatements(today, BatchExecutionRecorder.TriggeredBy.SCHEDULER,
+                            consumption.fedKrTickers());
+                    if (!consumption.fedTickers().isEmpty()) {
+                        indicatorReconciler.deriveInputs(targetDate, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+                    }
+                } catch (BatchShutdownException e) {
+                    log.info("일일 갱신 앞 공시 소비가 종료로 중단됐다. today={} — 일일 갱신을 시작하지 않는다.", today);
+                    return;
+                } catch (RuntimeException e) {
+                    // 목록이 던져도 소비는 이미 쌓인 행을 먹일 수 있지만, 여기서는 한 덩어리로 끊는다 — 14:16이 같은 순서로 다시 돈다.
+                    held = e;
+                }
                 log.info("일일 갱신을 시작한다. targetDate={}", targetDate);
                 try {
                     dailyUpdateJob.run(targetDate, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+                    if (consumption != null && !consumption.invalidatedTickers().isEmpty()) {
+                        indicatorReconciler.reconcile(indicatorReconciler.dataAsOf(today),
+                                consumption.invalidatedTickers(), BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+                    }
                 } catch (BatchShutdownException e) {
                     // IMPORTANT — 운영에서 종료가 배치를 끊는 경로가 실제로 여기다. 안 잡으면 Spring의
                     // 기본 처리가 ERROR로 찍고, sentry.logging.minimum-event-level이 error라 배포마다
                     // 이슈가 하나씩 쌓인다. catch-all이 아니라 이름 붙은 신호 하나만 받는다.
                     log.info("일일 갱신이 종료로 중단됐다. targetDate={} — ABORTED로 남는다. "
                             + "시세는 조회 창이 다시 시도하지만 백분위·워치리스트는 안 이어진다.", targetDate);
+                    return;
+                } catch (RuntimeException e) {
+                    if (held != null) {
+                        e.addSuppressed(held);
+                    }
+                    throw e;
+                }
+                if (held != null) {
+                    throw held;
                 }
             });
         } finally {
@@ -276,7 +324,8 @@ public class PipelineScheduler {
      * ({@link IndicatorReconciler#reconcile}).
      *
      * <h2>왜 14시인가</h2>
-     * <p>13시 30분 일일 갱신이 실측 13분 36초라 13시 44분에 끝난다. 그리고 스케줄러 스레드
+     * <p>13시 30분 일일 갱신은 2026-10 정기 성공 22회가 14분 22초~27분 41초(중앙값 21분)이고, 그 앞에 전날 공시 소비가 붙는다
+     * ({@link #runDailyUpdate}) — 긴 날은 14시를 넘겨 이 사슬이 밀린다(값은 안 틀린다). 그리고 스케줄러 스레드
      * 풀이 1이라 두 {@code @Scheduled}가 <b>원리적으로 동시에 돌지 않는다</b> — 앞이 길어지면
      * 이쪽이 밀릴 뿐이다. MUST NOT: {@code spring.task.scheduling.pool.size}를 키우지 않는다.
      * 키우는 순간 이 겹침 방지가 사라지고, 두 잡이 같은 종목의 {@code price_daily}를 함께 쓴다.
@@ -324,8 +373,8 @@ public class PipelineScheduler {
                     //
                     // MUST NOT: 여기서 입력 유도(deriveInputs)를 먼저 부르지 않는다. 재구축이 원장을 APPLIED로
                     // 바꿔 기저 판정의 입력이 바뀐 것은 맞지만, 유도가 던지면 지워진 종목이 화해 없이 남아
-                    // 무거운 잡 날 한 시간을 빈다 — 이 자리를 둔 이유가 통째로 무너진다. 어제 판정으로 채워도
-                    // 13:30과 같은 의미이고(판정 NULL = OK), 같은 오후 14:18 유도 → 14:20 화해가 새 판정으로 덮는다.
+                    // 무거운 잡 날 한 시간을 빈다 — 이 자리를 둔 이유가 통째로 무너진다. 그날 13:30까지의 판정으로 채워도
+                    // 13:30 일일 갱신과 같은 입력이고(판정 NULL = OK), 같은 오후 14:18 유도 → 14:20 화해가 새 판정으로 덮는다.
                     LocalDate dataAsOf = indicatorReconciler.dataAsOf(asOf);
                     indicatorReconciler.reconcile(dataAsOf, invalidation.tickers(),
                             BatchExecutionRecorder.TriggeredBy.SCHEDULER);
@@ -505,6 +554,10 @@ public class PipelineScheduler {
      * 빠진다. 풀이 1이라 이 크론은 14:15 뒤, 14:18 앞에 돈다(앞이 길어지면 밀릴 뿐 순서는 그대로다). 대상일은 실행일(KST)이다 —
      * 미국은 어제(미 동부)까지의 색인이 KST 11시께 올라와 있고, 국내는 어제까지 닫고 오늘은 받기만 한다.
      *
+     * <p><b>13:30 일일 갱신 앞에서 목록·소비가 이미 한 번 돌았다</b>({@link #runDailyUpdate}). 여기서 다시 도는 이유는 둘이다 —
+     * 미국 companyfacts가 아직 그 공시를 안 실어 열린 채 남은 행을 다시 묻고(소비 판정은 그 응답이 근거다), 국내 장중 접수분을
+     * 받는다. 미국 커서는 이미 전날까지 닫혀 분기 목록 1콜로 끝난다. 장부는 공시 단위로 멱등이고 시도 수는 하루에 한 번 센다.
+     *
      * <p>목록 뒤에 소비({@link FilingConsumptionJob})를 잇는다 — 열린 장부 행을 지금 편입 종목의 좁힌 FR·FSR({@code GAP_FILL})로
      * 먹이고, 그 종목을 쓴 트랜잭션 안에서 소비됨을 표시한다. 정정이 지운 지표는 14:20 화해가 채운다.
      *
@@ -601,7 +654,7 @@ public class PipelineScheduler {
      * 화해의 입력 유도. <b>평일 14시 18분(KST)</b> — 주식수 기저(미국) → 거버넌스 사실(보존 창 편입).
      *
      * <p><b>화해(14:20)와 크론을 가르는 이유</b>는 실패가 서로를 막지 않게 하려는 것이다. 유도가 실패하면
-     * 어제 판정·유도가 남아 있고 화해는 그것으로 돈다 — 13:30 일일 갱신도 판정과 무관하게 매일
+     * 어제 판정·유도가 남아 있고 화해는 그것으로 돈다 — 13:30 일일 갱신도 그 앞 유도(소비가 먹인 날만)가 던지든 말든
      * 계산한다(판정 {@code NULL}은 OK로 읽힌다). 한 메서드에 묶으면 유도 실패 하루가 전 종목의
      * 과거 순위를 하루 낡게 둔다.
      *

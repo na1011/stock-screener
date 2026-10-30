@@ -21,6 +21,7 @@ import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -30,8 +31,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Predicate;
 
 /**
- * 소비 장부의 열린 행을 지금 편입 종목의 좁힌 FR·FSR로 먹인다(ADR-0176 2차). 평일 14:16 크론이 목록 뒤에 부르고
- * {@code --job=filing-consumption}이 손으로 부른다.
+ * 소비 장부의 열린 행을 지금 편입 종목의 좁힌 FR·FSR로 먹인다(ADR-0176 2차). 평일 13:30 일일 갱신 앞과 14:16 크론이 목록 뒤에
+ * 부르고 {@code --job=filing-consumption}이 손으로 부른다.
  *
  * <p><b>표시는 그 종목을 쓴 트랜잭션 안에서 한다</b>(FR·FSR의 소비 훅). 「썼다」와 「소비됨」이 갈리지 않는다 — 종목이 실패하면
  * 둘 다 되돌아가고 행은 열린 채 다음 실행이 다시 먹인다. 근거는 그 FR·FSR이 받은 응답이다:
@@ -95,11 +96,31 @@ public class FilingConsumptionJob {
         this.batchExecutions = batchExecutions;
     }
 
-    /** 한 시장의 결과. */
-    private record MarketResult(String note, boolean failed, int consumed) {
+    /** 한 시장의 결과 — 먹인 티커(FR·FSR을 부른 종목)와 그 FR이 지표를 지운 티커를 함께 낸다. */
+    private record MarketResult(String note, boolean failed, int consumed, List<String> fed, List<String> invalidated) {
+
+        MarketResult(String note, boolean failed, int consumed) {
+            this(note, failed, consumed, List.of(), List.of());
+        }
+    }
+
+    /**
+     * 소비 한 판의 결과. 13:30 일일 갱신 앞 단계가 읽는다 — 먹인 종목이 있으면 입력 유도를, 국내 종목이면 보통주 몫 재료를,
+     * 무효화가 있으면 일일 갱신 뒤 좁힌 화해를 잇는다({@code PipelineScheduler#runDailyUpdate}).
+     *
+     * @param fedTickers         FR·FSR을 부른 종목(두 시장) — 소비 표시와 무관하게 그 FR이 판을 썼을 수 있다
+     * @param fedKrTickers       그중 국내
+     * @param invalidatedTickers FR이 정정·교정으로 지표를 지운 종목
+     */
+    public record Report(BatchStatus status, List<String> fedTickers, List<String> fedKrTickers,
+                         List<String> invalidatedTickers) {
     }
 
     public BatchStatus run(LocalDate todayKst, BatchExecutionRecorder.TriggeredBy triggeredBy) {
+        return runAndReport(todayKst, triggeredBy).status();
+    }
+
+    public Report runAndReport(LocalDate todayKst, BatchExecutionRecorder.TriggeredBy triggeredBy) {
         BatchExecutionContext execution = batchExecutions.start(JOB_NAME, todayKst, triggeredBy, MARKETS.size(),
                 BatchExecutionRecorder.DeclaredScope.FULL);
         execution.plan(CollectionPhase.FILING_CONSUMPTION, MARKETS.size());
@@ -111,6 +132,9 @@ public class FilingConsumptionJob {
         int failed = 0;
         long consumed = 0;
         List<String> notes = new ArrayList<>();
+        Set<String> fed = new LinkedHashSet<>();
+        Set<String> fedKr = new LinkedHashSet<>();
+        Set<String> invalidated = new LinkedHashSet<>();
         try {
             for (String market : MARKETS) {
                 execution.stage(market + " 공시 소비");
@@ -119,6 +143,11 @@ public class FilingConsumptionJob {
                         : consumeKr(todayKst, narrowBy);
                 notes.add(market + ": " + result.note());
                 consumed += result.consumed();
+                fed.addAll(result.fed());
+                if ("KR".equals(market)) {
+                    fedKr.addAll(result.fed());
+                }
+                invalidated.addAll(result.invalidated());
                 if (result.failed()) {
                     failed++;
                 } else {
@@ -134,7 +163,8 @@ public class FilingConsumptionJob {
         if (overdue != null) {
             execution.alertOperator(AlertSeverity.WARNING, "공시가 소비되지 않고 쌓였다", overdue);
         }
-        return execution.finish(String.join(" | ", notes));
+        return new Report(execution.finish(String.join(" | ", notes)), List.copyOf(fed), List.copyOf(fedKr),
+                List.copyOf(invalidated));
     }
 
     private MarketResult consumeUs(LocalDate today, BatchExecutionRecorder.TriggeredBy by) {
@@ -168,7 +198,7 @@ public class FilingConsumptionJob {
         int unreached = settleUnreachedUs(open, reached, Objects.requireNonNull(run.executionId(), "FR 실행 id"), counts);
         return new MarketResult("열린 행 %d(%d종목) · FR %s · 소비 %d · 열림 %d · 종목 실패로 못 닿음 %d".formatted(open.size(),
                 tickers.size(), status, counts.consumed.get(), counts.stillOpen.get(), unreached),
-                status == BatchStatus.FAILED, counts.consumed.get());
+                status == BatchStatus.FAILED, counts.consumed.get(), tickers, run.tickers());
     }
 
     /**
@@ -268,15 +298,20 @@ public class FilingConsumptionJob {
         List<OpenRow> frRows = keyed.stream().filter(OpenRow::frOpen).toList();
         String frNote = "FR 대상 0";
         boolean failed = false;
+        Set<String> fed = new LinkedHashSet<>();
+        List<String> invalidated = List.of();
         if (!frRows.isEmpty()) {
             Set<Long> reached = new HashSet<>();
-            BatchStatus status = financialRefill.runForConsumption(today, by, yearsBack(today, frRows), tickersOf(frRows),
-                    (executionId, security, outcome) -> {
+            fed.addAll(tickersOf(frRows));
+            FinancialRefillJob.Invalidation run = financialRefill.runForConsumption(today, by, yearsBack(today, frRows),
+                    tickersOf(frRows), (executionId, security, outcome) -> {
                         reached.add(security.stockId());
                         judgeKr(store.openFrOf("KR", security.stockId()), outcome.filingTrace(), fr,
                                 (row, latest) -> store.markFrConsumed(row.id(), "DART_RESPONSE", latest, executionId),
                                 "FR");
-                    }).status();
+                    });
+            BatchStatus status = run.status();
+            invalidated = run.tickers();
             int unreached = markUnreached(frRows, reached, OpenRow::frOpen, "FR");
             failed = status == BatchStatus.FAILED;
             frNote = "FR %s · 소비 %d · 열림 %d · 못 닿음 %d".formatted(status, fr.consumed.get(), fr.stillOpen.get(),
@@ -291,6 +326,7 @@ public class FilingConsumptionJob {
         String fsrNote = "FSR 대상 0";
         if (!fsrRows.isEmpty()) {
             Set<Long> reached = new HashSet<>();
+            fed.addAll(tickersOf(fsrRows));
             BatchStatus status = fullStatementRefill.runForConsumption(today, by, yearsBack(today, fsrRows),
                     tickersOf(fsrRows), (executionId, security, collected) -> {
                         reached.add(security.stockId());
@@ -303,7 +339,7 @@ public class FilingConsumptionJob {
                     unreached);
         }
         return new MarketResult("열린 행 %d · 키 없음 %d · %s · %s".formatted(open.size(), unkeyed, frNote, fsrNote),
-                failed, fr.consumed.get() + fsr.consumed.get());
+                failed, fr.consumed.get() + fsr.consumed.get(), List.copyOf(fed), invalidated);
     }
 
     @FunctionalInterface

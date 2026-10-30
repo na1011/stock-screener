@@ -257,11 +257,20 @@ public class FilingLedgerStore {
                 """, evidence, executionId, id);
     }
 
-    /** 소비하지 못한 시도를 남긴다 — 행은 열린 채이고 사유만 바뀐다. */
+    /**
+     * 소비하지 못한 시도를 남긴다 — 행은 열린 채이고 사유만 바뀐다.
+     *
+     * <p>{@code attempts}는 <b>시도한 날(KST) 수</b>다 — 같은 날 두 번째 시도는 사유와 시각만 바꾼다. 소비가 평일 13:30 앞과 14:16에
+     * 두 번 돌고, 후보 상한({@code FilingConsumptionJob.CANDIDATE_MAX_ATTEMPTS})이 「편입 지연 경보와 같은 평일 수」라서다.
+     */
     public int recordAttempt(long id, String reason) {
         return jdbc.update("""
                 UPDATE filing_consumption
-                SET attempts = attempts + 1, last_attempt_at = now(), last_reason = ?
+                SET attempts = attempts + CASE
+                        WHEN last_attempt_at IS NULL
+                          OR (last_attempt_at AT TIME ZONE 'Asia/Seoul')::date < (now() AT TIME ZONE 'Asia/Seoul')::date
+                        THEN 1 ELSE 0 END,
+                    last_attempt_at = now(), last_reason = ?
                 WHERE id = ?
                 """, reason, id);
     }

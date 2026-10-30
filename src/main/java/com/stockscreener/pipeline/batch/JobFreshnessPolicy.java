@@ -117,7 +117,8 @@ public class JobFreshnessPolicy {
                 "--job=full-statement-refill --all-quarters=true"));
         // 월 1회(목). 이 잡의 값은 결손 채우기가 아니라 정정공시 반영이다.
         map.put(FinancialRefillJob.JOB_NAME, new Budget(40, "--job=financial-refill"));
-        // 평일 14:16 원장 공시 목록(ADR-0176). 일일 갱신과 같은 주기라 같은 예산이다 — 받기 실패로 커서가 멈춘 것은
+        // 평일 13:30 앞 · 14:16 원장 공시 목록(ADR-0176). 일일 갱신과 같은 주기라 같은 예산이다 — 하루 두 번 돌아 마지막 성공이
+        // 14:16만의 실패를 가릴 수 있지만, 커서·적체는 잡 자신이 잰다. 받기 실패로 커서가 멈춘 것은
         // 잡 자신이 평일 2일 넘게 늦으면 먼저 알린다. 이 예산은 크론이 아예 안 돈 날을 센다.
         map.put(FilingListingJob.JOB_NAME, new Budget(5, "--job=filing-listing"));
         map.put(FilingConsumptionJob.JOB_NAME, new Budget(5, "--job=filing-consumption"));
