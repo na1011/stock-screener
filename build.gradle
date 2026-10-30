@@ -528,6 +528,10 @@ tasks.named('test') {
     // 시험이 ops/의 셸 스크립트를 읽고 돌린다(CronsDoneTableTest · WriteSessionScriptTest). 입력으로 안 적으면 스크립트만 고친
     // 변경에 Gradle이 test를 UP-TO-DATE로 건너뛰고 옛 초록을 보여 준다 — 쓰기 세션 대조군이 실제로 그렇게 초록으로 남았다.
     inputs.dir('ops').withPropertyName('opsScripts').withPathSensitivity(PathSensitivity.RELATIVE)
+    // 힙을 명시한다 — Gradle 기본(512MB)으로는 한 JVM에 Spring 컨텍스트 47개와 javac 속성 분석(ReaderVersionPinTest)이 함께 들어
+    // 순서에 따라 아무 클래스에서나 OutOfMemoryError가 난다(2026-10-30: 변경 전 HEAD를 빈 시험 DB로 돌린 대조군도 ReaderVersionPinTest
+    // 3건이 그것으로 붉었다 · 같은 날 두 판은 WatchlistAlertRunnerTest · StockSearchApiTest의 컨텍스트 기동이 그것으로 죽었다).
+    maxHeapSize = '2g'
 }
 
 // macOS Finder가 병합 시 만드는 "이름 2.java" 복제본을 잡는다. javac는 파일명이 아니라
