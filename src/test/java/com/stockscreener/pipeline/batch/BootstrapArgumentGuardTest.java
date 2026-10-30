@@ -87,6 +87,22 @@ class BootstrapArgumentGuardTest {
     }
 
     @Test
+    @DisplayName("러너가 읽는 인자는 전부 아는 인자다 — 목록에 안 넣으면 안내된 명령이 기동에서 거절된다(sweep-limit · max-fetches 2026-10-31)")
+    void everyOptionTheRunnerReadsIsKnown() throws Exception {
+        String source = java.nio.file.Files.readString(
+                java.nio.file.Path.of("src/main/java/com/stockscreener/pipeline/batch/BootstrapRunner.java"));
+        java.util.Set<String> read = new java.util.TreeSet<>();
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile(
+                "\\(args, \"([a-z-]+)\"|(?:getOptionValues|containsOption)\\(\"([a-z-]+)\"\\)|getOptionNames\\(\\)\\.contains\\(\"([a-z-]+)\"\\)")
+                .matcher(source);
+        while (m.find()) {
+            read.add(m.group(1) != null ? m.group(1) : m.group(2) != null ? m.group(2) : m.group(3));
+        }
+        assertThat(read).as("소스에서 인자 이름을 하나도 못 읽었다면 이 시험의 정규식이 낡은 것이다").contains("tickers", "max-fetches");
+        assertThat(BootstrapRunner.KNOWN_OPTIONS).containsAll(read);
+    }
+
+    @Test
     @DisplayName("--sweep-limit은 earnings-release에서 받고 다른 잡에서는 거절한다 — 첫 백필 명령이 모르는 인자로 기동에서 죽었다(2026-10-30)")
     void sweepLimitBelongsToEarningsRelease() {
         assertThatCode(() -> BootstrapRunner.rejectUnknownOptions(new DefaultApplicationArguments(
