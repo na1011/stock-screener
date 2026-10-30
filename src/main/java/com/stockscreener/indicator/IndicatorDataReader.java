@@ -13,14 +13,19 @@ import org.springframework.stereotype.Component;
 import java.math.BigDecimal;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.EnumMap;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
+import java.util.Set;
 import java.util.TreeMap;
 
 /**
@@ -282,6 +287,32 @@ public class IndicatorDataReader {
     private static final String SELECT_FINANCIALS_KNOWN_ON_COMMON_KR =
             SELECT_FINANCIALS_KNOWN_ON_TEMPLATE.formatted(FINANCIAL_COLUMNS + DISCONTINUED_COLUMNS + COMMON_COLUMNS_KR);
 
+    /**
+     * 화면의 재무 기준 표시(ADR-0195)가 읽는 판 이력 — {@link #SELECT_FINANCIALS_KNOWN_ON_TEMPLATE}와 <b>같은 술어</b>(공시일 · 기말 ·
+     * {@link #CURRENCY_GATE})로 여러 종목을 한 번에 읽고, 지표를 쓴 실행이 시작한 뒤 생긴 행은 뺀다(그 실행이 못 본 행이다). 연간과 분기를
+     * 한 질의로 읽는다 — 갈래는 행의 {@code fiscal_period}가 정한다.
+     *
+     * <p>통화 관문은 {@link #CURRENCY_GATE}와 <b>같은 술어</b>를 종목 집합 꼴로 건다 — 상관 부분질의를 행마다 돌면 미국 편입 1,000종목에
+     * 4.85초이고(행 15만 × 그 종목 행 → 630만 회), 집합 꼴은 0.11초다(2026-10-30 운영 실측 · 기준일 10-29). 걸러지는 종목은 같다
+     * (통화가 시장 통화와 다른 행이 하나라도 있는 종목 — {@code FinancialBasisReaderTest}).
+     *
+     * <p>인자가 여섯이다({@code stock_id} 배열, {@code published_at}, {@code period_end}, 상한 시각 둘, 관문의 {@code stock_id} 배열).
+     */
+    private static final String SELECT_FINANCIALS_KNOWN_ON_BATCH = """
+            SELECT stock_id, %s
+            FROM financial_statement
+            WHERE stock_id = ANY(?) AND published_at <= ? AND period_end <= ?
+              AND (CAST(? AS timestamptz) IS NULL OR created_at <= CAST(? AS timestamptz))
+              AND stock_id NOT IN (
+                  SELECT mismatched.stock_id
+                  FROM financial_statement mismatched
+                  JOIN stock gated ON gated.id = mismatched.stock_id
+                  JOIN market gate_market ON gate_market.code = gated.market_code
+                  WHERE mismatched.stock_id = ANY(?)
+                    AND mismatched.currency_code <> gate_market.currency_code)
+            ORDER BY stock_id, period_end DESC, published_at DESC
+            """.formatted(FINANCIAL_COLUMNS);
+
     private static final RowMapper<PriceBar> PRICE_BAR_MAPPER = (rs, rowNum) -> new PriceBar(
             rs.getObject("trade_date", LocalDate.class),
             rs.getBigDecimal("open"),
@@ -479,6 +510,60 @@ public class IndicatorDataReader {
             return List.of();
         }
         return queryFigures("<>", stockId, asOf, (years + 1) * 4, visibility);
+    }
+
+    /**
+     * 한 종목의 그 시점 판 이력 — 연간 · 분기, 그리고 기말마다의 보고서 양식({@code report_code}의 콜론 앞, 국내는 보고서 코드 그대로).
+     */
+    public record KnownFigures(List<FinancialFigures> annual, List<FinancialFigures> quarterly,
+                               Map<LocalDate, Set<String>> formsByPeriodEnd) {
+    }
+
+    /**
+     * 재무 기준 표시(ADR-0195)의 판 이력을 여러 종목 한 번에 읽는다 — 지표 계산이 {@link FinancialVisibility#KNOWN_ON}으로 읽는 것과 같은
+     * 행이다(같은 술어). 열은 관문과 무관한 기본 열만 싣는다 — 기준 기를 정하는 것은 기말과 공시일뿐이고, 관문이 바꾸는 것은 행이 아니라
+     * 열이다({@link #queryFigures}의 갈래들이 같은 행에 열을 더할 뿐이다).
+     *
+     * @param writtenBy 지표를 쓴 실행의 시작 시각. 그 뒤 생긴 행은 그 지표가 못 봤으므로 뺀다. {@code null}이면 빼지 않는다
+     */
+    public Map<Long, KnownFigures> readKnownFigures(Collection<Long> stockIds, LocalDate asOf,
+                                                    Instant writtenBy) {
+        Map<Long, List<FinancialFigures>> annual = new HashMap<>();
+        Map<Long, List<FinancialFigures>> quarterly = new HashMap<>();
+        Map<Long, Map<LocalDate, Set<String>>> forms = new HashMap<>();
+        if (stockIds.isEmpty()) {
+            return Map.of();
+        }
+        Timestamp bound = writtenBy == null ? null : Timestamp.from(writtenBy);
+        jdbcTemplate.query(con -> {
+            var ps = con.prepareStatement(SELECT_FINANCIALS_KNOWN_ON_BATCH);
+            java.sql.Array ids = con.createArrayOf("bigint", stockIds.toArray());
+            ps.setArray(1, ids);
+            ps.setObject(2, asOf);
+            ps.setObject(3, asOf);
+            ps.setTimestamp(4, bound);
+            ps.setTimestamp(5, bound);
+            ps.setArray(6, ids);
+            return ps;
+        }, rs -> {
+            long stockId = rs.getLong("stock_id");
+            FinancialFigures figures = mapFigures(rs, null, false, false);
+            (figures.fiscalPeriod() == FinancialFigures.FiscalPeriod.FY ? annual : quarterly)
+                    .computeIfAbsent(stockId, k -> new ArrayList<>()).add(figures);
+            String code = rs.getString("report_code");
+            if (code != null && figures.periodEnd() != null) {
+                int colon = code.indexOf(':');
+                forms.computeIfAbsent(stockId, k -> new HashMap<>())
+                        .computeIfAbsent(figures.periodEnd(), k -> new HashSet<>())
+                        .add(colon < 0 ? code : code.substring(0, colon));
+            }
+        });
+        Map<Long, KnownFigures> out = new HashMap<>();
+        for (Long stockId : stockIds) {
+            out.put(stockId, new KnownFigures(annual.getOrDefault(stockId, List.of()),
+                    quarterly.getOrDefault(stockId, List.of()), forms.getOrDefault(stockId, Map.of())));
+        }
+        return out;
     }
 
     /**

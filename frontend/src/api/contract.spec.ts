@@ -26,6 +26,8 @@ import {
   ZONE_ROLES,
   ZONE_STRENGTHS,
   FISCAL_PERIODS,
+  FINANCIAL_BASIS_STATUSES,
+  FINANCIAL_BASIS_UNTRACKED,
 } from './types'
 import { populationNote } from '@/lib/population'
 import { PRICE_REFERENCE_METHOD_SWING } from '@/lib/priceReference'
@@ -77,6 +79,8 @@ describe('서버 enum의 거울', () => {
     ['ExecutionScope', EXECUTION_SCOPES],
     ['ExecutionScopeReason', EXECUTION_SCOPE_REASONS],
     ['JobParameters', JOB_PARAMETERS],
+    ['FinancialBasisStatus', FINANCIAL_BASIS_STATUSES],
+    ['FinancialBasisUntracked', FINANCIAL_BASIS_UNTRACKED],
   ]
 
   it.each(pairs)('%s이 픽스처와 같은 값 집합이다', (name, values) => {

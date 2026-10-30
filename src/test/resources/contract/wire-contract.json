@@ -101,6 +101,19 @@
     "JobParameters": [
       "TARGET_DATE",
       "DATE_RANGE"
+    ],
+    "FinancialBasisStatus": [
+      "PENDING",
+      "NONE",
+      "UNTRACKED"
+    ],
+    "FinancialBasisUntracked": [
+      "FOREIGN_ISSUER",
+      "NON_DECEMBER_FISCAL_YEAR",
+      "UNRESOLVED",
+      "NOT_SWEPT",
+      "BEFORE_COVERAGE",
+      "NOT_YET_LISTED"
     ]
   },
   "problemTypes": [

@@ -8,6 +8,7 @@ import com.stockscreener.pipeline.batch.CandidateSplitJob;
 import com.stockscreener.pipeline.batch.CorporateActionJob;
 import com.stockscreener.pipeline.batch.DailyUpdateJob;
 import com.stockscreener.pipeline.batch.FilingConsumptionJob;
+import com.stockscreener.pipeline.batch.EarningsReleaseJob;
 import com.stockscreener.pipeline.batch.FilingListingJob;
 import com.stockscreener.pipeline.batch.FinancialRefillJob;
 import com.stockscreener.pipeline.batch.FreshnessCatchUpJob;
@@ -84,6 +85,7 @@ public class PipelineScheduler {
     private final BatchExecutions batchExecutions;
     private final WriteLock writeLock;
     private final FilingListingJob filingListingJob;
+    private final EarningsReleaseJob earningsReleaseJob;
     private final FilingConsumptionJob filingConsumptionJob;
     private final FreshnessCatchUpJob freshnessCatchUpJob;
     private final com.stockscreener.pipeline.batch.KrXbrlCollectJob krXbrlCollectJob;
@@ -110,8 +112,10 @@ public class PipelineScheduler {
                              UsCandidateFeed usCandidateFeed,
                              CandidateSplitJob candidateSplitJob,
                              com.stockscreener.pipeline.batch.PriceIntegrityAlerter priceIntegrityAlerter,
-                             com.stockscreener.pipeline.batch.KrXbrlCollectJob krXbrlCollectJob) {
+                             com.stockscreener.pipeline.batch.KrXbrlCollectJob krXbrlCollectJob,
+                             EarningsReleaseJob earningsReleaseJob) {
         this.priceIntegrityAlerter = priceIntegrityAlerter;
+        this.earningsReleaseJob = earningsReleaseJob;
         this.krXbrlCollectJob = krXbrlCollectJob;
         this.dailyUpdateJob = dailyUpdateJob;
         this.universeRebalanceJob = universeRebalanceJob;
@@ -227,6 +231,16 @@ public class PipelineScheduler {
                 } catch (RuntimeException e) {
                     // 목록이 던져도 소비는 이미 쌓인 행을 먹일 수 있지만, 여기서는 한 덩어리로 끊는다 — 14:16이 같은 순서로 다시 돈다.
                     held = e;
+                }
+                // 실적 발표 감지(ADR-0195) — 목록이 넣은 8-K의 항목을 묻고 남은 과거를 훑는다. 값을 안 바꾸지만 일일 갱신 안의 워치리스트
+                // 알림이 「새 실적 · 지표 미반영」을 싣으려면 그 앞이어야 한다. 앞 덩어리와 따로 돈다 — 소비가 던져도 목록이 넣은 줄은 있다.
+                try {
+                    earningsReleaseJob.run(today, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+                } catch (BatchShutdownException e) {
+                    log.info("일일 갱신 앞 실적 발표 감지가 종료로 중단됐다. today={} — 일일 갱신을 시작하지 않는다.", today);
+                    return;
+                } catch (RuntimeException e) {
+                    held = keepFirst(held, e);
                 }
                 log.info("일일 갱신을 시작한다. targetDate={}", targetDate);
                 try {
@@ -627,6 +641,15 @@ public class PipelineScheduler {
                     krXbrlCollectJob.run(today, BatchExecutionRecorder.TriggeredBy.SCHEDULER, List.of(), null);
                 } catch (BatchShutdownException e) {
                     log.info("국내 보통주 몫 재료 받기가 종료로 중단됐다. today={} — 판마다 표에 남아 다음 평일이 잇는다.", today);
+                    return;
+                } catch (RuntimeException e) {
+                    held = keepFirst(held, e);
+                }
+                // 끝에 실적 발표 감지(ADR-0195) — 13:30에 submissions에 아직 없던 8-K 항목을 다시 묻고 훑기를 잇는다. 값을 안 바꾼다.
+                try {
+                    earningsReleaseJob.run(today, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+                } catch (BatchShutdownException e) {
+                    log.info("실적 발표 감지가 종료로 중단됐다. today={} — 표는 종목마다 남아 다음 평일이 잇는다.", today);
                     return;
                 } catch (RuntimeException e) {
                     held = keepFirst(held, e);

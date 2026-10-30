@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -150,6 +151,26 @@ class SecFilingListSourceTest {
         assertThat(listed.filings()).extracting(f -> f.filingNo() + " " + f.stockId())
                 .containsExactlyInAnyOrder("0000063754-26-000329 10", "0001652044-26-000100 20",
                         "0001652044-26-000100 21", "0001067983-26-000001 30");
+    }
+
+    @Test
+    @DisplayName("감지 범위 종목의 8-K · 8-K/A는 실적 발표 후보로 낸다 — 범위 밖 종목 · 다른 수시 폼은 안 낸다 · 정기 공시 셈은 그대로(ADR-0195)")
+    void emitsCurrentReportsForReleaseScopeStocks() {
+        LocalDate day = LocalDate.of(2026, 10, 28);
+        Map<Long, List<Long>> byCik = SecFilingListSource.stocksByCik(SNAPSHOT, STOCKS);
+        var listed = SecFilingListSource.toDay(day, List.of(
+                new IndexLine("8-K", 1652044L, day, "0001652044-26-000090", "Alphabet Inc."),
+                new IndexLine("8-K/A", 63754L, day, "0000063754-26-000331", "MCCORMICK & CO INC"),
+                new IndexLine("8-K", 1067983L, day, "0001067983-26-000002", "BERKSHIRE HATHAWAY INC"),
+                new IndexLine("SC 13G", 1652044L, day, "0001652044-26-000091", "Alphabet Inc."),
+                new IndexLine("10-Q", 1652044L, day, "0001652044-26-000100", "Alphabet Inc.")), byCik, Set.of(20L, 21L, 10L));
+
+        assertThat(listed.releases()).extracting(r -> r.filingNo() + " " + r.stockId() + " " + r.form())
+                .as("GOOG·GOOGL 둘 다 · MKC의 8-K/A · 범위 밖 BRK(30)는 없다")
+                .containsExactlyInAnyOrder("0001652044-26-000090 20 8-K", "0001652044-26-000090 21 8-K",
+                        "0000063754-26-000331 10 8-K/A");
+        assertThat(listed.releases()).allSatisfy(r -> assertThat(r.reportName()).isNull());
+        assertThat(listed.sourceRows()).as("정기 공시 셈에 8-K가 안 든다").isEqualTo(1);
     }
 
     @Test

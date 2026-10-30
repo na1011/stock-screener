@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, useId } from 'vue'
 
-import type { IsoDate, StockPrice, StockSummary, UnadjustedActions } from '@/api/types'
+import type { FinancialBasis, IsoDate, StockPrice, StockSummary, UnadjustedActions } from '@/api/types'
 import WatchButton from '@/components/watchlist/WatchButton.vue'
+import { basisLine, financialBasisStyle } from '@/lib/financialBasis'
 import { formatCount, formatDate, formatPrice } from '@/lib/format'
 import { formatQuoteChange, quoteBasisLabel, quoteTone } from '@/lib/quote'
 
@@ -28,7 +29,14 @@ const props = defineProps<{
   asOf: IsoDate
   /** 수정계수를 확정하지 못한 기업 행위. `effectiveDates`가 비면 아무것도 그리지 않는다. */
   unadjustedActions: UnadjustedActions
+  /** 지표가 쓴 재무 기준과 새 실적 발표(ADR-0195). 재무가 하나도 안 보이면 null — 그때는 줄을 그리지 않는다. */
+  financialBasis: FinancialBasis | null
 }>()
+
+/** 재무 기준 줄의 강조 — 새 발표 대기는 경고색, 모름은 흐리게. 판정은 서버가 했다. */
+const basisTone = computed(() =>
+  props.financialBasis === null ? null : financialBasisStyle(props.financialBasis.status).tone,
+)
 
 /**
  * 이 값이 원주가라는 사실.
@@ -207,6 +215,19 @@ const basis = computed(() => quoteBasisLabel(props.price?.previousTradeDate))
       <span class="stock-header__unadjusted-dates">
         해당 일자: {{ unadjustedActions.effectiveDates.map(formatDate).join(', ') }}
       </span>
+    </p>
+
+    <!--
+      지표가 **어느 분기 재무로** 계산됐는가(ADR-0195). 늘 펼쳐 둔다 — 가격은 오늘 것이고 재무는 지난 분기 것이라, 새 실적 발표가 아직
+      지표에 안 실린 동안 PER이 옛 이익으로 낮아 보이는 착시를 사용자가 여기서 바로 알아야 한다. 문구는 서버 것을 그대로 쓴다.
+    -->
+    <p
+      v-if="financialBasis"
+      class="stock-header__financial"
+      :class="basisTone ? `stock-header__financial--${basisTone}` : undefined"
+    >
+      {{ basisLine(financialBasis) }}
+      <span v-if="financialBasis.notice" class="stock-header__financial-notice">{{ financialBasis.notice }}</span>
     </p>
   </header>
 </template>
@@ -481,6 +502,28 @@ const basis = computed(() => quoteBasisLabel(props.price?.previousTradeDate))
   font-size: var(--app-text-sm);
   line-height: 1.5;
   color: var(--p-amber-300);
+}
+
+.stock-header__financial {
+  margin: 0;
+  padding: 0.625rem 1rem 0.75rem;
+  border-top: 1px solid var(--p-content-border-color);
+  font-size: var(--app-text-sm);
+  line-height: 1.5;
+  color: var(--p-text-subtle-color);
+}
+
+.stock-header__financial--warn .stock-header__financial-notice {
+  color: var(--p-amber-300);
+}
+
+.stock-header__financial--muted .stock-header__financial-notice {
+  color: var(--p-text-muted-color);
+}
+
+.stock-header__financial-notice {
+  display: block;
+  margin-top: 0.25rem;
 }
 
 .stock-header__unadjusted-dates {

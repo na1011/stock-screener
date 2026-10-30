@@ -27,10 +27,16 @@ public interface FilingListSource {
     /** 우리 종목 하나. {@code accountingMonth}는 국내 분기 보고서 코드에만 쓴다. */
     /**
      * @param secCik 미국 행에 묶인 등록인(ADR-0180) — 있으면 장부가 오늘 티커 파일보다 먼저 쓴다. 국내·미결합은 {@code null}
+     * @param releaseScope 실적 발표 감지 범위인가(ADR-0195 · 활성 유니버스 멤버십이 감지 시작일 뒤에 걸친 종목) — 참인 종목만 실적 발표
+     *                     줄을 낸다. 거짓이면 정기 공시만 낸다
      */
-    record ListedStock(long stockId, Integer accountingMonth, Long secCik) {
+    record ListedStock(long stockId, Integer accountingMonth, Long secCik, boolean releaseScope) {
+        public ListedStock(long stockId, Integer accountingMonth, Long secCik) {
+            this(stockId, accountingMonth, secCik, false);
+        }
+
         public ListedStock(long stockId, Integer accountingMonth) {
-            this(stockId, accountingMonth, null);
+            this(stockId, accountingMonth, null, false);
         }
     }
 
@@ -38,8 +44,13 @@ public interface FilingListSource {
      * @param closedDays  날짜순으로 닫은 날
      * @param openFilings 받았지만 아직 닫지 않는 날(국내의 오늘)의 줄 — 장부에는 넣고 커서는 안 넘긴다
      * @param failure     멈춘 사유. 끝까지 갔으면 {@code null}
+     * @param openReleases 닫지 않는 날(국내의 오늘)의 실적 발표 줄 — 정기 공시처럼 넣되 커서는 안 넘긴다
      */
-    record FilingListing(List<ListedDay> closedDays, List<ListedFiling> openFilings, DataSourceException failure) {
+    record FilingListing(List<ListedDay> closedDays, List<ListedFiling> openFilings, DataSourceException failure,
+                         List<ListedRelease> openReleases) {
+        public FilingListing(List<ListedDay> closedDays, List<ListedFiling> openFilings, DataSourceException failure) {
+            this(closedDays, openFilings, failure, List.of());
+        }
     }
 
     /** 그날을 닫는 사유 — V67 {@code ck_filing_listing_day_outcome}. */
@@ -55,8 +66,21 @@ public interface FilingListSource {
     /**
      * @param sourceRows 거르기 전 정기 공시 줄 수
      * @param filings    우리 종목에 붙은 줄(종목이 여럿인 회사는 종목마다)
+     * @param releases   감지 범위 종목의 실적 발표 줄(ADR-0195) — 미국은 8-K · 8-K/A 전부(실적 발표인지는 아직 모른다), 국내는 이름
+     *                   규칙에 맞는 줄. 그날을 닫으면 그날의 발표 이력도 닫힌다
      */
-    record ListedDay(LocalDate day, DayOutcome outcome, int sourceRows, List<ListedFiling> filings) {
+    record ListedDay(LocalDate day, DayOutcome outcome, int sourceRows, List<ListedFiling> filings,
+                     List<ListedRelease> releases) {
+        public ListedDay(LocalDate day, DayOutcome outcome, int sourceRows, List<ListedFiling> filings) {
+            this(day, outcome, sourceRows, filings, List.of());
+        }
+    }
+
+    /**
+     * 실적 발표 한 줄(V69_6 {@code earnings_release}). 미국은 {@code items}가 {@code null}(submissions로 나중에 묻는다)이고
+     * {@code reportName}이 {@code null}, 국내는 {@code reportName}이 있고 {@code items}가 {@code null}이다.
+     */
+    record ListedRelease(String filingNo, long stockId, String form, String reportName, LocalDate filedOn) {
     }
 
     /**

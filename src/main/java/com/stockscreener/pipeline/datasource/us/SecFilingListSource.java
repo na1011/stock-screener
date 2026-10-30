@@ -12,6 +12,7 @@ import org.springframework.stereotype.Component;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -34,6 +35,9 @@ import java.util.TreeMap;
 @Component
 @ConditionalOnApiKey("sec-edgar")
 public class SecFilingListSource implements FilingListSource {
+
+    /** 실적 발표(Item 2.02)를 싣는 폼 — 수시 보고서와 그 정정. 6-K(외국 발행사)는 항목 구조가 없어 넣지 않는다(ADR-0195). */
+    static final Set<String> CURRENT_REPORT_FORMS = Set.of("8-K", "8-K/A");
 
     /** 일일 색인 받기 — 시험이 바꿔 끼운다. */
     interface DailyIndex {
@@ -74,6 +78,8 @@ public class SecFilingListSource implements FilingListSource {
             return new FilingListing(closed, List.of(), null);
         }
         Map<Long, List<Long>> stocksByCik;
+        Set<Long> releaseScope = new HashSet<>();
+        stocks.values().stream().filter(ListedStock::releaseScope).forEach(stock -> releaseScope.add(stock.stockId()));
         try {
             stocksByCik = stocksByCik(snapshots.fresh(), stocks);
         } catch (DataSourceException e) {
@@ -104,16 +110,33 @@ public class SecFilingListSource implements FilingListSource {
             } catch (DataSourceException e) {
                 return new FilingListing(closed, List.of(), e);
             }
-            closed.add(toDay(day, lines, stocksByCik));
+            closed.add(toDay(day, lines, stocksByCik, releaseScope));
         }
         return new FilingListing(closed, List.of(), failure);
     }
 
     /** 정기 공시 줄을 골라 우리 종목에 붙인다. */
     static ListedDay toDay(LocalDate day, List<IndexLine> lines, Map<Long, List<Long>> stocksByCik) {
+        return toDay(day, lines, stocksByCik, Set.of());
+    }
+
+    /**
+     * 정기 공시 줄을 골라 우리 종목에 붙이고, 감지 범위 종목({@code releaseScope})의 {@link #CURRENT_REPORT_FORMS} 줄을 실적 발표
+     * 후보로 낸다(ADR-0195). 색인에는 항목(Item 2.02)이 없다 — 실적 발표인지는 {@code EarningsReleaseJob}이 submissions로 묻는다.
+     */
+    static ListedDay toDay(LocalDate day, List<IndexLine> lines, Map<Long, List<Long>> stocksByCik, Set<Long> releaseScope) {
         int periodic = 0;
         List<ListedFiling> filings = new ArrayList<>();
+        List<ListedRelease> releases = new ArrayList<>();
         for (IndexLine line : lines) {
+            if (CURRENT_REPORT_FORMS.contains(line.form())) {
+                for (long stockId : stocksByCik.getOrDefault(line.cik(), List.of())) {
+                    if (releaseScope.contains(stockId)) {
+                        releases.add(new ListedRelease(line.accession(), stockId, line.form(), null, line.filed()));
+                    }
+                }
+                continue;
+            }
             if (!SecEdgarFacts.PERIODIC_FORMS.contains(line.form())) {
                 continue;
             }
@@ -123,7 +146,7 @@ public class SecFilingListSource implements FilingListSource {
                         line.filed(), null, null, null));
             }
         }
-        return new ListedDay(day, DayOutcome.LISTED, periodic, filings);
+        return new ListedDay(day, DayOutcome.LISTED, periodic, filings, releases);
     }
 
     /**

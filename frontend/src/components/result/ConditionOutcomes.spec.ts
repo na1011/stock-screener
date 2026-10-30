@@ -50,6 +50,7 @@ const row: ScreeningRow = {
   outcomes: [
     { conditionIndex: 0, status: 'MATCHED', actualValue: 3_500_000_000_000, earnedScore: null },
   ],
+  financialBasis: null,
 }
 
 const render = (currencyCode: string | null): Promise<string> => {

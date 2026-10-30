@@ -11,6 +11,7 @@ import com.stockscreener.screening.ScreeningResult;
 import com.stockscreener.screening.query.ScreeningRepository;
 import com.stockscreener.screening.store.ScreenDefinition;
 import com.stockscreener.screening.store.ScreenStore;
+import com.stockscreener.stock.FinancialBasisReader;
 import com.stockscreener.stock.StockReader;
 
 import org.slf4j.Logger;
@@ -58,11 +59,13 @@ public class WatchlistAlertRunner {
     private final ConditionEvaluator evaluator;
     private final StockReader stockReader;
     private final AlertPort alertPort;
+    private final FinancialBasisReader financialBasisReader;
 
     public WatchlistAlertRunner(WatchlistStore store, ScreenStore screenStore,
                                 ScreeningRepository screeningRepository,
                                 ConditionEvaluator evaluator, StockReader stockReader,
-                                AlertPort alertPort) {
+                                AlertPort alertPort, FinancialBasisReader financialBasisReader) {
+        this.financialBasisReader = financialBasisReader;
         this.store = store;
         this.screenStore = screenStore;
         this.screeningRepository = screeningRepository;
@@ -243,6 +246,8 @@ public class WatchlistAlertRunner {
         // 표시용 값도 그 종목의 시장 기준일로 읽는다. 하나로 읽으면 그날 휴장이던 시장의
         // 종목이 값 없는 카드로 나간다.
         Map<Long, StockReader.StockRow> stocks = new LinkedHashMap<>();
+        // 결과 표·상세와 같은 판정(ADR-0195) — 새 실적이 지표에 아직 안 실렸으면 알림 줄에도 싣는다. 같은 시장 기준일로 읽는다.
+        Map<Long, FinancialBasisReader.Basis> bases = new LinkedHashMap<>();
         triggered.stream().map(e -> e.item().stockId()).distinct()
                 .collect(Collectors.groupingBy(
                         id -> marketByStock.getOrDefault(id, ""), LinkedHashMap::new,
@@ -251,6 +256,7 @@ public class WatchlistAlertRunner {
                     LocalDate marketAsOf = asOfByMarket.get(market);
                     if (marketAsOf != null) {
                         stocks.putAll(stockReader.findRows(ids, marketAsOf));
+                        bases.putAll(financialBasisReader.read(ids, marketAsOf));
                     }
                 });
 
@@ -266,15 +272,15 @@ public class WatchlistAlertRunner {
                 userId,
                 AlertSeverity.INFO,
                 "관심종목 %d개가 조건을 충족했습니다".formatted(entries.size()),
-                describe(entries, stocks, asOf),
+                describe(entries, stocks, bases, asOf),
                 // 같은 사용자·같은 날의 판정은 한 번만 나간다. 배치를 두 번 돌려도 마찬가지다.
                 "watchlist:%d:%s".formatted(userId, asOf))));
 
         return byUser.size();
     }
 
-    private static String describe(List<Evaluated> entries,
-                                   Map<Long, StockReader.StockRow> stocks, String asOf) {
+    private static String describe(List<Evaluated> entries, Map<Long, StockReader.StockRow> stocks,
+                                   Map<Long, FinancialBasisReader.Basis> bases, String asOf) {
         StringBuilder sb = new StringBuilder("기준일 ").append(asOf).append('\n');
         entries.stream().limit(MAX_LISTED_STOCKS).forEach(entry -> {
             StockReader.StockRow stock = stocks.get(entry.item().stockId());
@@ -283,6 +289,10 @@ public class WatchlistAlertRunner {
                             : "%s(%s)".formatted(stock.name(), stock.ticker()))
                     .append(" — ").append(entry.definition().name())
                     .append('\n');
+            FinancialBasisReader.Basis basis = bases.get(entry.item().stockId());
+            if (basis != null && basis.status() == FinancialBasisReader.Status.PENDING) {
+                sb.append("  ").append(basis.notice()).append('\n');
+            }
         });
         if (entries.size() > MAX_LISTED_STOCKS) {
             sb.append("외 ").append(entries.size() - MAX_LISTED_STOCKS).append("건\n");

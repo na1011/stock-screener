@@ -11,6 +11,7 @@ import { RouterLink } from 'vue-router'
 import type { IndicatorBrief, ScreeningResponse, ScreeningRow } from '@/api/types'
 import IndicatorLabel from '@/components/IndicatorLabel.vue'
 import ConditionOutcomes from '@/components/result/ConditionOutcomes.vue'
+import NewReleaseBadge from '@/components/result/NewReleaseBadge.vue'
 import RatioBar from '@/components/ui/RatioBar.vue'
 import { MISSING, formatIndicatorValue, formatNumber, formatPrice, formatRatioAsPercent } from '@/lib/format'
 import { RESULT_LABELS, SCORE_DECIMAL_SCALE, indicatorBriefOf, valueOf } from '@/lib/resultRow'
@@ -197,6 +198,7 @@ function barRatio(row: ScreeningRow, code: string): number | null {
         <RouterLink :to="{ name: 'stock', params: { stockId: data.stockId }, query: { asOf } }">
           {{ data.name ?? RESULT_LABELS.unnamed }}
         </RouterLink>
+        <NewReleaseBadge :basis="data.financialBasis" />
         <div class="result-table__sub">{{ data.ticker }} · {{ data.marketCode }}</div>
       </template>
     </Column>

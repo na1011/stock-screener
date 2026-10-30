@@ -20,6 +20,7 @@ function row(values: Record<string, number>): ScreeningRow {
     notEvaluableCount: 0,
     values,
     outcomes: [],
+    financialBasis: null,
   }
 }
 

@@ -6,7 +6,7 @@ import { createSSRApp } from 'vue'
 import { renderToString } from 'vue/server-renderer'
 import { describe, expect, it } from 'vitest'
 
-import type { StockPrice, StockSummary } from '@/api/types'
+import type { FinancialBasis, StockPrice, StockSummary } from '@/api/types'
 
 import StockHeader from './StockHeader.vue'
 
@@ -44,12 +44,13 @@ const price: StockPrice = {
   changeRate: 0.84,
 } as StockPrice
 
-const render = (currencyCode: string): Promise<string> => {
+const render = (currencyCode: string, financialBasis: FinancialBasis | null = null): Promise<string> => {
   const app = createSSRApp(StockHeader, {
     stock: stock(currencyCode),
     price,
     asOf: '2026-08-05',
     unadjustedActions: { notice: '', effectiveDates: [] },
+    financialBasis,
   })
   app.use(createPinia())
   app.use(PrimeVue)
@@ -76,5 +77,35 @@ describe('StockHeader — 시세 금액은 종목의 통화로 그린다', () =>
 
     expect(html).toContain('150원')
     expect(html).not.toContain('$')
+  })
+})
+
+describe('StockHeader — 지표가 쓴 재무 기준을 늘 말한다(ADR-0195)', () => {
+  const basis: FinancialBasis = {
+    flowLabel: '2026 Q2',
+    balanceLabel: null,
+    status: 'PENDING',
+    untracked: null,
+    releaseFiledOn: '2026-10-28',
+    notice: '10월 28일 새 실적 발표가 있습니다 — 지표는 2026 Q2 재무 기준이라 아직 반영되지 않았습니다.',
+  }
+
+  it('새 실적 발표 대기면 기준과 서버 문구를 함께 그린다', async () => {
+    const html = await render('USD', basis)
+
+    expect(html).toContain('재무 기준 2026 Q2')
+    expect(html).toContain(basis.notice)
+    expect(html).toContain('stock-header__financial--warn')
+  })
+
+  it('발표가 없으면 기준만 그린다', async () => {
+    const html = await render('USD', { ...basis, status: 'NONE', releaseFiledOn: null, notice: null })
+
+    expect(html).toContain('재무 기준 2026 Q2')
+    expect(html).not.toContain('stock-header__financial--')
+  })
+
+  it('재무가 없으면 줄을 그리지 않는다', async () => {
+    expect(await render('USD', null)).not.toContain('재무 기준')
   })
 })

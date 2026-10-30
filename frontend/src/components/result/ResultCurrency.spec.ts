@@ -48,6 +48,7 @@ const response = (currencyCode: string | null): ScreeningResponse =>
         notEvaluableCount: 0,
         values: {},
         outcomes: [],
+        financialBasis: null,
       },
     ],
   }) as unknown as ScreeningResponse

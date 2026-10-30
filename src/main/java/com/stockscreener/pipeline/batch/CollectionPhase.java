@@ -102,5 +102,10 @@ public enum CollectionPhase {
      * 편입 원자료 따라잡기(ADR-0177 · {@code FreshnessCatchUpJob}). 단위는 <b>잡</b>(FR · FSR · G)이다 — 종목은 그 잡이
      * 각자 자기 단계로 센다.
      */
-    REFRESH_BEHIND
+    REFRESH_BEHIND,
+    /**
+     * 실적 발표 감지(ADR-0195 · {@code EarningsReleaseJob}) — 미국 항목 묻기와 종목별 과거 훑기. 단위는 <b>시장</b>이다 — 종목 실패는
+     * 그 시장의 실패 수로 센다({@code countExternally}).
+     */
+    EARNINGS_RELEASE
 }

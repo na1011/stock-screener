@@ -183,6 +183,7 @@ public class BootstrapRunner implements ApplicationRunner {
     private final ShareBasisDeriver shareBasisDeriver;
     private final IndicatorReconciler indicatorReconciler;
     private final FilingListingJob filingListingJob;
+    private final EarningsReleaseJob earningsReleaseJob;
     private final FilingConsumptionJob filingConsumptionJob;
     private final CandidateSplitJob candidateSplitJob;
     private final StockFoldJob stockFoldJob;
@@ -215,6 +216,7 @@ public class BootstrapRunner implements ApplicationRunner {
                            ShareBasisDeriver shareBasisDeriver,
                            IndicatorReconciler indicatorReconciler,
                            FilingListingJob filingListingJob,
+                           EarningsReleaseJob earningsReleaseJob,
                            FilingConsumptionJob filingConsumptionJob,
                            FreshnessCatchUpJob freshnessCatchUpJob,
                            CandidateSplitJob candidateSplitJob,
@@ -248,6 +250,7 @@ public class BootstrapRunner implements ApplicationRunner {
         this.shareBasisDeriver = shareBasisDeriver;
         this.indicatorReconciler = indicatorReconciler;
         this.filingListingJob = filingListingJob;
+        this.earningsReleaseJob = earningsReleaseJob;
         this.filingConsumptionJob = filingConsumptionJob;
         this.freshnessCatchUpJob = freshnessCatchUpJob;
         this.candidateSplitJob = candidateSplitJob;
@@ -404,6 +407,10 @@ public class BootstrapRunner implements ApplicationRunner {
                     governanceEndpoints(args), csv(args, "tickers"));
             // 원장 공시 목록 → 소비 장부(ADR-0176). 쓰는 표는 장부 둘뿐이다. --as-of가 「오늘」이다 — 국내는 그날을 닫지 않는다.
             case "filing-listing" -> filingListingJob.run(asOf, BatchExecutionRecorder.TriggeredBy.MANUAL);
+            // 실적 발표 감지(ADR-0195) — 8-K 항목 묻기와 종목별 과거 훑기. 쓰는 표는 실적 발표 표 둘뿐이다(값을 안 바꾼다). 첫 백필은
+            // --sweep-limit으로 상한을 푼다(정기는 시장별 50).
+            case "earnings-release" -> earningsReleaseJob.run(asOf, BatchExecutionRecorder.TriggeredBy.MANUAL,
+                    integer(args, "sweep-limit", EarningsReleaseJob.SCHEDULED_SWEEP_LIMIT));
             // 열린 장부 행을 좁힌 FR·FSR로 먹인다 — 재무 표를 쓴다(공시 목록과 달리 값을 바꾸는 표다 · ADR-0176 2차).
             case "filing-consumption" -> filingConsumptionJob.run(asOf, BatchExecutionRecorder.TriggeredBy.MANUAL);
             // 미국 순위 후보(활성 편입 없는 미국 종목)의 열린 행을 먹인다(ADR-0178) — 재무 표를 쓴다. 손 실행은 시도 상한 없이 다시 묻는다.
@@ -476,6 +483,7 @@ public class BootstrapRunner implements ApplicationRunner {
                             + " | corporate-action-review | corporate-action-judge"
                             + " | market-calendar | bar-gap-review"
                             + " | filing-listing | filing-consumption | candidate-consumption | candidate-splits | depositary-splits"
+                            + " | earnings-release"
                             + " | refresh-behind | stock-fold | sec-cik-bind | us-delisted-intake | price-boundary | symbol-era-seed");
         };
 

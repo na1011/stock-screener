@@ -1,6 +1,6 @@
 ---
 name: batch-load
-description: 시세·재무·업종·기업행위를 적재·백필하거나 일일 갱신을 돌릴 때, 수정계수를 원장에서 다시 지을 때, 기업행위 원장을 보거나 판정할 때, 재무 정정공시를 찾거나 반영할 때, 그리고 스키마에 컬럼이 늘어 기존 행이 NULL로 남았을 때. BootstrapRunner의 --job=universe|universe-restore|initial-load|financial-refill|full-statement-refill|company-profile|corporate-action|corporate-action-review|corporate-action-judge|adjustment-rebuild|market-index|backfill|indicator-reconcile|governance-load|governance-derive|share-basis-derive|market-calendar|bar-gap-review|filing-listing|filing-consumption|candidate-consumption|candidate-splits|depositary-splits|refresh-behind|kr-xbrl-collect|stock-fold|sec-cik-bind|us-delisted-intake|price-boundary|symbol-era-seed 명령 형태와 각 플래그가 실제로 하는 일, 조용히 아무 일도 하지 않는 플래그 조합, 판정 명령의 따옴표가 뒤 플래그를 삼키는 자리, 정정공시가 지표를 지우는 자리와 그것을 128콜로 먼저 찾는 법, 지표마다 실행당 채워지는 날짜 수가 다른 이유, 무효화가 낀 재백필의 범위를 날짜가 아니라 종목으로 좁히는 이유, 적재 후 확인 항목, 거버넌스 적재·유도·백필 셋을 이어 돌려야 하는 이유, 소스가 전 거래일을 아직 안 내놨을 때의 함정.
+description: 시세·재무·업종·기업행위를 적재·백필하거나 일일 갱신을 돌릴 때, 수정계수를 원장에서 다시 지을 때, 기업행위 원장을 보거나 판정할 때, 재무 정정공시를 찾거나 반영할 때, 그리고 스키마에 컬럼이 늘어 기존 행이 NULL로 남았을 때. BootstrapRunner의 --job=universe|universe-restore|initial-load|financial-refill|full-statement-refill|company-profile|corporate-action|corporate-action-review|corporate-action-judge|adjustment-rebuild|market-index|backfill|indicator-reconcile|governance-load|governance-derive|share-basis-derive|market-calendar|bar-gap-review|filing-listing|filing-consumption|candidate-consumption|candidate-splits|depositary-splits|refresh-behind|kr-xbrl-collect|earnings-release|stock-fold|sec-cik-bind|us-delisted-intake|price-boundary|symbol-era-seed 명령 형태와 각 플래그가 실제로 하는 일, 조용히 아무 일도 하지 않는 플래그 조합, 판정 명령의 따옴표가 뒤 플래그를 삼키는 자리, 정정공시가 지표를 지우는 자리와 그것을 128콜로 먼저 찾는 법, 지표마다 실행당 채워지는 날짜 수가 다른 이유, 무효화가 낀 재백필의 범위를 날짜가 아니라 종목으로 좁히는 이유, 적재 후 확인 항목, 거버넌스 적재·유도·백필 셋을 이어 돌려야 하는 이유, 소스가 전 거래일을 아직 안 내놨을 때의 함정.
 ---
 
 # 적재 배치 (`BootstrapRunner`)
@@ -37,6 +37,7 @@ pg_restore도 같은 exec) → `end <id>`. 세션 안 bootRun은 하나씩이다
 --job=governance-derive [--tickers=005930]
 --job=share-basis-derive [--market=US]
 --job=filing-listing [--as-of=2026-10-14]   # 커서 다음 날부터 · --as-of가 「오늘」(국내는 그날을 안 닫는다)
+--job=earnings-release [--sweep-limit=2000]   # 8-K 항목 묻기 + 종목별 과거 훑기(ADR-0195) · 첫 백필은 상한을 푼다(정기는 시장별 50)
 --job=filing-consumption [--as-of=2026-10-14]   # 열린 장부 행 → 좁힌 FR·FSR(재무 표를 쓴다)
 --job=candidate-consumption [--as-of=2026-10-14]   # 미국 순위 후보의 열린 장부 행 → 좁힌 FR(재무 표를 쓴다 · 손 실행은 시도 상한 없음)
 --job=candidate-splits [--as-of=2026-10-15]        # 미국 순위 후보의 공시 뒤 분할 → 원장(APPROVED · 재구축이 APPLIED로 올린다)
@@ -81,6 +82,7 @@ pg_restore도 같은 exec) → `end <id>`. 세션 안 bootRun은 하나씩이다
 | `governance-load` | 정기보고서 주요정보 → `governance_report_row` | **원문만 담는다.** 지표용 값은 `governance-derive`가 따로 만든다(ADR-0081). 표마다 받을 해가 달라 **국내가 350종목 8,050콜**이다((엔드포인트, 연도) 23쌍) — **우리 리미터가 먼저 걸린다** — `dart.daily-quota: 18000`이 하나의 카운터로 DART 전체를 센다(api-sources의 10,000은 **API당** 계획값이다). 셋을 같은 날 돌리면 23,570으로 넘으므로 스케줄러가 **하루 하나**로 나눈다(ADR-0116). 화면에 버튼이 없다. **시장마다 답하는 표가 다르다** — 대상은 활성 유니버스 전체(지금 1,350종목)이고 잡이 소스별로 좁힌다. 미국은 **배당 하나**뿐이라 `--governance-endpoints=DIVIDEND`를 줘도 국내는 여덟 중 배당만 다시 받는다(멱등, 350종목 700콜) |
 | `governance-derive` | `governance_report_row` → `governance_fact` | **외부 호출 0.** 유도 규칙을 고친 뒤 이것만 다시 돌린다 — 표를 가른 이유가 이것이다. 종목을 **통째로** 다시 짓는다(회계연도로 좁히면 감사인 교체처럼 보고서 둘을 견줘 나오는 값이 빠진다). 화면에도 있다 |
 | `filing-listing` | 원장 공시 목록 → `filing_listing_day`·`filing_consumption` | 평일 14:16 크론과 같은 잡(ADR-0176). 장부 두 표만 쓰고 값을 바꾸는 표는 안 건드린다. 커서 다음 날부터 받는다 — `--as-of`가 「오늘」이고 국내는 그날을 닫지 않는다. 다시 돌려도 같은 줄은 장부에 안 늘어난다 |
+| `earnings-release` | 실적 발표 감지 → `earnings_release`·`earnings_release_sweep` | 평일 13:30 일일 갱신 앞 · 14:16 사슬 끝과 같은 잡(ADR-0195). 두 표만 쓰고 값을 바꾸는 표는 안 건드린다. 공시 목록이 넣은 8-K의 항목(2.02)을 submissions로 묻고, 훑기 표지가 없는 감지 범위 종목을 2025-07-01부터 원장에 물어 채운다(미국 submissions · 국내 공시검색 I001·I002). 정기는 시장별 50종목 상한 — 남으면 시장 미완료로 시계를 안 민다. 첫 백필은 `--sweep-limit`을 크게 준다 |
 | `filing-consumption` | 열린 장부 행 → 지금 편입 종목의 좁힌 FR·FSR | 평일 14:16 크론이 목록 뒤에 잇는 잡(ADR-0176 2차). **재무 표를 쓴다** — 손으로 돌리면 FR·FSR이 `MANUAL`·NARROW로 남는다(정기는 `GAP_FILL`). 소비됨 표시는 그 종목을 쓴 트랜잭션 안이라 실패한 종목은 표시도 없다. 국내는 대상 행 사업연도부터 창을 좁히고 미국은 기본 창. 정정이 지운 지표는 화해가 짝이다(다음 평일 14:20 또는 `indicator-reconcile --tickers`) |
 | `candidate-consumption` | 미국 순위 후보(활성 편입 없는 미국 종목)의 열린 장부 행 → 좁힌 FR | 평일 14:16 사슬의 넷째 단계(목록 → 편입 소비 → 따라잡기 뒤 · ADR-0178). **재무 표를 쓴다** — 순위 재료(주식수)를 최신 공시에 맞춘다. 정기 실행은 시도 5회에 닿은 행을 새 공시까지 멈추고 한 번 알린다 · 손 실행은 상한 없이 다시 묻는다. 지운 지표 중 창 편입 밖 종목 것은 화해가 안 쓴다 — 읽는 경로가 편입으로 걸러 값에 안 닿는다 |
 | `candidate-splits` | 미국 순위 후보(보존 창 편입 아님)의 공시 뒤 분할·병합 → 기업행위 원장 | 평일 14:00 사슬에서 수집 뒤 · 재구축 앞(ADR-0178). 시장 전체 1~3콜. 원장에 `APPROVED`로 적고 **재구축이 `APPLIED`로 올려야** 순위 주식수 보정(`SHIFT_TO_ASOF`)이 읽는다 — 손으로 돌렸으면 `adjustment-rebuild`를 잇는다(봉 없는 후보는 표시만 한다). 분사는 안 담는다 |

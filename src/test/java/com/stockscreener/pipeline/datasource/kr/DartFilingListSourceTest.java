@@ -3,6 +3,7 @@ package com.stockscreener.pipeline.datasource.kr;
 import com.stockscreener.pipeline.datasource.DataSourceException;
 import com.stockscreener.pipeline.datasource.FilingListSource.DayOutcome;
 import com.stockscreener.pipeline.datasource.FilingListSource.FilingListing;
+import com.stockscreener.pipeline.datasource.FilingListSource.ListedDay;
 import com.stockscreener.pipeline.datasource.FilingListSource.ListedFiling;
 import com.stockscreener.pipeline.datasource.FilingListSource.ListedStock;
 import com.stockscreener.pipeline.datasource.kr.DartFilingListClient.DayListing;
@@ -118,6 +119,32 @@ class DartFilingListSourceTest {
         assertThat(listing.closedDays()).extracting(d -> d.day()).containsExactly(d1);
         assertThat(listing.failure()).isSameAs(limited);
         assertThat(asked).containsExactly(d1, d2);
+    }
+
+    @Test
+    @DisplayName("실적 발표 줄은 감지 범위 종목의 실적 공시만 낸다 — 정기 공시 셈에 안 들고, 오늘의 줄은 열린 채 낸다(ADR-0195)")
+    void routesEarningsReleasesSeparately() {
+        LocalDate day = LocalDate.of(2026, 10, 29);
+        Map<String, ListedStock> stocks = Map.of(
+                "005930", new ListedStock(5L, 12, null, true),
+                "055550", new ListedStock(4L, 12, null, false));
+        List<ListRow> rows = List.of(
+                row("I002", "005930", "연결재무제표기준영업(잠정)실적(공정공시)              ", "20261029800001", day),
+                row("I002", "005930", "결산실적공시예고", "20261029800002", day),
+                row("I002", "055550", "영업(잠정)실적(공정공시)", "20261029800003", day),
+                row("A003", "005930", "분기보고서 (2026.09)", "20261029000004", day));
+        DartFilingListSource source = new DartFilingListSource(d -> new DayListing(d, true, rows));
+
+        FilingListing closed = source.list(day.minusDays(1), day.plusDays(1), stocks);
+        FilingListing open = source.list(day.minusDays(1), day, stocks);
+
+        ListedDay listed = closed.closedDays().get(0);
+        assertThat(listed.sourceRows()).as("정기 공시만 센다").isEqualTo(1);
+        assertThat(listed.filings()).extracting(ListedFiling::filingNo).containsExactly("20261029000004");
+        assertThat(listed.releases()).extracting(r -> r.filingNo() + " " + r.stockId() + " " + r.form())
+                .as("범위 밖 055550 · 일정 안내는 없다").containsExactly("20261029800001 5 I002");
+        assertThat(open.closedDays()).isEmpty();
+        assertThat(open.openReleases()).extracting(r -> r.filingNo()).containsExactly("20261029800001");
     }
 
     @Test

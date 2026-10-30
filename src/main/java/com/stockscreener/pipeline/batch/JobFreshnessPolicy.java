@@ -128,6 +128,9 @@ public class JobFreshnessPolicy {
         map.put(FreshnessCatchUpJob.JOB_NAME, new Budget(5, "--job=refresh-behind"));
         // 국내 보통주 몫 재료(ADR-0192) — 평일 14:16 사슬 끝 · 공시 목록과 같은 주기.
         map.put(KrXbrlCollectJob.JOB_NAME, new Budget(5, "--job=kr-xbrl-collect"));
+        // 실적 발표 감지(ADR-0195) — 평일 13:30 일일 갱신 앞 · 14:16 사슬 끝. 공시 목록과 같은 주기다. 과거 훑기가 남은 실행은 시장
+        // 미완료라 시계를 안 민다 — 첫 백필(손 실행)이 끝나기 전에는 이 예산이 붉는 것이 맞다.
+        map.put(EarningsReleaseJob.JOB_NAME, new Budget(5, "--job=earnings-release"));
         // 소스가 미래 휴장일을 모르므로 실행일까지만 찬다 — 그만큼 천천히 낡는다.
         map.put(MarketCalendarJob.JOB_NAME, new Budget(60, null));
         return Map.copyOf(map);

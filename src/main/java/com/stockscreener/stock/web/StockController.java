@@ -6,6 +6,7 @@ import com.stockscreener.indicator.IndicatorDescriptor;
 import com.stockscreener.indicator.FinancialColumnAbsenceReader;
 import com.stockscreener.indicator.UnavailabilityRule;
 import com.stockscreener.screening.query.ScreeningRepository;
+import com.stockscreener.stock.FinancialBasisReader;
 import com.stockscreener.stock.PriceReference;
 import com.stockscreener.stock.StockReader;
 import com.stockscreener.stock.SupportResistanceAnalyzer;
@@ -48,6 +49,7 @@ public class StockController {
     private final MarketScope marketScope;
     private final StockFinancialsAssembler financialsAssembler;
     private final List<UnavailabilityRule> unavailabilityRules;
+    private final FinancialBasisReader financialBasisReader;
 
     public StockController(StockReader stockReader, IndicatorCatalog indicatorCatalog,
                            ScreeningRepository screeningRepository, IndicatorDataReader priceReader,
@@ -56,7 +58,9 @@ public class StockController {
                            StockFinancialsAssembler financialsAssembler,
                            List<UnavailabilityRule> unavailabilityRules,
                            FinancialColumnAbsenceReader absenceReader,
-                           GrossProfitPremiseReader premiseReader) {
+                           GrossProfitPremiseReader premiseReader,
+                           FinancialBasisReader financialBasisReader) {
+        this.financialBasisReader = financialBasisReader;
         this.absenceReader = absenceReader;
         this.premiseReader = premiseReader;
         this.stockReader = stockReader;
@@ -192,7 +196,9 @@ public class StockController {
                 // 업종 카드가 왜 없는지도 여기서만 말할 수 있다 — 표본이 임계에 못 미치면
                 // 상대값뿐 아니라 표본 수 행까지 쓰이지 않아 화면에 흔적이 0이다.
                 StockDetailResponse.SectorContext.of(
-                        stockReader.sectorPeersOf(stockId).orElse(null)));
+                        stockReader.sectorPeersOf(stockId).orElse(null)),
+                // 지표가 쓴 재무 기준과 새 실적 발표(ADR-0195) — 결과 표와 같은 리더 · 같은 기준일이다.
+                financialBasisReader.read(List.of(stockId), resolved).get(stockId));
     }
 
     /**

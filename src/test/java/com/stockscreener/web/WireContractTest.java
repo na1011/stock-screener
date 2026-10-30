@@ -18,6 +18,7 @@ import com.stockscreener.screening.web.ConditionGroupPayload;
 import com.stockscreener.screening.web.ScreenRequest;
 import com.stockscreener.screening.web.ScreeningResponse;
 import com.stockscreener.screening.web.ScreeningResponseAssembler;
+import com.stockscreener.stock.FinancialBasisReader;
 import com.stockscreener.stock.PriceReference;
 import com.stockscreener.watchlist.web.WatchlistRequest;
 
@@ -125,6 +126,9 @@ class WireContractTest {
                 .isEqualTo(expected("enums", "ExecutionScopeReason"));
         assertThat(names(AdminJobLauncher.Parameters.class))
                 .isEqualTo(expected("enums", "JobParameters"));
+        // 결과 행 · 상세가 상태로 표시를 가른다(ADR-0195). 프론트에 없는 상태가 오면 「새 실적」 표시가 조용히 안 뜬다.
+        assertThat(names(FinancialBasisReader.Status.class)).isEqualTo(expected("enums", "FinancialBasisStatus"));
+        assertThat(names(FinancialBasisReader.Untracked.class)).isEqualTo(expected("enums", "FinancialBasisUntracked"));
     }
 
     @Test

@@ -10,6 +10,7 @@ import { RouterLink } from 'vue-router'
 
 import type { ScreeningResponse, ScreeningRow } from '@/api/types'
 import ConditionOutcomes from '@/components/result/ConditionOutcomes.vue'
+import NewReleaseBadge from '@/components/result/NewReleaseBadge.vue'
 import {
   LOCALE,
   formatCount,
@@ -151,6 +152,7 @@ function toggle(stockId: number): void {
             {{ row.name ?? RESULT_LABELS.unnamed }}
           </RouterLink>
           <span class="card__ticker">{{ row.ticker }}</span>
+          <NewReleaseBadge :basis="row.financialBasis" />
         </div>
         <span class="card__price tabular">{{ formatPrice(row.close, result.currencyCode) }}</span>
       </header>

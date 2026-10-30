@@ -102,7 +102,7 @@ public class FilingListingJob {
                             newRows += store.recordDay(market, day);
                             newCursor = day.day();
                         }
-                        newRows += store.recordOpen(market, listing.openFilings());
+                        newRows += store.recordOpen(market, listing.openFilings(), listing.openReleases());
                         failure = describe(listing.failure());
                     } catch (DataAccessException e) {
                         // 장부 쓰기 실패도 그 시장의 실패다 — 실행 전체를 세우면 다음 시장의 커서까지 멈춘다(2026-10-20·21: 미국 한 날의

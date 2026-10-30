@@ -343,6 +343,8 @@ export interface ScreeningRow {
   /** 지표 코드 → 값. **계산되지 않은 지표는 키가 없다**(null이 아니라 부재). */
   values: Record<string, number>
   outcomes: Outcome[]
+  /** 지표가 쓴 재무 기준과 새 실적 발표 여부(ADR-0195). 재무가 하나도 안 보이면 null. */
+  financialBasis: FinancialBasis | null
 }
 
 export interface ScreeningUniverseInfo {
@@ -545,6 +547,40 @@ export interface StockDetailResponse {
   unadjustedActions: UnadjustedActions
   /** 업종 카드가 왜 없는지. 서버가 항상 싣는다. */
   sectorContext: SectorContext
+  /** 지표가 쓴 재무 기준과 새 실적 발표 여부(ADR-0195). 재무가 하나도 안 보이면 null. */
+  financialBasis: FinancialBasis | null
+}
+
+export const FINANCIAL_BASIS_STATUSES = ['PENDING', 'NONE', 'UNTRACKED'] as const
+export type FinancialBasisStatus = (typeof FINANCIAL_BASIS_STATUSES)[number]
+export const FINANCIAL_BASIS_UNTRACKED = [
+  'FOREIGN_ISSUER',
+  'NON_DECEMBER_FISCAL_YEAR',
+  'UNRESOLVED',
+  'NOT_SWEPT',
+  'BEFORE_COVERAGE',
+  'NOT_YET_LISTED',
+] as const
+export type FinancialBasisUntracked = (typeof FINANCIAL_BASIS_UNTRACKED)[number]
+
+/**
+ * 지표가 **어느 기의 재무로** 계산됐는가와 그보다 **새로운 실적 발표**가 있는가(ADR-0195).
+ *
+ * IMPORTANT — 판정은 서버가 했다. `UNTRACKED`는 「발표 없음」이 아니라 「모른다」이므로 `NONE`처럼 그리지 않는다.
+ * 문구(`notice`)는 서버 것을 그대로 쓴다.
+ */
+export interface FinancialBasis {
+  /** 유량 지표(PER · ROE …)가 쓰는 기 — 「2026 Q2」 · 「2025년」 */
+  flowLabel: string
+  /** 잔액 지표(PBR · 부채비율 …)가 쓰는 기. 유량과 같으면 null */
+  balanceLabel: string | null
+  status: FinancialBasisStatus
+  /** `UNTRACKED`일 때만 */
+  untracked: FinancialBasisUntracked | null
+  /** `PENDING`일 때 가장 최근 발표의 접수일 */
+  releaseFiledOn: IsoDate | null
+  /** `PENDING` · `UNTRACKED`의 설명. `NONE`이면 null */
+  notice: string | null
 }
 
 /**

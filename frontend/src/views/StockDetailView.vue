@@ -262,6 +262,7 @@ onMounted(() => {
             :price="detail.data.value.price"
             :as-of="detail.data.value.asOf"
             :unadjusted-actions="detail.data.value.unadjustedActions"
+            :financial-basis="detail.data.value.financialBasis"
           />
 
           <!--

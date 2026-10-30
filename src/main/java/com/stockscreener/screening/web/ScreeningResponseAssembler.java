@@ -9,6 +9,7 @@ import com.stockscreener.screening.IndicatorCondition;
 import com.stockscreener.screening.preset.PresetCatalog;
 import com.stockscreener.screening.ScreeningResult;
 import com.stockscreener.screening.query.ScreeningRepository;
+import com.stockscreener.stock.FinancialBasisReader;
 import com.stockscreener.stock.StockReader;
 
 import org.springframework.stereotype.Component;
@@ -53,10 +54,13 @@ public class ScreeningResponseAssembler {
      * 없다 — 표본 수에는 그 링크를 일부러 걸지 않았다(백분위 안내가 붙어 버린다).
      */
     private final Map<String, String> peerCountByMetric;
+    private final FinancialBasisReader financialBasisReader;
 
     public ScreeningResponseAssembler(IndicatorCatalog indicatorCatalog, StockReader stockReader,
                                       ScreeningRepository screeningRepository,
-                                      List<SectorMetricSpec> sectorMetricSpecs) {
+                                      List<SectorMetricSpec> sectorMetricSpecs,
+                                      FinancialBasisReader financialBasisReader) {
+        this.financialBasisReader = financialBasisReader;
         this.indicatorCatalog = indicatorCatalog;
         this.stockReader = stockReader;
         this.screeningRepository = screeningRepository;
@@ -112,6 +116,8 @@ public class ScreeningResponseAssembler {
         // 판정에 쓴 것과 같은 조회 경로·같은 일자라 두 값이 어긋날 수 없다.
         Map<Long, Map<String, BigDecimal>> valuesByStock =
                 screeningRepository.loadIndicatorValues(stockIds, columnCodes, asOf);
+        // 지표가 쓴 재무 기준과 새 실적 발표(ADR-0195) — 같은 기준일이다. 판정은 리더 하나가 한다(상세 · 워치리스트와 같은 판정).
+        Map<Long, FinancialBasisReader.Basis> basisByStock = financialBasisReader.read(stockIds, asOf);
 
         List<ScreeningResponse.ConditionInfo> conditionInfos = new ArrayList<>(conditions.size());
         for (int i = 0; i < conditions.size(); i++) {
@@ -120,7 +126,7 @@ public class ScreeningResponseAssembler {
 
         List<ScreeningResponse.Row> rows = results.stream()
                 .map(result -> toRow(result, stocks.get(result.stockId()),
-                        valuesByStock.getOrDefault(result.stockId(), Map.of())))
+                        valuesByStock.getOrDefault(result.stockId(), Map.of()), basisByStock.get(result.stockId())))
                 .toList();
 
         return new ScreeningResponse(
@@ -232,7 +238,7 @@ public class ScreeningResponseAssembler {
     }
 
     private static ScreeningResponse.Row toRow(ScreeningResult result, StockReader.StockRow stock,
-                                               Map<String, BigDecimal> values) {
+                                               Map<String, BigDecimal> values, FinancialBasisReader.Basis basis) {
         List<ScreeningResponse.Outcome> outcomes = new ArrayList<>(result.outcomes().size());
         for (int i = 0; i < result.outcomes().size(); i++) {
             ConditionOutcome outcome = result.outcomes().get(i);
@@ -252,6 +258,7 @@ public class ScreeningResponseAssembler {
                 result.matchedCount(),
                 result.notEvaluableCount(),
                 values,
-                outcomes);
+                outcomes,
+                basis);
     }
 }

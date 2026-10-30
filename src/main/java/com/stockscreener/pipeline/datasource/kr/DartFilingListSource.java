@@ -15,7 +15,8 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 국내 공시 목록 — DART 공시검색의 정기보고서 세 종류를 우리 종목에 붙인다(ADR-0176).
+ * 국내 공시 목록 — DART 공시검색의 정기보고서 세 종류를 우리 종목에 붙인다(ADR-0176). 같은 하루 받기의 실적 발표 줄은 감지 범위
+ * 종목에 붙여 함께 낸다(ADR-0195).
  *
  * <p><b>닫는 규칙</b>: 커서 다음 날부터 <b>KST 오늘</b>까지 날마다 묻고, <b>어제까지만 닫는다</b> — 오늘은 오후에도 공시가
  * 접수되므로 받은 줄은 장부에 넣되 닫지 않고 다음 실행이 다시 받는다. 모든 조합이 {@code 013}인 날은 공시 없는 날로 닫는다.
@@ -59,14 +60,35 @@ public class DartFilingListSource implements FilingListSource {
             } catch (DataSourceException e) {
                 return new FilingListing(closed, List.of(), e);
             }
-            List<ListedFiling> filings = toFilings(listing.rows(), stocks);
+            List<ListRow> periodic = listing.rows().stream()
+                    .filter(row -> DartFilingListClient.DETAIL_TYPES.contains(row.detailType())).toList();
+            List<ListedFiling> filings = toFilings(periodic, stocks);
+            List<ListedRelease> releases = toReleases(listing.rows(), stocks);
             if (day.equals(todayKst)) {
-                return new FilingListing(closed, filings, null);
+                return new FilingListing(closed, filings, null, releases);
             }
             closed.add(new ListedDay(day, listing.answered() ? DayOutcome.LISTED : DayOutcome.EMPTY,
-                    listing.rows().size(), filings));
+                    periodic.size(), filings, releases));
         }
         return new FilingListing(closed, List.of(), null);
+    }
+
+    /**
+     * 실적 발표가 실리는 종류의 줄 중 감지 범위 종목의 실적 발표({@link DartEarningsReleaseNames})만 낸다(ADR-0195). 국내는 제목이
+     * 곧 판정이라 미국과 달리 나중에 물을 것이 없다.
+     */
+    static List<ListedRelease> toReleases(List<ListRow> rows, Map<String, ListedStock> stocks) {
+        List<ListedRelease> out = new ArrayList<>();
+        for (ListRow row : rows) {
+            ListedStock stock = stocks.get(row.stockCode());
+            if (stock == null || !stock.releaseScope()
+                    || !DartFilingListClient.RELEASE_DETAIL_TYPES.contains(row.detailType())
+                    || !DartEarningsReleaseNames.isEarningsRelease(row.reportName())) {
+                continue;
+            }
+            out.add(new ListedRelease(row.rceptNo(), stock.stockId(), row.detailType(), row.reportName(), row.rceptDate()));
+        }
+        return out;
     }
 
     static List<ListedFiling> toFilings(List<ListRow> rows, Map<String, ListedStock> stocks) {

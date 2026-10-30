@@ -2,6 +2,7 @@ package com.stockscreener.pipeline.collector;
 
 import com.stockscreener.pipeline.datasource.FilingListSource.ListedDay;
 import com.stockscreener.pipeline.datasource.FilingListSource.ListedFiling;
+import com.stockscreener.pipeline.datasource.FilingListSource.ListedRelease;
 import com.stockscreener.pipeline.datasource.FilingListSource.ListedStock;
 
 import org.slf4j.Logger;
@@ -35,9 +36,11 @@ public class FilingLedgerStore {
     private static final Logger log = LoggerFactory.getLogger(FilingLedgerStore.class);
 
     private final JdbcTemplate jdbc;
+    private final EarningsReleaseStore releases;
 
-    public FilingLedgerStore(JdbcTemplate jdbc) {
+    public FilingLedgerStore(JdbcTemplate jdbc, EarningsReleaseStore releases) {
         this.jdbc = jdbc;
+        this.releases = releases;
     }
 
     /** DB 시각 — 시도 시각({@code last_attempt_at = now()})과 같은 시계로 「이번 실행 뒤」를 가른다. */
@@ -63,6 +66,8 @@ public class FilingLedgerStore {
     @Transactional(rollbackFor = Exception.class)
     public int recordDay(String market, ListedDay day) {
         Inserted inserted = insert(market, day.filings());
+        // 실적 발표 줄도 같은 트랜잭션이다(ADR-0195) — 닫힌 날은 그날의 발표 이력도 닫혔다는 뜻이라, 따로 쓰면 발표 없이 닫힌 날이 생긴다.
+        releases.insert(market, day.releases());
         jdbc.update("""
                 INSERT INTO filing_listing_day (market, listing_date, outcome, source_rows, kept_rows)
                 VALUES (?, ?, ?, ?, ?)
@@ -73,7 +78,15 @@ public class FilingLedgerStore {
     /** 장부 행만 넣는다 — 닫지 않는 날(국내의 오늘)이 쓴다. 넣은(새) 장부 행 수를 낸다. */
     @Transactional(rollbackFor = Exception.class)
     public int recordOpen(String market, List<ListedFiling> filings) {
-        return insert(market, filings).rows();
+        return recordOpen(market, filings, List.of());
+    }
+
+    /** 장부 행과 실적 발표 줄을 넣는다 — 닫지 않는 날(국내의 오늘). 넣은(새) 장부 행 수를 낸다. */
+    @Transactional(rollbackFor = Exception.class)
+    public int recordOpen(String market, List<ListedFiling> filings, List<ListedRelease> openReleases) {
+        int rows = insert(market, filings).rows();
+        releases.insert(market, openReleases);
+        return rows;
     }
 
     /** @param rows 넣은(새) 장부 행 · {@code keptFilings} 시대 안 종목 행이 하나라도 붙은(새로 넣었든 이미 있었든) 서로 다른 공시 수 */
@@ -120,11 +133,12 @@ public class FilingLedgerStore {
             default -> throw new IllegalArgumentException("장부의 시장이 아니다: " + market);
         };
         Map<String, ListedStock> out = new HashMap<>();
-        jdbc.query("SELECT id, ticker, accounting_month, sec_cik FROM stock WHERE " + where, rs -> {
+        jdbc.query("SELECT s.id, s.ticker, s.accounting_month, s.sec_cik, " + EarningsReleaseStore.inScope("s.id")
+                + " AS release_scope FROM stock s WHERE " + where.replace("market_code", "s.market_code"), rs -> {
             int month = rs.getInt("accounting_month");
             Integer accountingMonth = rs.wasNull() ? null : month;
             out.put(rs.getString("ticker"), new ListedStock(rs.getLong("id"), accountingMonth,
-                    rs.getObject("sec_cik", Long.class)));
+                    rs.getObject("sec_cik", Long.class), rs.getBoolean("release_scope")));
         });
         return out;
     }

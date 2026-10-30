@@ -2,6 +2,7 @@ package com.stockscreener.stock.web;
 
 import com.stockscreener.indicator.IndicatorCategory;
 import com.stockscreener.indicator.UnadjustedActionGuard;
+import com.stockscreener.stock.FinancialBasisReader;
 import com.stockscreener.stock.StockReader;
 
 import java.math.BigDecimal;
@@ -29,7 +30,8 @@ public record StockDetailResponse(
         Price price,
         List<IndicatorValue> indicators,
         UnadjustedActions unadjustedActions,
-        SectorContext sectorContext
+        SectorContext sectorContext,
+        FinancialBasisReader.Basis financialBasis
 ) {
 
     /**
