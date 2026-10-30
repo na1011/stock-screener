@@ -102,7 +102,8 @@ public class SharesGrowth3yCalculator implements IndicatorCalculator {
     }
 
     /**
-     * <p><b>{@link FinancialMath#bySegment}를 거친다</b>(ADR-0128 §규칙 · ADR-0132). 이 계산기는
+     * <p><b>{@link FinancialMath#sharesBySegment}를 거친다</b>(ADR-0128 §규칙 · ADR-0132) — 재무에서 주식수만 읽어 새 실적 발표로 막지 않는다
+     * (ADR-0195). 이 계산기는
      * 봉 루프를 스스로 돌지만 재무를 {@code context}에서 <b>한 번</b> 읽으므로, 감싸지 않으면
      * 그 컨텍스트가 <b>오늘 기준으로 접힌 최신 개정본</b>을 들고 있어 과거 봉이 <b>미래의
      * 판(revision)</b>을 쓴다. {@code sharesOf}의 {@code publishedIndexOn}은 <b>기(期)</b>만
@@ -111,7 +112,7 @@ public class SharesGrowth3yCalculator implements IndicatorCalculator {
      */
     @Override
     public List<IndicatorPoint> calculate(IndicatorContext context) {
-        return FinancialMath.bySegment(context, this::computeSegment);
+        return FinancialMath.sharesBySegment(context, this::computeSegment);
     }
 
     private List<IndicatorPoint> computeSegment(IndicatorContext context) {

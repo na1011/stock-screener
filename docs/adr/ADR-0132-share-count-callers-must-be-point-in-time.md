@@ -71,7 +71,7 @@ ADR-0128 §규칙이 *"재무에서 값을 내는 계산기는 `byPublication`�
 
 # 감싸지 않은 호출부가 남아 있는가 — 아무것도 반환하지 않아야 한다
 rg -l "FinancialMath.sharesOf" src/main/java/com/stockscreener/indicator/calculator \
-  | xargs rg -L "bySegment|byPublication"
+  | xargs rg -L "bySegment|sharesBySegment|byPublication"   # sharesBySegment: 주식수만 읽는 넷의 입구(새 실적 발표로 안 막음 · ADR-0195)
 ```
 
 **단위 시험은 이 결함을 못 잡는다** — 픽스처가 기마다 판 하나라 `bySegment`가 항등이다.

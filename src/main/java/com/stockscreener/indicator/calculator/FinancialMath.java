@@ -600,7 +600,8 @@ final class FinancialMath {
      * 재무는 옛 분기라, 값을 내면 그 봉의 재무 조건이 전부 어긋난 판정을 낸다. 비운 봉에는 행이 안 생기고 스크리닝은 「데이터 없음」이다.
      *
      * <p>MUST: 재무를 봉마다 읽는 루프({@link #byPublication} · {@link #bySegment} · {@code ValuationHistory})는 {@code visibleAt}을 직접
-     * 부르지 않고 이것을 부른다 — 하나라도 직접 부르면 그 계산기만 막힌 봉에 옛 분기 값을 낸다.
+     * 부르지 않고 이것을 부른다 — 하나라도 직접 부르면 그 계산기만 막힌 봉에 옛 분기 값을 낸다. 예외는 주식수만 읽는 계산기의 입구
+     * {@link #sharesBySegment} 하나다.
      */
     static IndicatorContext financialsAt(IndicatorContext context, LocalDate barDate) {
         IndicatorContext visible = context.visibleAt(barDate);
@@ -663,6 +664,26 @@ final class FinancialMath {
     static List<IndicatorPoint> bySegment(
             IndicatorContext context,
             Function<IndicatorContext, List<IndicatorPoint>> compute) {
+        return bySegment(context, compute, true);
+    }
+
+    /**
+     * {@link #bySegment}와 같은 구간 루프이되 <b>새 실적 발표로 막지 않는다</b> — 재무에서 <b>주식수만</b> 읽는 계산기(시가총액 · 회전율 ·
+     * 주식수 증가율)의 입구다(ADR-0195). 실적 발표는 손익 · 재무상태를 바꾸지 주식수를 바꾸지 않으므로, 그 값은 발표 뒤에도 맞다. 막으면
+     * 맞는 값을 지운다(2026-10-31 전제 펜스: 발표 대기 종목의 {@code MARKET_CAP}이 사라졌다).
+     *
+     * <p>MUST NOT: 손익 · 자본 · 자산을 한 칸이라도 읽는 계산기는 이것을 쓰지 않는다 — 그 값은 발표 뒤 옛 분기다.
+     */
+    static List<IndicatorPoint> sharesBySegment(
+            IndicatorContext context,
+            Function<IndicatorContext, List<IndicatorPoint>> compute) {
+        return bySegment(context, compute, false);
+    }
+
+    private static List<IndicatorPoint> bySegment(
+            IndicatorContext context,
+            Function<IndicatorContext, List<IndicatorPoint>> compute,
+            boolean withholdOnRelease) {
         List<PriceBar> bars = context.priceBars();
         if (bars.isEmpty()) {
             return List.of();
@@ -683,7 +704,8 @@ final class FinancialMath {
                 end++;
             }
             LocalDate to = bars.get(end - 1).tradeDate();
-            for (IndicatorPoint point : compute.apply(financialsAt(context, from))) {
+            IndicatorContext atSegment = withholdOnRelease ? financialsAt(context, from) : context.visibleAt(from);
+            for (IndicatorPoint point : compute.apply(atSegment)) {
                 if (!point.tradeDate().isBefore(from) && !point.tradeDate().isAfter(to)) {
                     out.add(point);
                 }

@@ -223,6 +223,8 @@ class IndicatorRunnerTest {
                 .noneMatch(d -> !d.isBefore(LocalDate.of(2026, 4, 7)) && d.isBefore(LocalDate.of(2026, 5, 15)))
                 .noneMatch(d -> !d.isBefore(LocalDate.of(2026, 7, 7)));
         assertThat(storedDatesOf(Sma20Calculator.CODE)).as("시세 지표는 그대로다").contains(LocalDate.of(2026, 7, 7));
+        assertThat(storedDatesOf(MarketCapCalculator.CODE)).as("주식수만 읽는 지표는 막지 않는다 — 실적 발표는 주식수를 안 바꾼다")
+                .contains(LocalDate.of(2026, 4, 7), LocalDate.of(2026, 7, 7));
     }
 
     private void release(LocalDate effectiveOn) {

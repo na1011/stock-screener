@@ -47,6 +47,9 @@ applies_to:
 - **MUST: 재무를 봉마다 읽는 루프는 `FinancialMath.financialsAt`을 거친다** — `byPublication` · `bySegment` · `ValuationHistory`.
   하나라도 `visibleAt`을 직접 부르면 그 계산기만 막힌 봉에 옛 분기 값을 낸다. 실적 발표 공개일은 구간 경계다
   (`IndicatorContext.financialPublicationDates`).
+- **예외 하나 — 재무에서 주식수만 읽는 계산기는 막지 않는다**(`FinancialMath.sharesBySegment` · 시가총액 · 회전율 둘 · 3년 주식수 증가율).
+  실적 발표는 손익 · 재무상태를 바꾸지 주식수를 바꾸지 않는다 — 막으면 맞는 값을 지운다(첫 반영 뒤 ADR-0164 전제 펜스가 대기 종목의
+  `MARKET_CAP` 결손으로 울었다). **MUST NOT: 손익 · 자본 · 자산을 한 칸이라도 읽는 계산기는 그 입구를 쓰지 않는다.**
 - **MUST: 러너가 실적 발표 공개일을 싣는다**(`IndicatorRunner.readRawData` → `IndicatorDataReader.readEarningsReleaseDates`). 빠뜨려도
   컴파일되고 값이 그럴듯하다 — `IndicatorRunnerTest`가 지킨다.
 - **「공개」의 날짜(`earnings_release.effective_on`)**:
