@@ -87,6 +87,18 @@ class BootstrapArgumentGuardTest {
     }
 
     @Test
+    @DisplayName("--sweep-limit은 earnings-release에서 받고 다른 잡에서는 거절한다 — 첫 백필 명령이 모르는 인자로 기동에서 죽었다(2026-10-30)")
+    void sweepLimitBelongsToEarningsRelease() {
+        assertThatCode(() -> BootstrapRunner.rejectUnknownOptions(new DefaultApplicationArguments(
+                "--job=earnings-release", "--sweep-limit=2000"))).doesNotThrowAnyException();
+        assertThatCode(() -> BootstrapRunner.rejectMisplacedLoadOptions(new DefaultApplicationArguments(
+                "--job=earnings-release", "--sweep-limit=2000"), "earnings-release")).doesNotThrowAnyException();
+        assertThatThrownBy(() -> BootstrapRunner.rejectMisplacedLoadOptions(new DefaultApplicationArguments(
+                "--job=filing-listing", "--sweep-limit=2000"), "filing-listing"))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("sweep-limit");
+    }
+
+    @Test
     @DisplayName("값이 붙은 불리언은 통과한다")
     void acceptsBooleansWithValues() {
         assertThatCode(() -> BootstrapRunner.rejectMalformedBooleans(

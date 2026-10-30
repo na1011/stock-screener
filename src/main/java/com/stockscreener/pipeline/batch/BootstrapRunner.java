@@ -554,6 +554,9 @@ public class BootstrapRunner implements ApplicationRunner {
     /** 지표 화해. {@code --from}이 뜻이 없는 유일한 지표 잡이라 이름으로 둔다 — {@code switch}는 거울 검사(check-doc-staleness §5c)가 읽도록 문자열로 쓴다. */
     static final String RECONCILE_JOB = "indicator-reconcile";
 
+    /** 실적 발표 감지(ADR-0195) — {@code --sweep-limit}이 뜻을 갖는 유일한 잡. */
+    static final String EARNINGS_RELEASE_JOB = EarningsReleaseJob.JOB_NAME;
+
     private static final java.util.Set<String> KNOWN_OPTIONS = java.util.Set.of(
             "job", "as-of", "universe", "price-years", "financial-years", "reload-existing",
             "skip-financial", "skip-price", "tickers", "from",
@@ -566,7 +569,9 @@ public class BootstrapRunner implements ApplicationRunner {
             // 이 축을 원리적으로 안 탄다(재무 shares_outstanding 이 KR 전량 NULL 이다).
             "market",
             // stock-fold 전용(새 행 후보의 생성 시각 하한 · ISO 오프셋 시각) · sec-cik-bind 전용(손 후보 티커:CIK,…).
-            "since", "ciks");
+            "since", "ciks",
+            // earnings-release 전용(시장별 과거 훑기 상한 · ADR-0195).
+            "sweep-limit");
 
     /**
      * {@code --universe}가 뜻을 갖는 잡. 나머지에서는 조용히 무시되므로 거절한다.
@@ -633,6 +638,10 @@ public class BootstrapRunner implements ApplicationRunner {
             throw new IllegalArgumentException(
                     "--insert-earlier-vintages는 '" + FINANCIAL_REFILL_JOB + "'에서만 쓴다 — 지금 잡은 '"
                             + job + "'이고, 그대로 두면 인자가 조용히 무시된다.");
+        }
+        if (!EARNINGS_RELEASE_JOB.equals(job) && args.getOptionNames().contains("sweep-limit")) {
+            throw new IllegalArgumentException("--sweep-limit은 '" + EARNINGS_RELEASE_JOB + "'에서만 쓴다 — 지금 잡은 '"
+                    + job + "'이고, 그대로 두면 인자가 조용히 무시된다.");
         }
         if (RECONCILE_JOB.equals(job) && args.getOptionNames().contains("from")) {
             throw new IllegalArgumentException(
