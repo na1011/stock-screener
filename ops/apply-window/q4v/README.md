@@ -3,7 +3,7 @@
 **기록이다 — 지금 실행기가 아니다.** ADR-0161(이른 판 저장)을 운영에 적용한 절차를 그대로 둔다. 전체 사본 둘(S1·S0)을 복원하는 꼴이라
 `CLAUDE.md` 「드라이런이란 무엇인가」가 막는 형태이고, 미국 관문 실행기는 상위 폴더(`../README.md`)다. 경로는 2026-10-16에 이 폴더로 옮겼다.
 
-**이 폴더의 스크립트가 절차다.** 산출물은 `$Q4V_WORK`(기본 `~/Library/Application Support/stock-screener/apply-window`)에 쌓인다.
+**이 폴더의 스크립트가 절차다.** 산출물은 `$Q4V_WORK`(기본 `~/stock-screener-apply-window` — `env.sh`가 정본)에 쌓인다.
 같은 형태의 창(E·L 반영 · 국내 기저 등)에서 그대로 쓰되, 대상·기대값은 그 축의 ADR §결과에서 다시 정한다.
 
 스크립트: 이 폴더 — `env.sh` `00-precheck.sh` `01-dump-shadows.sh` `02-snapshot.sh` `04-refill.sh` `05-backfill.sh` `06-vacuum.sh`
