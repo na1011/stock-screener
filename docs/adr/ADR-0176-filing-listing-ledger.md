@@ -89,6 +89,21 @@ SELECT CASE
        || ' — batch_execution의 filing-listing note가 마지막 실패를 말한다' END"
 ```
 
+- 13:30 앞 소비: `PipelineSchedulerChainTest`(목록 → 소비 → 국내 재료 → 유도 → 일일 갱신 → 좁힌 화해 · 먹인 것 없으면 유도 안 함 · 목록이
+  던져도 시세 · 일일 갱신 예외가 주 예외 · 종료 신호면 일일 갱신 안 함) · `FilingConsumptionJobTest`(같은 날 두 번 시도는 하나 —
+  대조군: 옛 `recordAttempt`에서 붉다). 아래 펜스는 2026-10-28~30 창으로 돌리면 옛 순서 3일을 발견으로 낸다.
+
+```premise 정기 일일 갱신이 그날 공시 소비 뒤에 돈다
+psql -X -d stock_screener -At -c "WITH d AS (SELECT started_at FROM batch_execution WHERE job_name = 'daily-update' AND triggered_by = 'SCHEDULER' AND started_at >= '2026-10-31' ORDER BY started_at DESC LIMIT 5),
+j AS (SELECT d.started_at, EXISTS (SELECT 1 FROM batch_execution c WHERE c.job_name = 'filing-consumption' AND c.triggered_by = 'SCHEDULER'
+        AND c.started_at < d.started_at AND (c.started_at AT TIME ZONE 'Asia/Seoul')::date = (d.started_at AT TIME ZONE 'Asia/Seoul')::date) AS fed FROM d)
+SELECT CASE
+  WHEN (SELECT count(*) FROM j) = 0 THEN '잴 것이 없었다 — 배포 뒤 정기 일일 갱신이 아직 없다'
+  WHEN (SELECT bool_and(fed) FROM j) THEN 'OK 최근 정기 일일 갱신 ' || (SELECT count(*) FROM j) || '회 전부 그날 소비 뒤'
+  ELSE '일일 갱신이 그날 공시 소비 없이 돌았다: ' || (SELECT string_agg(to_char(started_at AT TIME ZONE 'Asia/Seoul', 'MM-DD HH24:MI'), ' · ') FROM j WHERE NOT fed)
+       || ' — 옛 jar(app.jar.commit)이거나 13:30 앞 목록·소비가 행을 만들기 전에 던졌다(로그의 runDailyUpdate 발화)' END"
+```
+
 ## 배경
 
 새 정기 공시는 FR(목)·FSR(수, 국내)·새 편입 꼬리로만 들어왔다. 정기 주기가 「마지막 성공에서 25일 초과」라, 원장에 있는 공시가 DB에 오기까지
