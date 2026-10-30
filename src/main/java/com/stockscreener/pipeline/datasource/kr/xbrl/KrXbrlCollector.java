@@ -95,12 +95,19 @@ public class KrXbrlCollector {
         int unbound = 0;
         Set<String> seen = new java.util.HashSet<>();
         String firstFailure = null;
+        List<Filing> queue = new java.util.ArrayList<>();
         for (RowVintage row : rows) {
             Filing filing = bound(row, filings);
             if (filing == null) {
                 unbound++;
                 continue;
             }
+            queue.add(filing);
+            // 그 보고서의 더 이른 판(원본 · 앞선 정정)도 받는다 — 같은 숫자를 처음 공개한 판의 접수일을 가리는 재료다(ADR-0195 ·
+            // KrEarlierVintages). DART 재무 API는 보고서마다 가장 늦은 판만 주어 저장 공시일이 정정일로 밀린다.
+            queue.addAll(earlier(filing, filings));
+        }
+        for (Filing filing : queue) {
             if (!seen.add(filing.rceptNo()) || !needs(filing)) {
                 continue;
             }
@@ -189,6 +196,15 @@ public class KrXbrlCollector {
             }
         }
         return found;
+    }
+
+    /** 같은 (사업연도, 보고서 코드)에서 {@code bound}보다 앞서 접수된 판들. */
+    static List<Filing> earlier(Filing bound, List<Filing> filings) {
+        return filings.stream()
+                .filter(f -> f.bsnsYear() != null && f.bsnsYear().equals(bound.bsnsYear())
+                        && bound.reprtCode() != null && bound.reprtCode().equals(f.reprtCode())
+                        && f.rceptDate().isBefore(bound.rceptDate()))
+                .toList();
     }
 
     private static boolean needs(Filing f) {

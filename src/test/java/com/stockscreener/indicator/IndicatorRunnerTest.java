@@ -199,6 +199,39 @@ class IndicatorRunnerTest {
                 .hasSizeGreaterThan(1);
     }
 
+    @Test
+    @DisplayName("IMPORTANT — 재무 기준보다 새 실적 발표가 공개된 봉은 재무 지표를 안 낸다 — 정식 공시가 실리면 다시 낸다(ADR-0195)")
+    void withholdsFinancialIndicatorsWhileANewerReleaseIsPending() {
+        // 12월 결산이어야 판정한다 — 비12월은 저장 기말이 합성이라 싣지 않는다(readEarningsReleaseDates).
+        jdbcTemplate.update("UPDATE stock SET accounting_month = 12 WHERE id = ?", stockId);
+        insertPriceHistory(300);
+        insertQuarterPublishedOn(LocalDate.of(2025, 5, 15), 2025, "Q1", new BigDecimal("10000000"));
+        insertQuarterPublishedOn(LocalDate.of(2025, 8, 14), 2025, "Q2", new BigDecimal("10000000"));
+        insertQuarterPublishedOn(LocalDate.of(2025, 11, 14), 2025, "Q3", new BigDecimal("10000000"));
+        insertQuarterPublishedOn(LocalDate.of(2026, 3, 10), 2025, "Q4", new BigDecimal("10000000"));
+        insertQuarterPublishedOn(LocalDate.of(2026, 5, 15), 2026, "Q1", new BigDecimal("10000000"));
+        // 국내 잠정실적 둘 — Q1 잠정(기준 Q4의 다음 기말 03-31 뒤)과 Q2 잠정(기준 Q1의 다음 기말 06-30 뒤).
+        release(LocalDate.of(2026, 4, 7));
+        release(LocalDate.of(2026, 7, 7));
+
+        runner.run(stockId, AS_OF, Optional.empty(), Map.of());
+
+        List<LocalDate> per = storedDatesOf(PerCalculator.CODE);
+        assertThat(per).as("잠정 전 · 분기보고서 뒤에는 값이 있다")
+                .contains(LocalDate.of(2026, 4, 6), LocalDate.of(2026, 5, 15), LocalDate.of(2026, 7, 6));
+        assertThat(per).as("잠정 공개 ~ 분기보고서 전 · 둘째 잠정 뒤는 값이 없다 — 가격은 새 실적, 재무는 옛 분기다")
+                .noneMatch(d -> !d.isBefore(LocalDate.of(2026, 4, 7)) && d.isBefore(LocalDate.of(2026, 5, 15)))
+                .noneMatch(d -> !d.isBefore(LocalDate.of(2026, 7, 7)));
+        assertThat(storedDatesOf(Sma20Calculator.CODE)).as("시세 지표는 그대로다").contains(LocalDate.of(2026, 7, 7));
+    }
+
+    private void release(LocalDate effectiveOn) {
+        jdbcTemplate.update("""
+                INSERT INTO earnings_release (market, filing_no, stock_id, form, report_name, filed_on, effective_on)
+                VALUES ('KR', ?, ?, 'I002', '영업(잠정)실적(공정공시)', ?, ?)
+                """, effectiveOn.toString().replace("-", "") + "800001", stockId, effectiveOn, effectiveOn);
+    }
+
     /** {@code publishedAt}에 공시된 분기 하나. TTM 합산에 쓸 순이익만 채운다. */
     private void insertQuarterPublishedOn(LocalDate publishedAt, int fiscalYear, String period,
                                           BigDecimal netIncome) {

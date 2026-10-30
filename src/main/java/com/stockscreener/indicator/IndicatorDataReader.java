@@ -1,6 +1,7 @@
 package com.stockscreener.indicator;
 
 import com.stockscreener.pipeline.collector.CorporateActionLedger;
+import com.stockscreener.pipeline.collector.EarningsReleaseStore;
 import com.stockscreener.pipeline.datasource.us.UsMarket;
 import com.stockscreener.pipeline.datasource.us.shareclass.ShareClassLine;
 import com.stockscreener.pipeline.datasource.us.shareclass.ShareClassStore;
@@ -510,6 +511,21 @@ public class IndicatorDataReader {
             return List.of();
         }
         return queryFigures("<>", stockId, asOf, (years + 1) * 4, visibility);
+    }
+
+    /**
+     * 실적 발표가 공개된 날(ADR-0195 · {@code earnings_release.effective_on}) — {@code asOf}까지. 재무 기준보다 새로운 발표가 공개된 봉의
+     * 재무 지표를 막는 재료다({@code FinancialMath.financialsAt}). 감지 범위 밖 종목 · 훑기 전 종목은 빈 목록이고 막히지 않는다.
+     *
+     * <p>국내 비12월 결산은 싣지 않는다 — 저장 기말이 12월 결산 합성 규약이라 기준 기의 다음 기말이 실제와 달라 판정이 성립하지 않는다.
+     * 화면도 그 종목을 판정 불가로 둔다({@code FinancialBasisReader.Untracked.NON_DECEMBER_FISCAL_YEAR}) — 두 자리가 같은 술어다.
+     */
+    public List<LocalDate> readEarningsReleaseDates(long stockId, LocalDate asOf) {
+        return jdbcTemplate.queryForList("""
+                SELECT DISTINCT r.effective_on FROM earnings_release r JOIN stock s ON s.id = r.stock_id
+                WHERE r.stock_id = ? AND r.effective_on <= ? AND (s.market_code = 'US' OR s.accounting_month = 12)
+                  AND """ + EarningsReleaseStore.IS_EARNINGS_RELEASE + """
+                 ORDER BY 1""", LocalDate.class, stockId, asOf);
     }
 
     /**

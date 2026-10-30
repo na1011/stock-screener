@@ -635,8 +635,9 @@ public class PipelineScheduler {
                 } catch (RuntimeException e) {
                     held = keepFirst(held, e);
                 }
-                // 끝에 국내 보통주 몫 재료를 받는다(ADR-0192) — 값을 안 바꾸는 재료 표만 쓰고, 앞 단계가 그날 새로 쓴 국내 판까지 받으려고
-                // 맨 뒤다. 한 판에 새로 받는 수는 설정 상한이 묶는다(14:18 · 14:20을 안 민다).
+                // 끝에 국내 보통주 몫 재료를 받는다(ADR-0192) — 재료 표를 쓰고, 재료가 원본 판의 숫자가 같다고 답한 라벨에는 원본 접수일의 판을
+                // 넣는다(ADR-0195 · KrEarlierVintages — 재무 판이 바뀌므로 14:18 유도 · 14:20 화해가 그 뒤다). 앞 단계가 그날 새로 쓴 국내
+                // 판까지 받으려고 맨 뒤다. 한 판에 새로 받는 수는 설정 상한이 묶는다(14:18 · 14:20을 안 민다).
                 try {
                     krXbrlCollectJob.run(today, BatchExecutionRecorder.TriggeredBy.SCHEDULER, List.of(), null);
                 } catch (BatchShutdownException e) {

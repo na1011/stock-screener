@@ -29,6 +29,8 @@ public final class IndicatorContext {
     private final NavigableMap<LocalDate, BigDecimal> marketIndex;
     private final List<GovernanceFigures> governanceFacts;
     private final Map<String, NavigableMap<LocalDate, BigDecimal>> dependencies;
+    /** 실적 발표가 공개된 날(오름차순 · ADR-0195) — 재무 기준보다 새 발표가 공개된 봉의 재무 지표를 막는 재료다. */
+    private final List<LocalDate> earningsReleaseDates;
 
     public IndicatorContext(
             long stockId,
@@ -41,6 +43,28 @@ public final class IndicatorContext {
             NavigableMap<LocalDate, BigDecimal> marketIndex,
             List<GovernanceFigures> governanceFacts,
             Map<String, NavigableMap<LocalDate, BigDecimal>> dependencies) {
+        this(stockId, industryDivisionKey, priceBars, annualFigures, quarterlyFigures, shareAdjustments,
+                unadjustedActions, marketIndex, governanceFacts, dependencies, List.of());
+    }
+
+    /**
+     * @param earningsReleaseDates 실적 발표가 공개된 날({@code earnings_release.effective_on}) — 러너가 싣는다. 빠뜨리면 컴파일되고
+     *                             새 실적이 공개된 봉도 옛 분기로 값이 나온다(ADR-0195). {@code IndicatorRunnerTest}가 이 자리를 지킨다
+     */
+    public IndicatorContext(
+            long stockId,
+            String industryDivisionKey,
+            List<PriceBar> priceBars,
+            List<FinancialFigures> annualFigures,
+            List<FinancialFigures> quarterlyFigures,
+            List<ShareAdjustment> shareAdjustments,
+            List<LocalDate> unadjustedActions,
+            NavigableMap<LocalDate, BigDecimal> marketIndex,
+            List<GovernanceFigures> governanceFacts,
+            Map<String, NavigableMap<LocalDate, BigDecimal>> dependencies,
+            List<LocalDate> earningsReleaseDates) {
+        this.earningsReleaseDates = earningsReleaseDates == null ? List.of()
+                : earningsReleaseDates.stream().distinct().sorted().toList();
         this.stockId = stockId;
         this.industryDivisionKey = industryDivisionKey;
         this.priceBars = priceBars == null ? List.of() : List.copyOf(priceBars);
@@ -95,7 +119,7 @@ public final class IndicatorContext {
             Map<String, NavigableMap<LocalDate, BigDecimal>> newDependencies) {
         return new IndicatorContext(stockId, industryDivisionKey, priceBars, annualRevisions,
                 quarterlyRevisions, shareAdjustments, unadjustedActions, marketIndex,
-                governanceFacts, newDependencies);
+                governanceFacts, newDependencies, earningsReleaseDates);
     }
 
     public long stockId() {
@@ -138,7 +162,29 @@ public final class IndicatorContext {
         return new IndicatorContext(stockId, industryDivisionKey, priceBars,
                 publishedOnOrBefore(annualRevisions, tradeDate),
                 publishedOnOrBefore(quarterlyRevisions, tradeDate),
-                shareAdjustments, unadjustedActions, marketIndex, governanceFacts, dependencies);
+                shareAdjustments, unadjustedActions, marketIndex, governanceFacts, dependencies,
+                earningsReleaseDates.stream().filter(d -> !d.isAfter(tradeDate)).toList());
+    }
+
+    /**
+     * 재무를 비운 사본 — 그 봉의 재무 지표를 내지 않을 때 계산기에 넘긴다(ADR-0195 · {@code FinancialMath.financialsAt}). 재무가 없는
+     * 컨텍스트에서 계산기는 값을 안 내므로 그 봉에 행이 안 생긴다. 시세 · 거버넌스는 그대로다.
+     */
+    public IndicatorContext withoutFinancials() {
+        return new IndicatorContext(stockId, industryDivisionKey, priceBars, List.of(), List.of(),
+                shareAdjustments, unadjustedActions, marketIndex, governanceFacts, dependencies, earningsReleaseDates);
+    }
+
+    /** 실적 발표가 공개된 날(오름차순). */
+    public List<LocalDate> earningsReleaseDates() {
+        return earningsReleaseDates;
+    }
+
+    /** 실적 발표 공개일만 갈아끼운 사본. 시험이 시드할 때 쓴다. */
+    public IndicatorContext withEarningsReleaseDates(List<LocalDate> dates) {
+        return new IndicatorContext(stockId, industryDivisionKey, priceBars, annualRevisions,
+                quarterlyRevisions, shareAdjustments, unadjustedActions, marketIndex,
+                governanceFacts, dependencies, dates);
     }
 
     /**
@@ -150,8 +196,12 @@ public final class IndicatorContext {
      * 그만큼만 늘어난다.
      */
     public List<LocalDate> financialPublicationDates() {
-        return java.util.stream.Stream.concat(annualRevisions.stream(), quarterlyRevisions.stream())
-                .map(FinancialFigures::publishedAt)
+        // 실적 발표 공개일도 경계다(ADR-0195) — 그 날부터 재무 지표가 막히고, 다음 공시일에 다시 열린다. 빼면 구간이 안 갈려 막힌 날
+        // 앞의 값이 그 봉까지 펴진다.
+        return java.util.stream.Stream.concat(
+                        java.util.stream.Stream.concat(annualRevisions.stream(), quarterlyRevisions.stream())
+                                .map(FinancialFigures::publishedAt),
+                        earningsReleaseDates.stream())
                 .filter(java.util.Objects::nonNull)
                 .distinct()
                 .sorted()
@@ -354,7 +404,7 @@ public final class IndicatorContext {
     public IndicatorContext withGovernanceFacts(List<GovernanceFigures> newGovernanceFacts) {
         return new IndicatorContext(stockId, industryDivisionKey, priceBars, annualRevisions,
                 quarterlyRevisions, shareAdjustments, unadjustedActions, marketIndex,
-                newGovernanceFacts, dependencies);
+                newGovernanceFacts, dependencies, earningsReleaseDates);
     }
 
     /** 계산 대상 날짜들(시세 기준, 오름차순). */
@@ -377,6 +427,6 @@ public final class IndicatorContext {
     public IndicatorContext withMarketIndex(NavigableMap<LocalDate, BigDecimal> newMarketIndex) {
         return new IndicatorContext(stockId, industryDivisionKey, priceBars, annualRevisions,
                 quarterlyRevisions, shareAdjustments, unadjustedActions, newMarketIndex,
-                governanceFacts, dependencies);
+                governanceFacts, dependencies, earningsReleaseDates);
     }
 }

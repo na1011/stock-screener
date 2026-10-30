@@ -371,8 +371,11 @@ public class FinancialWriter {
         return renumbered;
     }
 
-    /** 한 라벨을 공시일 순 0..n으로. 두 문장인 이유는 {@link #renumberOutOfOrderLabels}에 있다. */
-    private void renumberLabel(long stockId, int fiscalYear, String fiscalPeriod) {
+    /**
+     * 한 라벨을 공시일 순 0..n으로. 두 문장인 이유는 {@link #renumberOutOfOrderLabels}에 있다. 이른 판을 넣는 다른 갈래
+     * ({@link KrEarlierVintages})도 이것으로 맞춘다 — 번호 규칙이 두 벌이 되지 않게.
+     */
+    void renumberLabel(long stockId, int fiscalYear, String fiscalPeriod) {
         jdbcTemplate.update("""
                 UPDATE financial_statement SET revision_no = revision_no + 1000
                 WHERE stock_id = ? AND fiscal_year = ? AND fiscal_period = ?

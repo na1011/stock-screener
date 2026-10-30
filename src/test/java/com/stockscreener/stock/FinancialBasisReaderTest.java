@@ -54,7 +54,7 @@ class FinancialBasisReaderTest {
         assertThat(basis.balanceLabel()).isNull();
         assertThat(basis.status()).isEqualTo(Status.PENDING);
         assertThat(basis.releaseFiledOn()).isEqualTo(LocalDate.of(2031, 10, 28));
-        assertThat(basis.notice()).contains("10월 28일").contains("2031 Q2");
+        assertThat(basis.notice()).contains("10월 28일").contains("2031 Q2").contains("계산하지 않았습니다");
     }
 
     @Test
@@ -168,27 +168,20 @@ class FinancialBasisReaderTest {
     }
 
     @Test
-    @DisplayName("다음 기말 — 월말은 월말로 맞추고 52/53주 결산은 날짜 그대로 석 달 뒤다")
-    void nextPeriodEnd() {
-        assertThat(FinancialBasisReader.nextPeriodEnd(LocalDate.of(2026, 6, 30))).isEqualTo(LocalDate.of(2026, 9, 30));
-        assertThat(FinancialBasisReader.nextPeriodEnd(LocalDate.of(2026, 3, 31))).isEqualTo(LocalDate.of(2026, 6, 30));
-        assertThat(FinancialBasisReader.nextPeriodEnd(LocalDate.of(2025, 11, 30))).isEqualTo(LocalDate.of(2026, 2, 28));
-        assertThat(FinancialBasisReader.nextPeriodEnd(LocalDate.of(2026, 6, 27))).isEqualTo(LocalDate.of(2026, 9, 27));
-    }
+    @DisplayName("지표를 쓴 실행 뒤에 알게 된 발표는 아직 지표를 막지 않았다 — 대기라 말하지 않는다")
+    void releasesLearnedAfterTheIndicatorWriteAreNotPendingYet() {
+        long id = usStockWithFourQuarters("LATR");
+        LocalDate asOf = LocalDate.of(2031, 10, 29);
+        jdbc.update("""
+                INSERT INTO batch_execution (job_name, target_date, status, triggered_by, scope, started_at, finished_at)
+                VALUES ('daily-update', ?, 'SUCCESS', 'SCHEDULER', 'FULL', now() - interval '1 hour', now() - interval '50 minutes')
+                """, asOf);
+        jdbc.update("UPDATE financial_statement SET created_at = now() - interval '2 hours' WHERE stock_id = ?", id);
+        release(id, "US", "0000000001-31-000090", "8-K", null, "2.02,9.01", LocalDate.of(2031, 10, 28));
+        jdbc.update("UPDATE earnings_release SET first_seen_at = now(), resolved_at = now() WHERE stock_id = ?", id);
+        sweep(id, asOf);
 
-    @Test
-    @DisplayName("통화가 시장과 다른 행이 하나라도 있으면 지표 리더처럼 재무를 통째로 안 본다 — 지표가 없는데 라벨만 기준을 말하지 않는다")
-    void currencyGateMatchesTheIndicatorReader() {
-        long gated = insertStock("KOSPI", "900003", 12);
-        quarter(gated, 2031, "Q2", LocalDate.of(2031, 6, 30), LocalDate.of(2031, 8, 14), "11012");
-        jdbc.update("UPDATE financial_statement SET currency_code = 'USD' WHERE stock_id = ?", gated);
-        quarter(gated, 2031, "Q1", LocalDate.of(2031, 3, 31), LocalDate.of(2031, 5, 15), "11013");
-        long clean = insertStock("KOSPI", "900004", 12);
-        quarter(clean, 2031, "Q1", LocalDate.of(2031, 3, 31), LocalDate.of(2031, 5, 15), "11013");
-
-        var bases = reader.read(List.of(gated, clean), LocalDate.of(2031, 10, 29));
-
-        assertThat(bases).doesNotContainKey(gated).containsKey(clean);
+        assertThat(reader.read(List.of(id), asOf).get(id).status()).isEqualTo(Status.NONE);
     }
 
     @Test
@@ -240,9 +233,11 @@ class FinancialBasisReaderTest {
     private void release(long stockId, String market, String filingNo, String form, String reportName, String items,
                          LocalDate filedOn) {
         jdbc.update("""
-                INSERT INTO earnings_release (market, filing_no, stock_id, form, report_name, items, filed_on, resolved_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, CASE WHEN CAST(? AS varchar) IS NULL THEN NULL ELSE now() END)
-                """, market, filingNo, stockId, form, reportName, items, filedOn, items);
+                INSERT INTO earnings_release (market, filing_no, stock_id, form, report_name, items, filed_on, effective_on,
+                    resolved_at, first_seen_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, CASE WHEN CAST(? AS varchar) IS NULL THEN NULL ELSE now() - interval '3 hours' END,
+                    now() - interval '3 hours')
+                """, market, filingNo, stockId, form, reportName, items, filedOn, filedOn, items);
     }
 
     private void sweep(long stockId, LocalDate through) {

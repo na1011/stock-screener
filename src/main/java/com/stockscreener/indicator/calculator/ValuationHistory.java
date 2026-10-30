@@ -81,9 +81,12 @@ final class ValuationHistory {
         }
 
         Double[] ratios = new Double[bars.size()];
+        // 재무가 막힌 봉(ADR-0195 · 새 실적 발표가 공개됐는데 기준은 옛 분기)은 배수도 중앙값도 안 낸다.
+        boolean[] withheld = new boolean[bars.size()];
         List<LocalDate> cuts = context.financialPublicationDates();
         int cut = 0;
         FinancialMath.PeriodSeries visible = null;
+        boolean blocked = false;
         for (int i = 0; i < bars.size(); i++) {
             PriceBar bar = bars.get(i);
             boolean crossed = false;
@@ -95,8 +98,11 @@ final class ValuationHistory {
                 // MUST: 기저를 그 시점 컨텍스트로 고른다. 봉마다 보이는 판이 달라지면
                 // 연속 네 분기가 서는지도 달라지므로, 창 밖에서 한 번 고른 기저를 쓰면
                 // 과거 봉이 그때 성립하지 않던 기저로 계산된다(ADR-0164).
-                visible = FinancialMath.seriesOf(context.visibleAt(bar.tradeDate()));
+                IndicatorContext atBar = context.visibleAt(bar.tradeDate());
+                blocked = FinancialMath.withheldAt(atBar, bar.tradeDate());
+                visible = FinancialMath.seriesOf(blocked ? atBar.withoutFinancials() : atBar);
             }
+            withheld[i] = blocked;
             int published = FinancialMath.publishedIndexOn(visible.rows(), bar.tradeDate());
             if (published < 0) {
                 continue;
@@ -121,7 +127,7 @@ final class ValuationHistory {
                 removeSorted(window, ratios[i - LOOKBACK - 1]);
                 insertSorted(window, ratios[i]);
             }
-            if (window.size() < MIN_SAMPLES) {
+            if (window.size() < MIN_SAMPLES || withheld[i]) {
                 continue;
             }
             points.add(new IndicatorPoint(bars.get(i).tradeDate(),

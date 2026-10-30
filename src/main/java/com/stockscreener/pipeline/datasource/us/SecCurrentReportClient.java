@@ -13,6 +13,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import tools.jackson.databind.JsonNode;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
@@ -56,8 +57,15 @@ public class SecCurrentReportClient {
         this.backoff = backoff;
     }
 
-    /** 수시 보고서 하나. {@code items}는 원장이 적은 그대로(「2.02,9.01」) — 비어 있을 수 있다. */
-    public record CurrentReport(String accession, String form, LocalDate filed, String items) {
+    /**
+     * 수시 보고서 하나. {@code items}는 원장이 적은 그대로(「2.02,9.01」) — 비어 있을 수 있다. {@code accepted}는 접수 시각
+     * ({@code acceptanceDateTime} · UTC) — 실적 발표가 그날 종가 전에 공개됐는지를 가른다(ADR-0195). 못 읽으면 {@code null}이다.
+     */
+    public record CurrentReport(String accession, String form, LocalDate filed, String items, Instant accepted) {
+
+        public CurrentReport(String accession, String form, LocalDate filed, String items) {
+            this(accession, form, filed, items, null);
+        }
 
         /** 실적 발표인가 — 항목 목록에 {@code 2.02}가 있다. */
         public boolean isEarningsRelease() {
@@ -107,6 +115,7 @@ public class SecCurrentReportClient {
         JsonNode forms = table.path("form");
         JsonNode filed = table.path("filingDate");
         JsonNode items = table.path("items");
+        JsonNode accepted = table.path("acceptanceDateTime");
         int n = accessions.size();
         if (forms.size() != n || filed.size() != n || items.size() != n) {
             throw new DataSourceException(DataSourceException.Kind.MALFORMED, SecEdgarResponse.SOURCE_NAME,
@@ -127,7 +136,8 @@ public class SecCurrentReportClient {
             if (date.isBefore(since)) {
                 continue;
             }
-            out.add(new CurrentReport(accessions.get(i).asString(""), form, date, items.get(i).asString("")));
+            out.add(new CurrentReport(accessions.get(i).asString(""), form, date, items.get(i).asString(""),
+                    i < accepted.size() ? parseInstant(accepted.get(i).asString("")) : null));
         }
         return out;
     }
@@ -137,6 +147,18 @@ public class SecCurrentReportClient {
                 () -> data.get().uri(path).retrieve().toEntity(String.class),
                 received -> SecEdgarResponse.unreadableJson(received.getBody()), context);
         return SecEdgarResponse.requireJson(response.getStatusCode(), response.getBody(), context);
+    }
+
+    /** 「2026-10-29T20:05:45.000Z」. 못 읽으면 {@code null} — 그 줄의 공개일은 접수일로 보수적으로 둔다. */
+    private static Instant parseInstant(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        try {
+            return Instant.parse(raw);
+        } catch (DateTimeParseException e) {
+            return null;
+        }
     }
 
     private static LocalDate parseDate(String raw) {

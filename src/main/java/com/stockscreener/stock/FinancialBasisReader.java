@@ -16,7 +16,7 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
-import java.time.temporal.TemporalAdjusters;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -96,29 +96,36 @@ public class FinancialBasisReader {
         if (stockIds.isEmpty()) {
             return Map.of();
         }
-        Map<Long, KnownFigures> known = indicatorDataReader.readKnownFigures(stockIds, asOf, indicatorsWrittenBy(asOf));
+        Instant writtenBy = indicatorsWrittenBy(asOf);
+        Map<Long, KnownFigures> known = indicatorDataReader.readKnownFigures(stockIds, asOf, writtenBy);
         Map<Long, StockFacts> facts = stockFacts(stockIds);
+        Map<Long, List<LocalDate>> releaseDates = releaseDates(stockIds, asOf, writtenBy);
         Map<String, LocalDate> cursors = listingCursors();
+        Map<Long, IndicatorContext> contexts = new HashMap<>();
         Map<Long, ReportingBasis.Basis> bases = new HashMap<>();
         for (Long stockId : stockIds) {
             KnownFigures figures = known.get(stockId);
             if (figures == null || !facts.containsKey(stockId)) {
                 continue;
             }
-            ReportingBasis.of(new IndicatorContext(stockId, List.of(), figures.annual(), figures.quarterly(), Map.of()))
-                    .ifPresent(basis -> bases.put(stockId, basis));
+            IndicatorContext context = new IndicatorContext(stockId, List.of(), figures.annual(), figures.quarterly(), Map.of())
+                    .withEarningsReleaseDates(releaseDates.getOrDefault(stockId, List.of()));
+            ReportingBasis.of(context).ifPresent(basis -> {
+                bases.put(stockId, basis);
+                contexts.put(stockId, context);
+            });
         }
         Map<Long, LocalDate> after = new HashMap<>();
-        bases.forEach((stockId, basis) -> after.put(stockId, nextPeriodEnd(basis.flow().periodEnd())));
-        Map<Long, Releases> releases = releases(after, asOf);
+        bases.forEach((stockId, basis) -> after.put(stockId, ReportingBasis.nextPeriodEnd(basis.flow().periodEnd())));
+        Map<Long, LocalDate> unresolved = unresolved(after, asOf);
         Map<Long, Basis> out = new HashMap<>();
-        bases.forEach((stockId, basis) -> out.put(stockId, judge(facts.get(stockId), basis, known.get(stockId), asOf,
-                cursors, releases.getOrDefault(stockId, Releases.EMPTY))));
+        bases.forEach((stockId, basis) -> out.put(stockId, judge(facts.get(stockId), basis, known.get(stockId),
+                contexts.get(stockId), asOf, cursors, unresolved.get(stockId))));
         return out;
     }
 
-    private Basis judge(StockFacts stock, ReportingBasis.Basis basis, KnownFigures figures, LocalDate asOf,
-                        Map<String, LocalDate> cursors, Releases releases) {
+    private Basis judge(StockFacts stock, ReportingBasis.Basis basis, KnownFigures figures, IndicatorContext context,
+                        LocalDate asOf, Map<String, LocalDate> cursors, LocalDate unresolved) {
         String flowLabel = label(basis.flow(), basis.quarterly());
         String balanceLabel = basis.point() == null || basis.point().periodEnd().equals(basis.flow().periodEnd())
                 ? null : label(basis.point(), basis.point().fiscalPeriod() != FinancialFigures.FiscalPeriod.FY);
@@ -132,19 +139,21 @@ public class FinancialBasisReader {
             return untracked(flowLabel, balanceLabel, Untracked.FOREIGN_ISSUER,
                     "외국 발행사는 실적 발표(6-K)를 원장이 구조로 주지 않아 새 실적 발표를 감지하지 못합니다.");
         }
-        LocalDate nextEnd = nextPeriodEnd(flowEnd);
-        if (releases.latest() != null) {
-            return new Basis(flowLabel, balanceLabel, Status.PENDING, null, releases.latest(),
-                    "%s 새 실적 발표가 있습니다 — 지표는 %s 재무 기준이라 아직 반영되지 않았습니다."
-                            .formatted(DAY.format(releases.latest()), flowLabel));
+        // 지표 계산과 같은 판정이다(ReportingBasis.pendingRelease) — 대기면 그 날의 재무 지표는 계산되지 않았다.
+        LocalDate pending = ReportingBasis.pendingRelease(context, asOf).orElse(null);
+        if (pending != null) {
+            return new Basis(flowLabel, balanceLabel, Status.PENDING, null, pending,
+                    "%s 새 실적 발표가 있어 이 날의 재무 지표를 계산하지 않았습니다 — 재무 기준이 %s라 정식 공시가 반영되면 다시 계산합니다."
+                            .formatted(DAY.format(pending), flowLabel));
         }
-        if (releases.unresolved() != null) {
+        if (unresolved != null) {
             return untracked(flowLabel, balanceLabel, Untracked.UNRESOLVED,
-                    "%s 8-K가 실적 발표인지 아직 확인하지 못했습니다.".formatted(DAY.format(releases.unresolved())));
+                    "%s 8-K가 실적 발표인지 아직 확인하지 못했습니다.".formatted(DAY.format(unresolved)));
         }
         if (stock.sweptThrough() == null) {
             return untracked(flowLabel, balanceLabel, Untracked.NOT_SWEPT, "이 종목의 실적 발표 이력을 아직 받지 않았습니다.");
         }
+        LocalDate nextEnd = ReportingBasis.nextPeriodEnd(flowEnd);
         if (nextEnd.isBefore(EarningsReleaseStore.FIRST_DATE.minusDays(1))) {
             return untracked(flowLabel, balanceLabel, Untracked.BEFORE_COVERAGE,
                     "재무 기준(%s)이 실적 발표 수집 시작보다 오래돼 그 뒤 발표와 대조하지 못합니다.".formatted(flowLabel));
@@ -162,13 +171,6 @@ public class FinancialBasisReader {
         return new Basis(flowLabel, balanceLabel, Status.UNTRACKED, reason, null, notice);
     }
 
-    /** 다음 기의 기말 — 석 달 뒤. 월말 기말은 월말로 맞춘다(06-30 → 09-30 · 03-31 → 06-30). 52/53주 결산은 그 날짜 그대로 석 달 뒤다. */
-    static LocalDate nextPeriodEnd(LocalDate periodEnd) {
-        LocalDate next = periodEnd.plusMonths(3);
-        return periodEnd.equals(periodEnd.with(TemporalAdjusters.lastDayOfMonth()))
-                ? next.with(TemporalAdjusters.lastDayOfMonth()) : next;
-    }
-
     /** 화면 라벨 — 연간은 「2025년」, 분기는 「2026 Q2」({@code FinancialsPanel}의 표기와 같다). */
     static String label(FinancialFigures row, boolean quarterly) {
         return quarterly && row.fiscalPeriod() != FinancialFigures.FiscalPeriod.FY
@@ -177,28 +179,42 @@ public class FinancialBasisReader {
     }
 
     /**
-     * @param latest     다음 기말 뒤 · 기준일까지 가장 최근 실적 발표의 접수일
-     * @param unresolved 같은 구간의, 항목을 아직 모르는 8-K 중 가장 이른 접수일
+     * 종목마다 실적 발표 공개일(지표 리더와 같은 술어 · {@code EarningsReleaseStore.IS_EARNINGS_RELEASE}). 지표를 쓴 실행이 시작한 뒤에
+     * 알게 된 발표는 뺀다 — 그 지표는 아직 그 발표로 막히지 않았다.
      */
-    private record Releases(LocalDate latest, LocalDate unresolved) {
-        static final Releases EMPTY = new Releases(null, null);
+    private Map<Long, List<LocalDate>> releaseDates(Collection<Long> stockIds, LocalDate asOf, Instant writtenBy) {
+        Map<Long, List<LocalDate>> out = new HashMap<>();
+        Timestamp bound = writtenBy == null ? null : Timestamp.from(writtenBy);
+        jdbc.query(con -> {
+            var ps = con.prepareStatement("""
+                    SELECT r.stock_id, r.effective_on FROM earnings_release r
+                    WHERE r.stock_id = ANY(?) AND r.effective_on <= ? AND """ + EarningsReleaseStore.IS_EARNINGS_RELEASE + """
+                      AND (CAST(? AS timestamptz) IS NULL OR coalesce(r.resolved_at, r.first_seen_at) <= CAST(? AS timestamptz))
+                    """);
+            ps.setArray(1, con.createArrayOf("bigint", stockIds.toArray()));
+            ps.setObject(2, asOf);
+            ps.setTimestamp(3, bound);
+            ps.setTimestamp(4, bound);
+            return ps;
+        }, rs -> {
+            out.computeIfAbsent(rs.getLong("stock_id"), k -> new ArrayList<>()).add(rs.getObject("effective_on", LocalDate.class));
+        });
+        return out;
     }
 
-    /** 종목마다 그 종목의 다음 기말 뒤 · 기준일까지의 발표를 한 질의로 — 결과 표가 최대 2,000행이다. */
-    private Map<Long, Releases> releases(Map<Long, LocalDate> after, LocalDate asOf) {
-        Map<Long, Releases> out = new HashMap<>();
+    /** 종목마다 다음 기말 뒤 · 기준일까지 항목을 아직 모르는 8-K 중 가장 이른 접수일 — 결과 표가 최대 2,000행이라 한 질의다. */
+    private Map<Long, LocalDate> unresolved(Map<Long, LocalDate> after, LocalDate asOf) {
+        Map<Long, LocalDate> out = new HashMap<>();
         if (after.isEmpty()) {
             return out;
         }
         List<Long> ids = List.copyOf(after.keySet());
         jdbc.query(con -> {
             var ps = con.prepareStatement("""
-                    SELECT w.stock_id,
-                           max(r.filed_on) FILTER (WHERE r.market = 'KR'
-                               OR (r.items IS NOT NULL AND ',' || replace(r.items, ' ', '') || ',' LIKE '%,2.02,%')) AS latest,
-                           min(r.filed_on) FILTER (WHERE r.market = 'US' AND r.items IS NULL) AS unresolved
+                    SELECT w.stock_id, min(r.filed_on) AS unresolved
                     FROM unnest(?::bigint[], ?::date[]) AS w(stock_id, after_day)
                     JOIN earnings_release r ON r.stock_id = w.stock_id AND r.filed_on > w.after_day AND r.filed_on <= ?
+                    WHERE r.market = 'US' AND r.items IS NULL
                     GROUP BY w.stock_id
                     """);
             ps.setArray(1, con.createArrayOf("bigint", ids.toArray()));
@@ -206,8 +222,7 @@ public class FinancialBasisReader {
             ps.setObject(3, asOf);
             return ps;
         }, rs -> {
-            out.put(rs.getLong("stock_id"), new Releases(rs.getObject("latest", LocalDate.class),
-                    rs.getObject("unresolved", LocalDate.class)));
+            out.put(rs.getLong("stock_id"), rs.getObject("unresolved", LocalDate.class));
         });
         return out;
     }

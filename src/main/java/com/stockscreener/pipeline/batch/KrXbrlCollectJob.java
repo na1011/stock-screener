@@ -1,5 +1,6 @@
 package com.stockscreener.pipeline.batch;
 
+import com.stockscreener.pipeline.collector.KrEarlierVintages;
 import com.stockscreener.pipeline.datasource.DataSourceException;
 import com.stockscreener.pipeline.datasource.SecurityRef;
 import com.stockscreener.pipeline.datasource.kr.xbrl.KrXbrlCollector;
@@ -17,8 +18,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 /**
  * 국내 보통주 몫 재료 받기(ADR-0192) — 국내 재무 행이 있는 종목 전원의 판마다 원본 재료와 주식총수 명부를 채운다.
  *
- * <p><b>값을 바꾸지 않는다</b> — 재료 표 둘과 디스크 캐시만 쓴다. 판정(보통주 몫)은 국내 관문 뒤 유도가 이 재료를 읽는다. 그래서 관문
- * 앞에 먼저 돌아 밀린 재료를 비워 둔다(무해한 선행 배포). 정기 실행(평일 14:16 사슬 끝)은 한 판에 새로 받는 수를
+ * <p>재료 표 둘과 디스크 캐시를 쓰고, 판정(보통주 몫)은 국내 관문 뒤 유도가 이 재료를 읽는다. <b>예외 하나가 값을 바꾼다</b> — 재료를 받은
+ * 그 종목 트랜잭션 안에서 「같은 숫자를 처음 공개한 판」을 넣는다({@link KrEarlierVintages} · ADR-0195): DART 재무 API가 가장 늦은 판만
+ * 주어 밀린 첫 공시일을 원본 접수일로 바로잡는다. 재료가 둘 다 있어야 판정되므로 재료를 받는 이 자리가 그 순서의 정본이다. 정기 실행(평일 14:16 사슬 끝)은 한 판에 새로 받는 수를
  * {@code stockscreener.kr-xbrl.max-fetches-per-run}으로 묶는다 — 처음 한 번 밀린 약 14,000판을 한 오후에 몰면 14:18 · 14:20을 민다.
  */
 @Component
@@ -32,11 +34,14 @@ public class KrXbrlCollectJob {
 
     private final KrXbrlCollector collector;
     private final KrXbrlStore store;
+    private final KrEarlierVintages earlierVintages;
     private final BatchExecutions batchExecutions;
     private final int scheduledBudget;
 
     public KrXbrlCollectJob(KrXbrlCollector collector, KrXbrlStore store, BatchExecutions batchExecutions,
-                            @Value("${stockscreener.kr-xbrl.max-fetches-per-run}") int scheduledBudget) {
+                            @Value("${stockscreener.kr-xbrl.max-fetches-per-run}") int scheduledBudget,
+                            KrEarlierVintages earlierVintages) {
+        this.earlierVintages = earlierVintages;
         this.collector = collector;
         this.store = store;
         this.batchExecutions = batchExecutions;
@@ -89,6 +94,7 @@ public class KrXbrlCollectJob {
         AtomicInteger noFile = new AtomicInteger();
         AtomicInteger registers = new AtomicInteger();
         AtomicInteger unbound = new AtomicInteger();
+        AtomicInteger earlier = new AtomicInteger();
         try {
             for (KrXbrlStore.Target target : targets) {
                 SecurityRef security = new SecurityRef(target.stockId(), target.market(), target.ticker());
@@ -99,7 +105,9 @@ public class KrXbrlCollectJob {
                     noFile.addAndGet(c.noFile());
                     registers.addAndGet(c.registers());
                     unbound.addAndGet(c.unbound());
-                    return c.fetched() + c.reread() + c.noFile() + c.registers();
+                    int inserted = earlierVintages.insert(target.stockId());
+                    earlier.addAndGet(inserted);
+                    return c.fetched() + c.reread() + c.noFile() + c.registers() + inserted;
                 });
             }
         } catch (DataSourceException e) {
@@ -109,9 +117,9 @@ public class KrXbrlCollectJob {
             execution.failUnexpectedly(e);
             throw e;
         }
-        String note = "받음=%d 캐시재판독=%d 원본없음=%d 명부=%d 짝없는판=%d 남은상한=%s 미해결=%d".formatted(fetched.get(), reread.get(),
-                noFile.get(), registers.get(), unbound.get(), budget == Integer.MAX_VALUE ? "없음" : String.valueOf(remaining.get()),
-                store.unresolved());
+        String note = "받음=%d 캐시재판독=%d 원본없음=%d 명부=%d 짝없는판=%d 이른판=%d 남은상한=%s 미해결=%d".formatted(fetched.get(),
+                reread.get(), noFile.get(), registers.get(), unbound.get(), earlier.get(),
+                budget == Integer.MAX_VALUE ? "없음" : String.valueOf(remaining.get()), store.unresolved());
         log.info("국내 보통주 몫 재료 받기를 마쳤다. {}", note);
         return execution.finish(note);
     }

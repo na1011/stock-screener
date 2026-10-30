@@ -156,17 +156,17 @@ public class EarningsReleaseJob {
         List<String> stale = new ArrayList<>();
         for (Map.Entry<Long, List<Unresolved>> e : byCik.entrySet()) {
             LocalDate since = e.getValue().stream().map(Unresolved::filedOn).min(LocalDate::compareTo).orElseThrow();
-            Map<String, String> items = new HashMap<>();
+            Map<String, CurrentReport> answered = new HashMap<>();
             try {
                 for (CurrentReport report : sec.currentReports(e.getKey(), since)) {
-                    items.put(report.accession(), report.items());
+                    answered.put(report.accession(), report);
                 }
             } catch (DataSourceException ex) {
                 failures.add("CIK " + e.getKey() + " " + ex.kind() + " " + ex.getMessage());
                 continue;
             }
             for (Unresolved u : e.getValue()) {
-                String found = items.get(u.filingNo());
+                CurrentReport found = answered.get(u.filingNo());
                 if (found == null) {
                     // submissions에 아직 없다 — 그 줄만 모르는 채 남는다(그 종목의 그 구간은 판정 불가).
                     stillUnknown++;
@@ -175,7 +175,7 @@ public class EarningsReleaseJob {
                     }
                     continue;
                 }
-                store.resolve(u.id(), found);
+                store.resolve(u.id(), found.items(), found.accepted());
                 resolved++;
             }
         }
@@ -192,12 +192,12 @@ public class EarningsReleaseJob {
                 continue;
             }
             List<ListedRelease> releases = new ArrayList<>();
-            Map<String, String> items = new HashMap<>();
+            Map<String, EarningsReleaseStore.Resolution> resolutions = new HashMap<>();
             for (CurrentReport report : reports) {
                 releases.add(new ListedRelease(report.accession(), stock.stockId(), report.form(), null, report.filed()));
-                items.put(report.accession(), report.items());
+                resolutions.put(report.accession(), new EarningsReleaseStore.Resolution(report.items(), report.accepted()));
             }
-            written += store.recordSweep("US", stock.stockId(), releases, items, sweptThrough);
+            written += store.recordSweep("US", stock.stockId(), releases, resolutions, sweptThrough);
             swept++;
         }
         int left = Math.max(0, unswept.size() - sweepLimit);

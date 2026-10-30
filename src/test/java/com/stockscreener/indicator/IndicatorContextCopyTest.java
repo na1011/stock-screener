@@ -34,7 +34,8 @@ class IndicatorContextCopyTest {
     private static final Map<String, String> REPLACED_BY = Map.of(
             "withDependencies", "dependencies",
             "withMarketIndex", "marketIndex",
-            "withGovernanceFacts", "governanceFacts");
+            "withGovernanceFacts", "governanceFacts",
+            "withEarningsReleaseDates", "earningsReleaseDates");
 
     @Test
     @DisplayName("withDependencies가 나머지 필드를 전부 나른다")
@@ -60,6 +61,32 @@ class IndicatorContextCopyTest {
         IndicatorContext copy = base.withGovernanceFacts(List.of(
                 new GovernanceFigures(2020, Map.of())));
         assertCarriesEverythingExcept(base, copy, "withGovernanceFacts");
+    }
+
+    @Test
+    @DisplayName("withEarningsReleaseDates가 나머지 필드를 전부 나른다")
+    void withEarningsReleaseDatesCarriesEveryOtherField() throws Exception {
+        IndicatorContext base = fullyPopulated();
+        assertCarriesEverythingExcept(base, base.withEarningsReleaseDates(List.of(LocalDate.of(2026, 7, 7))),
+                "withEarningsReleaseDates");
+    }
+
+    @Test
+    @DisplayName("withoutFinancials는 재무 넷만 비우고 나머지를 전부 나른다(ADR-0195) — 시세 · 거버넌스 지표가 막힌 봉에도 산다")
+    void withoutFinancialsClearsOnlyTheFinancials() throws Exception {
+        IndicatorContext base = fullyPopulated();
+        IndicatorContext copy = base.withoutFinancials();
+        java.util.Set<String> financial = java.util.Set.of("annualRevisions", "quarterlyRevisions", "annualFigures",
+                "quarterlyFigures");
+        for (Field field : instanceFields()) {
+            field.setAccessible(true);
+            if (financial.contains(field.getName())) {
+                assertThat(isEmptyish(field.get(copy))).as("%s를 안 비웠다", field.getName()).isTrue();
+            } else {
+                assertThat(field.get(copy)).as("withoutFinancials가 %s를 안 실었다", field.getName())
+                        .isEqualTo(field.get(base));
+            }
+        }
     }
 
     @Test
@@ -141,7 +168,8 @@ class IndicatorContextCopyTest {
                 index,
                 List.of(new GovernanceFigures(2025, Map.of(GovernanceMetric.DIRECTOR_COUNT,
                         new GovernanceValue(BigDecimal.valueOf(9), LocalDate.of(2026, 3, 10))))),
-                Map.of("PARENT", new TreeMap<>(index)));
+                Map.of("PARENT", new TreeMap<>(index)),
+                List.of(LocalDate.of(2026, 4, 7)));
     }
 
     private static FinancialFigures annual() {

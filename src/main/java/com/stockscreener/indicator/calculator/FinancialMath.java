@@ -594,6 +594,24 @@ final class FinancialMath {
      * @param valueOf 그 시점의 재무만 담긴 컨텍스트를 받아 값 하나를 낸다. {@code null}이면
      *                그 구간에는 행을 쓰지 않는다(ADR-0002)
      */
+    /**
+     * 그 봉의 계산기가 볼 재무 — 그 봉 시점에 공시돼 있던 판({@link IndicatorContext#visibleAt}). 다만 <b>그 판의 기준보다 새로운 실적
+     * 발표가 그 봉까지 공개돼 있으면 재무를 비운다</b>(ADR-0195 · {@link ReportingBasis#pendingRelease}) — 가격은 새 실적에 반응했는데
+     * 재무는 옛 분기라, 값을 내면 그 봉의 재무 조건이 전부 어긋난 판정을 낸다. 비운 봉에는 행이 안 생기고 스크리닝은 「데이터 없음」이다.
+     *
+     * <p>MUST: 재무를 봉마다 읽는 루프({@link #byPublication} · {@link #bySegment} · {@code ValuationHistory})는 {@code visibleAt}을 직접
+     * 부르지 않고 이것을 부른다 — 하나라도 직접 부르면 그 계산기만 막힌 봉에 옛 분기 값을 낸다.
+     */
+    static IndicatorContext financialsAt(IndicatorContext context, LocalDate barDate) {
+        IndicatorContext visible = context.visibleAt(barDate);
+        return withheldAt(visible, barDate) ? visible.withoutFinancials() : visible;
+    }
+
+    /** 그 봉의 재무 지표를 막는가 — {@code visible}은 그 봉 시점 사본({@link IndicatorContext#visibleAt})이다. */
+    static boolean withheldAt(IndicatorContext visible, LocalDate barDate) {
+        return ReportingBasis.pendingRelease(visible, barDate).isPresent();
+    }
+
     static List<IndicatorPoint> byPublication(
             IndicatorContext context,
             Function<IndicatorContext, BigDecimal> valueOf) {
@@ -613,7 +631,7 @@ final class FinancialMath {
                 crossed = true;
             }
             if (!computed || crossed) {
-                cached = valueOf.apply(context.visibleAt(bar.tradeDate()));
+                cached = valueOf.apply(financialsAt(context, bar.tradeDate()));
                 computed = true;
             }
             if (cached != null) {
@@ -665,7 +683,7 @@ final class FinancialMath {
                 end++;
             }
             LocalDate to = bars.get(end - 1).tradeDate();
-            for (IndicatorPoint point : compute.apply(context.visibleAt(from))) {
+            for (IndicatorPoint point : compute.apply(financialsAt(context, from))) {
                 if (!point.tradeDate().isBefore(from) && !point.tradeDate().isAfter(to)) {
                     out.add(point);
                 }

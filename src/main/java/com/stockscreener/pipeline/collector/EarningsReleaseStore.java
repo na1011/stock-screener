@@ -1,5 +1,6 @@
 package com.stockscreener.pipeline.collector;
 
+import com.stockscreener.indicator.calculator.ReportingBasis;
 import com.stockscreener.pipeline.datasource.FilingListSource.ListedRelease;
 
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -7,6 +8,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.sql.Date;
+import java.sql.Timestamp;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -28,6 +31,13 @@ public class EarningsReleaseStore {
      * 발표부터 센다. 결산월이 다르거나 공시가 밀린 종목의 기준 기가 더 오래될 수 있어 한 분기를 더 둔다.
      */
     public static final LocalDate FIRST_DATE = LocalDate.of(2025, 7, 1);
+
+    /**
+     * {@code earnings_release} 행(별칭 {@code r})이 <b>실적 발표</b>인가 — 국내는 이름으로 판정해 넣은 줄이라 전부, 미국은 항목에
+     * {@code 2.02}가 있는 줄. 항목을 아직 모르는 미국 줄은 실적 발표가 아니다(모른다). 지표 리더와 화면 판정이 이 한 술어를 쓴다.
+     */
+    public static final String IS_EARNINGS_RELEASE =
+            "(r.market = 'KR' OR (r.items IS NOT NULL AND ',' || replace(r.items, ' ', '') || ',' LIKE '%,2.02,%'))";
 
     private final JdbcTemplate jdbc;
 
@@ -61,16 +71,21 @@ public class EarningsReleaseStore {
             if (!Boolean.TRUE.equals(covered)) {
                 continue;
             }
+            // 공개일은 접수 시각을 알기 전까지 접수일이다(보수적) — 미국 줄은 항목과 함께 시각을 받으면 고친다(resolve).
             inserted += jdbc.update("""
-                    INSERT INTO earnings_release (market, filing_no, stock_id, form, report_name, filed_on)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                    INSERT INTO earnings_release (market, filing_no, stock_id, form, report_name, filed_on, effective_on)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT (market, filing_no, stock_id) DO NOTHING
-                    """, market, r.filingNo(), r.stockId(), r.form(), r.reportName(), Date.valueOf(r.filedOn()));
+                    """, market, r.filingNo(), r.stockId(), r.form(), r.reportName(), Date.valueOf(r.filedOn()),
+                    Date.valueOf(r.filedOn()));
         }
         return inserted;
     }
 
-    /** 항목을 아직 모르는 미국 줄 — CIK별로 묶는다(submissions 한 콜이 그 CIK의 줄을 다 답한다). */
+    /**
+     * 항목이나 접수 시각을 아직 모르는 미국 줄 — CIK별로 묶는다(submissions 한 콜이 그 CIK의 줄을 다 답한다). 시각을 모르는 실적 발표는
+     * 공개일이 접수일이라 장 마감 뒤 발표의 그 봉 하나를 일찍 막는다 — 그래서 시각도 묻는다.
+     */
     public record Unresolved(long id, long stockId, long cik, String filingNo, LocalDate filedOn) {
     }
 
@@ -78,15 +93,20 @@ public class EarningsReleaseStore {
         return jdbc.query("""
                 SELECT r.id, r.stock_id, s.sec_cik, r.filing_no, r.filed_on
                 FROM earnings_release r JOIN stock s ON s.id = r.stock_id
-                WHERE r.market = 'US' AND r.items IS NULL AND s.sec_cik IS NOT NULL
+                WHERE r.market = 'US' AND (r.items IS NULL OR r.accepted_at IS NULL) AND s.sec_cik IS NOT NULL
                 ORDER BY s.sec_cik, r.filed_on
                 """, (rs, i) -> new Unresolved(rs.getLong("id"), rs.getLong("stock_id"), rs.getLong("sec_cik"),
                 rs.getString("filing_no"), rs.getObject("filed_on", LocalDate.class)));
     }
 
-    /** 미국 줄의 항목을 적는다. */
-    public void resolve(long id, String items) {
-        jdbc.update("UPDATE earnings_release SET items = ?, resolved_at = now() WHERE id = ? AND items IS NULL", items, id);
+    /** 미국 줄의 항목과 접수 시각을 적고 공개일을 정한다({@link ReportingBasis#effectiveOn}). */
+    public void resolve(long id, String items, Instant acceptedAt) {
+        jdbc.update("""
+                UPDATE earnings_release SET items = ?, resolved_at = coalesce(resolved_at, now()), accepted_at = ?,
+                    effective_on = coalesce(?, filed_on)
+                WHERE id = ?
+                """, items, acceptedAt == null ? null : Timestamp.from(acceptedAt),
+                acceptedAt == null ? null : Date.valueOf(ReportingBasis.effectiveOn(null, acceptedAt)), id);
     }
 
     /** 훑지 않은 감지 범위 종목. 미국은 등록인이 묶인 행만 — 묶이지 않은 행은 submissions를 물을 CIK가 없다. */
@@ -116,14 +136,17 @@ public class EarningsReleaseStore {
      * @param resolvedItems 미국 줄의 항목(접수번호 → items). 국내는 비어 있다
      */
     @Transactional(rollbackFor = Exception.class)
-    public int recordSweep(String market, long stockId, List<ListedRelease> releases, Map<String, String> resolvedItems,
+    public int recordSweep(String market, long stockId, List<ListedRelease> releases, Map<String, Resolution> resolved,
                            LocalDate sweptThrough) {
         int inserted = insert(market, releases);
-        for (Map.Entry<String, String> e : resolvedItems.entrySet()) {
+        for (Map.Entry<String, Resolution> e : resolved.entrySet()) {
+            Instant acceptedAt = e.getValue().acceptedAt();
             jdbc.update("""
-                    UPDATE earnings_release SET items = ?, resolved_at = now()
-                    WHERE market = 'US' AND filing_no = ? AND stock_id = ? AND items IS NULL
-                    """, e.getValue(), e.getKey(), stockId);
+                    UPDATE earnings_release SET items = ?, resolved_at = coalesce(resolved_at, now()), accepted_at = ?,
+                        effective_on = coalesce(?, filed_on)
+                    WHERE market = 'US' AND filing_no = ? AND stock_id = ?
+                    """, e.getValue().items(), acceptedAt == null ? null : Timestamp.from(acceptedAt),
+                    acceptedAt == null ? null : Date.valueOf(ReportingBasis.effectiveOn(null, acceptedAt)), e.getKey(), stockId);
         }
         jdbc.update("""
                 INSERT INTO earnings_release_sweep (stock_id, swept_from, swept_through) VALUES (?, ?, ?)
@@ -131,6 +154,10 @@ public class EarningsReleaseStore {
                     EXCLUDED.swept_through), swept_at = now()
                 """, stockId, Date.valueOf(FIRST_DATE), Date.valueOf(sweptThrough));
         return inserted;
+    }
+
+    /** 미국 줄 하나의 답 — submissions가 준 항목과 접수 시각. */
+    public record Resolution(String items, Instant acceptedAt) {
     }
 
     /** 감지 범위 종목 id 전부 — 공시 목록이 실적 발표 줄을 낼 종목이다. */

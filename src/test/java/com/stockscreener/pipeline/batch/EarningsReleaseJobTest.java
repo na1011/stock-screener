@@ -98,10 +98,16 @@ class EarningsReleaseJobTest {
         long googl = stock("US", "ZZER1", 1652044L, null, true);
         stock("US", "ZZER2", 1652045L, null, false);
         when(sec.currentReports(eq(1652044L), eq(EarningsReleaseStore.FIRST_DATE))).thenReturn(List.of(
-                new CurrentReport("0001652044-26-000090", "8-K", LocalDate.of(2026, 10, 28), "2.02,9.01"),
+                new CurrentReport("0001652044-26-000090", "8-K", LocalDate.of(2026, 10, 28), "2.02,9.01",
+                        java.time.Instant.parse("2026-10-28T20:01:33Z")),
                 new CurrentReport("0001652044-26-000080", "8-K", LocalDate.of(2026, 9, 1), "5.02")));
 
         BatchStatus status = job().run(TODAY, BatchExecutionRecorder.TriggeredBy.MANUAL, 1000);
+
+        assertThat(jdbc.queryForObject("SELECT effective_on FROM earnings_release WHERE filing_no = '0001652044-26-000090'",
+                LocalDate.class)).as("16:01 ET 접수 — 그날 종가 뒤라 다음 날 봉부터 공개다").isEqualTo(LocalDate.of(2026, 10, 29));
+        assertThat(jdbc.queryForObject("SELECT effective_on FROM earnings_release WHERE filing_no = '0001652044-26-000080'",
+                LocalDate.class)).as("시각을 모르면 접수일").isEqualTo(LocalDate.of(2026, 9, 1));
 
         assertThat(jdbc.queryForList("SELECT filing_no || ' ' || items FROM earnings_release WHERE stock_id = ? ORDER BY filing_no",
                 String.class, googl)).containsExactly("0001652044-26-000080 5.02", "0001652044-26-000090 2.02,9.01");
@@ -125,7 +131,8 @@ class EarningsReleaseJobTest {
                 new ListedRelease("0001652044-26-000091", a, "8-K", null, LocalDate.of(2026, 10, 29)),
                 new ListedRelease("0001652046-26-000010", b, "8-K", null, LocalDate.of(2026, 10, 29))));
         when(sec.currentReports(eq(1652044L), any())).thenReturn(List.of(
-                new CurrentReport("0001652044-26-000090", "8-K", LocalDate.of(2026, 10, 28), "2.02,9.01")));
+                new CurrentReport("0001652044-26-000090", "8-K", LocalDate.of(2026, 10, 28), "2.02,9.01",
+                        java.time.Instant.parse("2026-10-28T13:00:00Z"))));
         when(sec.currentReports(eq(1652046L), any())).thenThrow(
                 new DataSourceException(DataSourceException.Kind.TRANSIENT, "sec", "끊김"));
 
@@ -134,6 +141,8 @@ class EarningsReleaseJobTest {
         assertThat(jdbc.queryForList("SELECT filing_no || ' ' || coalesce(items, '?') FROM earnings_release WHERE stock_id IN (?, ?) ORDER BY filing_no",
                 String.class, a, b)).containsExactly("0001652044-26-000090 2.02,9.01", "0001652044-26-000091 ?",
                 "0001652046-26-000010 ?");
+        assertThat(jdbc.queryForObject("SELECT effective_on FROM earnings_release WHERE filing_no = '0001652044-26-000090'",
+                LocalDate.class)).as("09:00 ET 접수 — 그날 봉부터").isEqualTo(LocalDate.of(2026, 10, 28));
         assertThat(status).as("한 CIK 실패는 그 시장의 실패로 센다").isEqualTo(BatchStatus.PARTIAL_SUCCESS);
     }
 
