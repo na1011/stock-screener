@@ -109,7 +109,7 @@ w AS (SELECT stock_id,
         max(value) FILTER (WHERE indicator_code='ROE_MIN_3Y') a,
         max(value) FILTER (WHERE indicator_code='ROIC_MIN_3Y') b
       FROM (SELECT iv0.* FROM indicator_value iv0 JOIN stock s0 ON s0.id = iv0.stock_id JOIN universe_membership m0 ON m0.stock_id = s0.id AND m0.effective_to IS NULL JOIN universe u0 ON u0.code = m0.universe_code AND u0.is_active WHERE s0.market_code IN ('KOSPI','KOSDAQ')) iv, d WHERE iv.trade_date = d.t GROUP BY 1),
-n AS (SELECT count(*) tot, count(*) FILTER (WHERE a>=10) na,
+n AS (SELECT count(*) FILTER (WHERE a IS NOT NULL AND b IS NOT NULL) tot, count(*) FILTER (WHERE a>=10) na,
              count(*) FILTER (WHERE b>=10) nb,
              count(*) FILTER (WHERE a>=10 AND b>=10) nab FROM w)
 SELECT CASE
@@ -123,6 +123,10 @@ SELECT CASE
        || '배. 두 게이트가 사실상 하나가 됐는지 본다'
   END"
 ```
+
+모집단은 **두 게이트 값이 다 있는 종목**이다 — 겹침 배수는 판정이 성립하는 종목 사이의 독립성을 재는 것이다. 「아무 지표나 있는 종목」으로
+세면 재무 지표가 막힌 종목(새 실적 발표 대기 · ADR-0195 · 시세 지표는 있다)이 분모에만 들어가 배수가 기계적으로 커진다(2026-10-31:
+분모 350 → 5.84배 · 분모 233 → 3.89배).
 
 ## 배경
 
