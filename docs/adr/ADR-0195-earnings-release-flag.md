@@ -4,6 +4,7 @@ status: 채택됨
 date: 2026-10-30
 applies_to:
   - "src/main/java/**/stock/FinancialBasisReader*"
+  - "src/main/java/**/watchlist/WatchlistAlertRunner*"
   - "src/main/java/**/indicator/calculator/ReportingBasis*"
   - "src/main/java/**/indicator/calculator/FinancialMath*"
   - "src/main/java/**/indicator/calculator/ValuationHistory*"
@@ -55,6 +56,9 @@ applies_to:
 - **실적 발표**:
   - 미국: 8-K · 8-K/A 중 submissions 항목에 `2.02`가 있는 것. 항목을 모르는 줄은 실적 발표가 아니다(화면은 판정 불가).
   - 국내: DART I001 · I002 중 잠정실적 · 손익구조 변동 제목(`DartEarningsReleaseNames` — 자회사 실적 · 결산 일정 · 전망은 아니다).
+- **MUST: 워치리스트는 발표 대기로 판정 불가 조건이 생긴 항목의 판정을 보류한다**(`WatchlistAlertRunner.evaluateScreen`) — 판정 불가는
+  불충족으로 접혀 `last_satisfied`가 내려가고, 정식 공시가 실린 날 같은 조건이 「방금 충족」으로 다시 알린다. 기준일 없는 시장과 같은 처리다.
+  시세 조건만 건 화면은 값이 다 있어 그대로 판정한다.
 - **MUST: 실적 발표 줄은 공시 목록의 그날과 한 트랜잭션이다**(`FilingLedgerStore.recordDay`). 닫힌 날에 발표가 빠지면 그날 막아야 할 봉이 안 막힌다.
 - **MUST: 수집은 종목 단위로 실패를 격리한다** — 접수번호가 아직 submissions에 없는 8-K는 그 줄만 남고 시장 커서는 안 멈춘다.
 - **국내 첫 공시일**(`KrEarlierVintages` · `kr-xbrl-collect` 안):
@@ -77,6 +81,7 @@ applies_to:
   - `FinancialBasisReaderTest`(대기 · 닫힘 · 늦은 보도자료 · 항목 모름 · 미훑음 · 목록 미닫힘 · 외국 발행사 · 비12월 · 지표와 같은 유량 기 ·
     실행 뒤 생긴 행 · 실행 뒤 알게 된 발표 · 통화 관문). 대조군: 「실행 뒤 생긴 행」 · 통화 관문을 끄면 각각 붉었다.
   - `KrEarlierVintagesTest`(같은 숫자 → 원본 날 판 · 멱등 · 숫자 바뀜 → 안 넣음 · 재료 없음 → 안 넣음).
+  - `WatchlistAlertRunnerTest.holdsJudgementWhileAReleaseIsPending`. 대조군: 보류를 끄면 붉었다.
   - `EarningsReleaseJobTest` · `DartEarningsReleaseNamesTest` · `SecCurrentReportClientTest` · 목록 소스 시험의 실적 발표 줄 ·
     `PipelineSchedulerChainTest`의 실적 발표 감지 넷 · `WireContractTest` · 프론트 `financialBasis.spec.ts` · `StockHeader.spec.ts`.
 

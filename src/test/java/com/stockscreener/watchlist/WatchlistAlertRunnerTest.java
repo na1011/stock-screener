@@ -213,6 +213,48 @@ class WatchlistAlertRunnerTest {
 
     // ── 픽스처 ────────────────────────────────────────────────────────────
 
+    @Test
+    @DisplayName("새 실적 발표로 재무 지표가 막힌 종목은 판정을 보류한다 — 상태가 안 내려가 정식 공시 뒤 같은 알림이 다시 안 나간다(ADR-0195)")
+    void holdsJudgementWhileAReleaseIsPending() {
+        long itemId = watch(userId, stockId, screenId);
+        putIndicator(stockId, "PER", new BigDecimal("8"));
+        runner.run(AS_OF_BY_MARKET);
+        assertThat(lastSatisfied(itemId)).isTrue();
+        alertPort.received.clear();
+
+        // 2026 Q1 기준(다음 기말 06-30) 뒤 07-07 잠정실적 — 그날부터 PER이 막혀 행이 없다.
+        jdbcTemplate.update("UPDATE stock SET accounting_month = 12 WHERE id = ?", stockId);
+        quarter(2025, "Q2", LocalDate.of(2025, 6, 30), LocalDate.of(2025, 8, 14));
+        quarter(2025, "Q3", LocalDate.of(2025, 9, 30), LocalDate.of(2025, 11, 14));
+        quarter(2025, "Q4", LocalDate.of(2025, 12, 31), LocalDate.of(2026, 3, 10));
+        quarter(2026, "Q1", LocalDate.of(2026, 3, 31), LocalDate.of(2026, 5, 15));
+        jdbcTemplate.update("""
+                INSERT INTO earnings_release (market, filing_no, stock_id, form, report_name, filed_on, effective_on, first_seen_at)
+                VALUES ('KR', '20260707800001', ?, 'I002', '영업(잠정)실적(공정공시)', DATE '2026-07-07', DATE '2026-07-07',
+                        TIMESTAMPTZ '2000-01-01')
+                """, stockId);
+        jdbcTemplate.update("DELETE FROM indicator_value WHERE stock_id = ? AND indicator_code = 'PER'", stockId);
+
+        WatchlistAlertRunner.Result held = runner.run(AS_OF_BY_MARKET);
+
+        assertThat(held.evaluated()).as("보류한 항목은 판정 수에 안 든다").isZero();
+        assertThat(lastSatisfied(itemId)).as("상태가 그대로다").isTrue();
+
+        // 정식 공시가 실려 값이 돌아오면 참 → 참이라 침묵한다.
+        putIndicator(stockId, "PER", new BigDecimal("8"));
+        quarter(2026, "Q2", LocalDate.of(2026, 6, 30), LocalDate.of(2026, 8, 5));
+        assertThat(runner.run(AS_OF_BY_MARKET).triggered()).isZero();
+        assertThat(alertPort.received).isEmpty();
+    }
+
+    private void quarter(int year, String period, LocalDate periodEnd, LocalDate publishedAt) {
+        jdbcTemplate.update("""
+                INSERT INTO financial_statement (stock_id, fiscal_year, fiscal_period, period_start, period_end, published_at,
+                    revision_no, is_latest, currency_code, net_income, report_code, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, 0, true, 'KRW', 100, '11013', TIMESTAMPTZ '2000-01-01')
+                """, stockId, year, period, periodEnd.minusMonths(3).plusDays(1), periodEnd, publishedAt);
+    }
+
     private long watch(long user, long stock, Long screen) {
         return store.create(user, stock, screen, null).id();
     }

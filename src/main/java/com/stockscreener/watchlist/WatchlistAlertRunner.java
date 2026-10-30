@@ -164,6 +164,9 @@ public class WatchlistAlertRunner {
         // 판정하지 않는다 — 값이 없는 것을 불충족으로 접으면 last_satisfied가 내려가고,
         // 다음 실행에서 같은 알림이 새 충족인 것처럼 다시 나간다.
         Map<Long, Map<String, BigDecimal>> valuesByStock = new LinkedHashMap<>();
+        // 새 실적 발표가 공개돼 재무 지표가 막힌 종목(ADR-0195). 그 조건이 판정 불가로 접히면 last_satisfied가 내려가고, 정식 공시가
+        // 실린 날 같은 조건이 「방금 충족」으로 다시 알린다 — 기준일 없는 시장과 같은 이유로 판정을 보류한다.
+        java.util.Set<Long> releasePending = new java.util.HashSet<>();
         Map<String, List<Long>> stockIdsByMarket = items.stream()
                 .map(WatchlistItem::stockId).distinct()
                 .filter(id -> marketByStock.get(id) != null)
@@ -179,6 +182,11 @@ public class WatchlistAlertRunner {
             }
             valuesByStock.putAll(screeningRepository.loadIndicatorValues(
                     byMarket.getValue(), group.referencedIndicatorCodes(), asOf));
+            financialBasisReader.read(byMarket.getValue(), asOf).forEach((stockId, basis) -> {
+                if (basis.status() == FinancialBasisReader.Status.PENDING) {
+                    releasePending.add(stockId);
+                }
+            });
             byMarket.getValue().forEach(id -> items.stream()
                     .filter(item -> item.stockId() == id).forEach(judgeable::add));
         }
@@ -191,6 +199,7 @@ public class WatchlistAlertRunner {
         // 기준일 없는 시장에 대해 이미 그 형태를 쓴다).
         Map<String, ConditionGroup> resolvedByCurrency = new LinkedHashMap<>();
         Map<String, Integer> skippedByCurrency = new LinkedHashMap<>();
+        int heldForRelease = 0;
 
         List<Evaluated> results = new ArrayList<>(judgeable.size());
         for (WatchlistItem item : judgeable) {
@@ -211,11 +220,20 @@ public class WatchlistAlertRunner {
             Map<String, BigDecimal> values = valuesByStock.getOrDefault(item.stockId(), Map.of());
             ScreeningResult outcome = evaluator.evaluate(
                     item.stockId(), resolvedGroup, EvaluationMode.FILTER, values);
+            if (releasePending.contains(item.stockId()) && outcome.notEvaluableCount() > 0) {
+                // 보류 — 상태를 안 바꾼다. 시세 조건만 건 화면은 값이 다 있어 여기 안 온다(그대로 판정한다).
+                heldForRelease++;
+                continue;
+            }
 
             // FILTER에서 included가 곧 "모든 조건을 충족했는가"다. 지표가 없어 판정할 수
             // 없었던 조건은 불충족으로 접히므로, 값이 아직 없는 종목은 알림을 받지 않는다 —
             // 그것이 맞다. 판정할 수 없는 것을 충족으로 읽으면 근거 없는 알림이 나간다.
             results.add(new Evaluated(item, definition, outcome.included()));
+        }
+        if (heldForRelease > 0) {
+            log.info("새 실적 발표가 공개돼 재무 지표가 막힌 종목이라 워치리스트 판정을 보류한다(ADR-0195). screenId={}, 항목 {}건",
+                    screenId, heldForRelease);
         }
         skippedByCurrency.forEach((currency, count) -> log.info(
                 "그 시장 임계가 없어 워치리스트 판정을 건너뛴다. screenId={}, 통화={}, 항목 {}건",
