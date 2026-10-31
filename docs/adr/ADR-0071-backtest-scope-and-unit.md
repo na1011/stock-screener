@@ -193,9 +193,12 @@ rg -n 'FROM indicator_value|import .*ScreeningRepository' \
 **모집단을 국내로 좁힌다.** 백테스트가 대상으로 삼는 프리셋이 국내 유니버스에 묶여 있고,
 창 시작은 **국내 7개년 재무의 공시일**이 정한다. 좁히지 않으면 미국 종목의 공시일이 `min`을
 끌어내려 창이 움직인 것처럼 보인다 — 미국 재무 적재 직후 2025-04-24로 울었다(2026-08-30).
+**기준선을 2025-04-18로 옮겼다(2026-10-31 귀속)** — 그 값을 정하는 것은 합병으로 편입 밖이 된 042670 HD현대인프라코어(2025-04-18)·010620
+HD현대미포(2025-07-11)다. 둘 다 마지막 FY가 2024라 FY2018~2024 일곱 해가 FY2024 공시일에 찼다. 그다음 종목이 2026-02-19(003570)이고 편입
+종목은 2026-03-09(002380 · 012330)부터라 P17 표의 창은 그대로다 — 창 안 표본이 바뀐 것이 아니라 `min`을 정하는 종목이 바뀌었다.
 
-```premise 백테스트 창의 시작이 아직 2026-03-09이다
-psql -d stock_screener -At -c "WITH seven AS (SELECT stock_id, max(published_at) p7 FROM (SELECT stock_id, fiscal_year, published_at, row_number() OVER (PARTITION BY stock_id ORDER BY fiscal_year DESC) rn FROM financial_statement f JOIN stock s ON s.id = f.stock_id WHERE fiscal_period = 'FY' AND is_latest AND s.market_code IN ('KOSPI','KOSDAQ')) t WHERE rn <= 7 GROUP BY stock_id HAVING count(*) = 7) SELECT CASE WHEN (SELECT count(*) FROM financial_statement WHERE fiscal_period = 'FY') = 0 THEN '잴 것이 없었다 — 연간 재무가 한 행도 없다' WHEN (SELECT count(*) FROM seven) = 0 THEN '7개년을 갖춘 종목이 없다 — PROFIT_STREAK_Y가 전 종목 판정불가이고 백테스트 창이 0이다' WHEN (SELECT min(p7) FROM seven) = DATE '2026-03-09' THEN 'OK 백테스트 창 시작 2026-03-09 · 7개년 확보 ' || (SELECT count(*) FROM seven) || '종목' ELSE '창 시작이 ' || (SELECT min(p7) FROM seven) || '로 움직였다(계획 기준 2026-03-09) — 재무 적재가 돌았거나 정정이 공시일을 바꿨다' END"
+```premise 백테스트 창의 시작이 아직 2025-04-18이다
+psql -d stock_screener -At -c "WITH seven AS (SELECT stock_id, max(published_at) p7 FROM (SELECT stock_id, fiscal_year, published_at, row_number() OVER (PARTITION BY stock_id ORDER BY fiscal_year DESC) rn FROM financial_statement f JOIN stock s ON s.id = f.stock_id WHERE fiscal_period = 'FY' AND is_latest AND s.market_code IN ('KOSPI','KOSDAQ')) t WHERE rn <= 7 GROUP BY stock_id HAVING count(*) = 7) SELECT CASE WHEN (SELECT count(*) FROM financial_statement WHERE fiscal_period = 'FY') = 0 THEN '잴 것이 없었다 — 연간 재무가 한 행도 없다' WHEN (SELECT count(*) FROM seven) = 0 THEN '7개년을 갖춘 종목이 없다 — PROFIT_STREAK_Y가 전 종목 판정불가이고 백테스트 창이 0이다' WHEN (SELECT min(p7) FROM seven) = DATE '2025-04-18' THEN 'OK 백테스트 창 시작 2025-04-18(합병 042670) · 7개년 확보 ' || (SELECT count(*) FROM seven) || '종목' ELSE '창 시작이 ' || (SELECT min(p7) FROM seven) || '로 움직였다(기준 2025-04-18 · 2026-10-31 귀속) — 재무 적재가 돌았거나 정정이 공시일을 바꿨다' END"
 ```
 
 ```premise 저장된 지표에 시간축이 생겼다 — 2026-09-08에 뜻이 뒤집힌 펜스다
@@ -244,8 +247,8 @@ psql -d stock_screener -At -c "SELECT CASE WHEN current_setting('default_transac
 psql -d stock_screener -At -c "SELECT CASE WHEN count(*) FILTER (WHERE NOT is_active) = 0 THEN 'OK stock ' || count(*) || '행이 전부 활성이다 — 폐지 종목이 없어 미충족 집단 평균이 위로 당겨진다(실측 편향 0.57~2.47%p/6개월, 임계 3.5%p)' ELSE '비활성 종목이 ' || count(*) FILTER (WHERE NOT is_active) || '행 생겼다 — 폐지 이력이 들어왔다면 생존편향 하한을 다시 재고 부호 서술을 고친다' END FROM stock"
 ```
 
-```premise 수익률에서 제외할 종목이 아직 4다
-psql -d stock_screener -At -c "WITH bad AS (SELECT DISTINCT stock_id FROM corporate_action WHERE status = 'UNSUPPORTED' AND effective_date >= DATE '2020-01-01'), pending AS (SELECT DISTINCT stock_id FROM corporate_action WHERE status = 'OBSERVED' AND effective_date >= DATE '2020-01-01') SELECT CASE WHEN (SELECT count(*) FROM corporate_action) = 0 THEN '잴 것이 없었다 — 기업행위 원장이 비었다' WHEN (SELECT count(*) FROM bad) = 4 THEN 'OK 미보정 기업행위 4종목(계획 기준)' || CASE WHEN (SELECT count(*) FROM pending) > 0 THEN ' · 판정 대기 ' || (SELECT count(*) FROM pending) || '종목' ELSE '' END ELSE '미보정 기업행위가 ' || (SELECT count(*) FROM bad) || '종목이다(계획 기준 4) — 수익률 제외 목록이 낡았다' END"
+```premise 수익률에서 제외할 종목이 아직 6이다
+psql -d stock_screener -At -c "WITH bad AS (SELECT DISTINCT stock_id FROM corporate_action WHERE status = 'UNSUPPORTED' AND effective_date >= DATE '2020-01-01'), pending AS (SELECT DISTINCT stock_id FROM corporate_action WHERE status = 'OBSERVED' AND effective_date >= DATE '2020-01-01') SELECT CASE WHEN (SELECT count(*) FROM corporate_action) = 0 THEN '잴 것이 없었다 — 기업행위 원장이 비었다' WHEN (SELECT count(*) FROM bad) = 6 THEN 'OK 미보정 기업행위 6종목(국내 2 · 미국 4 — 2026-10-31 기준)' || CASE WHEN (SELECT count(*) FROM pending) > 0 THEN ' · 판정 대기 ' || (SELECT count(*) FROM pending) || '종목' ELSE '' END ELSE '미보정 기업행위가 ' || (SELECT count(*) FROM bad) || '종목이다(기준 6) — 수익률 제외 목록이 낡았다' END"
 ```
 
 ## 배경
@@ -360,7 +363,7 @@ ADR-0044의 *"손잡이를 푸는 것은 사용자 결정이다"*와 ADR-0061의
 KR 0.9950/0.9844 · US 0.9873이고 사전등록한 합격선(0.95 · 0.90)을 넘었다(ADR-0135 §결과).
 **창 밖(2022-04~)은 그대로 복원되지 않는다** — 이 하네스의 앵커 여덟 중 **일곱이 거기 있다.**
 
-**수익률의 정본에도 구멍이 있다.** 2020 이후 `UNSUPPORTED` 4종목(국내 2 · 미국 2)은 비율을 낼 수
+**수익률의 정본에도 구멍이 있다.** 2020 이후 `UNSUPPORTED` 6종목(국내 2 · 미국 4 — 2026-10-19에 CORZ 2024-01-24 분사(효력일 앞 봉이 체결 없는 채움이라 가격 배수를 못 잼) · WOLF 2025-09-29 미해석 분사가 더해졌다)은 비율을 낼 수
 없어 원장이 포기한 것이라 `adj_close`가 실제로 끊겨 있다 — 아시아나항공 **+327.6%**(2021-01-15),
 DN오토모티브 **−81.2%**(2024-10-08), CNH −13.8%(2022-01-03 Iveco 분사 · 자식 값을 못 구함),
 DNTH −7.7%(2023-09-11 CVR)와 이튿날 **+1,472%**(원장에 없는 1:16 병합 — 억제 창이 함께 덮는다).
