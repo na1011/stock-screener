@@ -589,7 +589,16 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
         java.util.Set<String> judged = new java.util.LinkedHashSet<>(FLOW_COLUMNS.keySet());
         judged.addAll(ANNUAL_ONLY.keySet());
         judged.remove("net_income");
-        return DartFlowBasis.bases(year, reports, judged, owned);
+        Map<String, List<com.stockscreener.pipeline.datasource.FlowBasis.Restatement>> restated =
+                new java.util.HashMap<>(DartFlowBasis.restatedFiscalYear(values, dates));
+        restated.remove("net_income");
+        // capex · 법인세는 크기로 견줬다(부호 표기가 갈린다) — 그 값을 새 FY로 넣으면 저장 부호 규약이 뒤집힌다. 그 둘은 비우기만 한다.
+        restated.remove("capex");
+        restated.remove("income_tax_expense");
+        if (!ownControlling) {
+            restated.remove("net_income_controlling");
+        }
+        return DartFlowBasis.bases(year, reports, judged, owned, restated);
     }
 
     private static BigDecimal amount(Pending p, java.util.Set<String> ids, String field, boolean zeroWhenAbsent) {

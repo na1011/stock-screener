@@ -130,6 +130,29 @@ class CommonEquityBasisTest {
     }
 
     @Test
+    @DisplayName("원장이 다시 실은 FY 값은 그 공시일부터 그 값이다(두 시장 한 기준) · 순이익 묶음은 넷 다 새 값이 있어야 받는다")
+    void restatedFiscalYearValueIsSeenFromItsFiling() {
+        java.util.TreeMap<LocalDate, BigDecimal> restated = new java.util.TreeMap<>(java.util.Map.of(
+                LocalDate.of(2026, 3, 17), new BigDecimal("900"), LocalDate.of(2027, 3, 16), new BigDecimal("880")));
+        FinancialFigures fy = FinancialFiguresFixture.annual(END).revenue(new BigDecimal("1000")).netIncome(new BigDecimal("50"))
+                .flowSupersession("revenue", new com.stockscreener.indicator.FlowSupersession(LocalDate.of(2026, 3, 17), restated))
+                .flowSupersession("net_income", new com.stockscreener.indicator.FlowSupersession(LocalDate.of(2026, 3, 17),
+                        new java.util.TreeMap<>(java.util.Map.of(LocalDate.of(2026, 3, 17), new BigDecimal("40"))))).build();
+        assertThat(fy.asSeenOn(LocalDate.of(2026, 3, 16)).revenue()).isEqualByComparingTo("1000");
+        assertThat(fy.asSeenOn(LocalDate.of(2026, 6, 1)).revenue()).isEqualByComparingTo("900");
+        assertThat(fy.asSeenOn(LocalDate.of(2027, 6, 1)).revenue()).isEqualByComparingTo("880");
+        assertThat(fy.asSeenOn(LocalDate.of(2026, 6, 1)).netIncome()).as("묶음 넷 중 다른 칸이 없어 넷 다 새 값이면 받는다")
+                .isEqualByComparingTo("40");
+
+        FinancialFigures partial = FinancialFiguresFixture.annual(END).netIncome(new BigDecimal("50"))
+                .netIncomeControlling(new BigDecimal("45"))
+                .flowSupersession("net_income", new com.stockscreener.indicator.FlowSupersession(LocalDate.of(2026, 3, 17),
+                        new java.util.TreeMap<>(java.util.Map.of(LocalDate.of(2026, 3, 17), new BigDecimal("40"))))).build();
+        assertThat(partial.asSeenOn(LocalDate.of(2026, 6, 1)).netIncome()).as("지배 NI는 옛 기저 그대로라 묶음을 모른다").isNull();
+        assertThat(partial.asSeenOn(LocalDate.of(2026, 6, 1)).netIncomeControlling()).isNull();
+    }
+
+    @Test
     @DisplayName("못 정함은 미표시다 — 지배 자본으로 메우지 않는다")
     void undecidedIsNotShown() {
         FinancialFigures f = bank().commonEquity(null, null, "open").build();

@@ -77,7 +77,7 @@ class FinancialFiguresFixtureTest {
             } else if (type == FinancialFigures.class) {
                 args.add(FinancialFiguresFixture.annual(LocalDate.of(2020, 12, 31)).revenue(BigDecimal.valueOf(seq)).build());
             } else if (type == java.util.Map.class) {
-                args.add(java.util.Map.of("revenue", LocalDate.of(2026, 1, 1).plusDays(seq)));
+                args.add(java.util.Map.of("revenue", com.stockscreener.indicator.FlowSupersession.at(LocalDate.of(2026, 1, 1).plusDays(seq))));
             } else {
                 throw new AssertionError(
                         "새 컴포넌트 타입이다. 이 표본에 그 타입의 값을 더해라: " + type);

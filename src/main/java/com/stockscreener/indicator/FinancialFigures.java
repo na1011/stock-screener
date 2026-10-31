@@ -156,7 +156,7 @@ public record FinancialFigures(
          * (반기 · 3분기 누계 · 다음 해 전기 열이 저장 값과 안 닫힌다) 새 기저의 이 기간 값은 안 줬다. 그날부터의 봉은 그 칸을 모른다
          * ({@link #asSeenOn}) — 두 기저를 한 TTM 창에 섞지 않는다. 비면 이 규칙으로 안 읽은 행이다.
          */
-        java.util.Map<String, LocalDate> flowsSupersededOn,
+        java.util.Map<String, FlowSupersession> flowsSupersededOn,
 
         /**
          * <b>4분기 행이 기대는 그 해 FY 행</b>(관문 켬 봉 사본만 · {@code IndicatorContext.visibleAt}) — 4분기로 끝나는 TTM 창의 네 분기 합은 그
@@ -183,7 +183,7 @@ public record FinancialFigures(
                             BigDecimal shareBasisMultiple, String shareBasisStatus, ShareClassLine.State shareClassState,
                             BigDecimal weightedShares, boolean weightedSharesJudged, BigDecimal discontinuedIncome,
                             BigDecimal discontinuedIncomeControlling, BigDecimal discontinuedRule, CommonIncomeRead common,
-                            java.util.Map<String, LocalDate> flowsSupersededOn) {
+                            java.util.Map<String, FlowSupersession> flowsSupersededOn) {
         this(fiscalYear, fiscalPeriod, periodStart, periodEnd, publishedAt, currencyCode, revenue, operatingIncome, netIncome,
                 totalAssets, totalEquity, totalEquityControlling, totalLiabilities, currentAssets, currentLiabilities,
                 retainedEarnings, operatingCashFlow, sharesOutstanding, eps, bps, costOfSales, cashAndEquivalents, capex,
@@ -233,34 +233,46 @@ public record FinancialFigures(
      * {@code day}의 봉이 보는 이 행 — 기저 대체일이 그날 이하인 손익 칸을 비운다({@link #flowsSupersededOn}). 대체가 없으면 그대로다.
      */
     public FinancialFigures asSeenOn(LocalDate day) {
-        if (flowsSupersededOn.isEmpty()) {
+        if (flowsSupersededOn.isEmpty() || flowsSupersededOn.values().stream().noneMatch(f -> f.staleOn(day))) {
             return this;
         }
-        java.util.function.Predicate<String> stale = column -> {
-            LocalDate since = flowsSupersededOn.get(column);
-            return since != null && !since.isAfter(day);
+        java.util.function.Function<String, BigDecimal> stored = column -> switch (column) {
+            case "revenue" -> revenue;
+            case "operating_income" -> operatingIncome;
+            case "net_income" -> netIncome;
+            case "net_income_controlling" -> netIncomeControlling;
+            case "cost_of_sales" -> costOfSales;
+            case "gross_profit" -> grossProfit;
+            case "operating_cash_flow" -> operatingCashFlow;
+            case "capex" -> capex;
+            case "income_tax_expense" -> incomeTaxExpense;
+            case "profit_before_tax" -> profitBeforeTax;
+            case "discontinued_income" -> discontinuedIncome;
+            case "discontinued_income_controlling" -> discontinuedIncomeControlling;
+            default -> null;
         };
-        // 순이익 · 지배주주 순이익 · 중단영업 둘은 같은 재작성을 탄다 — 한쪽만 비우면 창 단위 연결 폴백(FinancialMath.sumControllingContinuingIncome)이
-        // 지배 계열을 연결 계속영업으로 떨어뜨리거나(F2b MUST NOT) 계속영업이 옛 중단 몫을 뺀다. 넷 중 하나가 낡으면 넷 다 모르고, 보통주 몫 엔진의
-        // 손익 몫(주당 지표 분자 · 배당성향 분모)도 같은 기간 손익이라 함께 모른다 — 자본 재료(신종자본증권 · 보통주 몫)는 잔액이라 그대로다.
-        boolean income = INCOME_GROUP.stream().anyMatch(stale);
-        java.util.function.Predicate<String> gone = column -> INCOME_GROUP.contains(column) ? income : stale.test(column);
-        if (flowsSupersededOn.keySet().stream().noneMatch(stale)) {
-            return this;
-        }
+        java.util.function.Function<String, BigDecimal> seen = column -> {
+            FlowSupersession f = flowsSupersededOn.get(column);
+            return f == null ? stored.apply(column) : f.seenOn(day, stored.apply(column));
+        };
+        // 순이익 · 지배주주 순이익 · 중단영업 둘은 같은 재작성을 탄다 — 한쪽만 바뀌면 창 단위 연결 폴백(FinancialMath.sumControllingContinuingIncome)이
+        // 지배 계열을 연결 계속영업으로 떨어뜨리거나(F2b MUST NOT) 계속영업이 옛 중단 몫을 뺀다. 넷 중 하나가 낡으면 넷 다 새 값이 있을 때만 받고
+        // 아니면 넷 다 모른다. 보통주 몫 엔진의 손익 몫도 같은 기간 손익이라 그때 함께 모른다(자본 재료는 잔액이라 그대로).
+        boolean income = INCOME_GROUP.stream().anyMatch(c -> flowsSupersededOn.containsKey(c) && flowsSupersededOn.get(c).staleOn(day));
+        boolean incomeKnown = !income || INCOME_GROUP.stream().allMatch(c -> !flowsSupersededOn.containsKey(c)
+                ? stored.apply(c) == null : seen.apply(c) != null);
+        java.util.function.Function<String, BigDecimal> value = column -> INCOME_GROUP.contains(column)
+                ? (income && !incomeKnown ? null : seen.apply(column)) : seen.apply(column);
         return new FinancialFigures(fiscalYear, fiscalPeriod, periodStart, periodEnd, publishedAt, currencyCode,
-                gone.test("revenue") ? null : revenue, gone.test("operating_income") ? null : operatingIncome,
-                gone.test("net_income") ? null : netIncome, totalAssets, totalEquity, totalEquityControlling, totalLiabilities,
-                currentAssets, currentLiabilities, retainedEarnings, gone.test("operating_cash_flow") ? null : operatingCashFlow,
-                sharesOutstanding, eps, bps, gone.test("cost_of_sales") ? null : costOfSales, cashAndEquivalents,
-                gone.test("capex") ? null : capex, inventories,
-                gone.test("net_income_controlling") ? null : netIncomeControlling, interestAndDividendIncome, noninterestIncome,
-                interestExpense, noninterestExpense, benefitsLossesAndExpenses, gone.test("gross_profit") ? null : grossProfit,
-                operatingExpenses, costsAndExpenses, gone.test("income_tax_expense") ? null : incomeTaxExpense,
-                gone.test("profit_before_tax") ? null : profitBeforeTax, shareBasisMultiple, shareBasisStatus,
-                shareClassState, weightedShares, weightedSharesJudged, income ? null : discontinuedIncome,
-                income ? null : discontinuedIncomeControlling, discontinuedRule, income && common != null ? common.withoutIncome() : common,
-                flowsSupersededOn, annualOfYear);
+                value.apply("revenue"), value.apply("operating_income"), value.apply("net_income"), totalAssets, totalEquity,
+                totalEquityControlling, totalLiabilities, currentAssets, currentLiabilities, retainedEarnings,
+                value.apply("operating_cash_flow"), sharesOutstanding, eps, bps, value.apply("cost_of_sales"), cashAndEquivalents,
+                value.apply("capex"), inventories, value.apply("net_income_controlling"), interestAndDividendIncome, noninterestIncome,
+                interestExpense, noninterestExpense, benefitsLossesAndExpenses, value.apply("gross_profit"), operatingExpenses,
+                costsAndExpenses, value.apply("income_tax_expense"), value.apply("profit_before_tax"), shareBasisMultiple,
+                shareBasisStatus, shareClassState, weightedShares, weightedSharesJudged, value.apply("discontinued_income"),
+                value.apply("discontinued_income_controlling"), discontinuedRule,
+                income && common != null ? common.withoutIncome() : common, flowsSupersededOn, annualOfYear);
     }
 
     /** 함께 낡는 손익 칸(DB 컬럼명) — {@link #asSeenOn}. */

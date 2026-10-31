@@ -17,7 +17,7 @@ import java.time.LocalDate;
  */
 final class FinancialFiguresFixture {
 
-    private java.util.Map<String, LocalDate> flowsSupersededOn;
+    private java.util.Map<String, com.stockscreener.indicator.FlowSupersession> flowsSupersededOn;
     private FinancialFigures annualOfYear;
 
     private int fiscalYear;
@@ -360,7 +360,18 @@ final class FinancialFiguresFixture {
 
     /** 국내 관문 켬 행(재고 A6) — 손익 칸의 기저 대체일. */
     FinancialFiguresFixture flowsSupersededOn(java.util.Map<String, LocalDate> superseded) {
-        this.flowsSupersededOn = superseded;
+        java.util.Map<String, com.stockscreener.indicator.FlowSupersession> out = new java.util.HashMap<>();
+        superseded.forEach((k, v) -> out.put(k, com.stockscreener.indicator.FlowSupersession.at(v)));
+        this.flowsSupersededOn = out;
+        return this;
+    }
+
+    /** 국내 관문 켬 행(ADR-0200) — 기저 대체와 원장이 다시 실은 새 값. */
+    FinancialFiguresFixture flowSupersession(String column, com.stockscreener.indicator.FlowSupersession supersession) {
+        java.util.Map<String, com.stockscreener.indicator.FlowSupersession> out =
+                flowsSupersededOn == null ? new java.util.HashMap<>() : new java.util.HashMap<>(flowsSupersededOn);
+        out.put(column, supersession);
+        this.flowsSupersededOn = out;
         return this;
     }
 

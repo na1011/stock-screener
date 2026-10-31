@@ -874,13 +874,25 @@ public class IndicatorDataReader {
     }
 
     /** 기저 대체일 jsonb({@code {"revenue": "2024-11-14", …}}) — 국내 관문 켬 행만 싣는다(재고 A6). */
-    private static java.util.Map<String, LocalDate> supersession(String json) {
+    private static java.util.Map<String, FlowSupersession> supersession(String json) {
         if (json == null || json.isBlank()) {
             return null;
         }
-        java.util.Map<String, LocalDate> out = new java.util.HashMap<>();
+        java.util.Map<String, FlowSupersession> out = new java.util.HashMap<>();
         tools.jackson.databind.JsonNode node = new tools.jackson.databind.ObjectMapper().readTree(json);
-        node.properties().forEach(e -> out.put(e.getKey(), LocalDate.parse(e.getValue().asString())));
+        node.properties().forEach(e -> out.put(e.getKey(), flowSupersession(e.getValue())));
         return out;
+    }
+
+    /** 칸 하나 — 날짜 문자열(그날부터 모른다) 또는 {@code {"since", "restated": [[공시일, 값], …]}}(FY의 새 값 · ADR-0200). */
+    static FlowSupersession flowSupersession(tools.jackson.databind.JsonNode v) {
+        if (v.isString()) {
+            return FlowSupersession.at(LocalDate.parse(v.asString()));
+        }
+        java.util.TreeMap<LocalDate, BigDecimal> restated = new java.util.TreeMap<>();
+        for (tools.jackson.databind.JsonNode pair : v.path("restated")) {
+            restated.put(LocalDate.parse(pair.get(0).asString()), new BigDecimal(pair.get(1).asString()));
+        }
+        return new FlowSupersession(LocalDate.parse(v.path("since").asString()), restated);
     }
 }

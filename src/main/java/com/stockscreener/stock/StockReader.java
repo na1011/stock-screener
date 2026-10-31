@@ -248,7 +248,8 @@ public class StockReader {
         }
         java.util.Set<String> out = new java.util.HashSet<>();
         new tools.jackson.databind.ObjectMapper().readTree(json).properties().forEach(e -> {
-            if (!LocalDate.parse(e.getValue().asString()).isAfter(day)) {
+            String since = e.getValue().isString() ? e.getValue().asString() : e.getValue().path("since").asString();
+            if (!LocalDate.parse(since).isAfter(day)) {
                 out.add(e.getKey());
             }
         });

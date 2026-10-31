@@ -101,17 +101,49 @@ final class DartFlowBasis {
         return out;
     }
 
-    /** 그 해 보고서마다 판정 결과를 싣는다 — 판정한 칸 · 대체된 칸. */
+    /**
+     * FY 칸의 새 값 — 다음 해 · 두 해 뒤 사업보고서의 전기 · 전전기 FY 열이 저장 FY와 안 닫히면 그 열이 그날부터의 FY 값이다(원장이 새 기저로
+     * 다시 실은 연간 값 그대로 · 미국이 비교열을 새 판으로 받는 것과 같은 기준). 분기 3개월 값은 받지 않는다 — 전기 열을 값으로 넣으면 닫히는
+     * 것이 매출 26/50 · 영업이익 29/63뿐이라(검출기로만) 근거가 FY에 안 선다.
+     */
+    static Map<String, List<FlowBasis.Restatement>> restatedFiscalYear(Map<String, Values> values, Dates d) {
+        Map<String, List<FlowBasis.Restatement>> out = new HashMap<>();
+        for (Map.Entry<String, Values> e : values.entrySet()) {
+            Values v = e.getValue();
+            List<FlowBasis.Restatement> list = new ArrayList<>();
+            LocalDate next = latest(d.fy(), d.nextFy());
+            if (next != null && apart(v.priorFy(), v.fy(), null)) {
+                list.add(new FlowBasis.Restatement(next, v.priorFy()));
+            }
+            LocalDate twoLater = latest(d.fy(), d.twoYearsLaterFy());
+            if (twoLater != null && apart(v.twoYearsPriorFy(), v.fy(), null)) {
+                list.add(new FlowBasis.Restatement(twoLater, v.twoYearsPriorFy()));
+            }
+            if (!list.isEmpty()) {
+                list.sort(java.util.Comparator.comparing(FlowBasis.Restatement::since));
+                out.put(e.getKey(), list);
+            }
+        }
+        return out;
+    }
+
+    /** 그 해 보고서마다 판정 결과를 싣는다 — 판정한 칸 · 대체된 칸 · FY의 새 값. */
     static List<FlowBasis> bases(int year, Map<String, RawFinancialReport> reports, Set<String> judged,
-                                 Map<String, Map<String, LocalDate>> verdict) {
+                                 Map<String, Map<String, LocalDate>> verdict, Map<String, List<FlowBasis.Restatement>> restated) {
         List<FlowBasis> out = new ArrayList<>();
         for (String label : LABELS) {
             RawFinancialReport r = reports.get(label);
             if (r != null) {
-                out.add(new FlowBasis(year, label, r.publishedAt(), judged, verdict.getOrDefault(label, Map.of())));
+                Map<String, List<FlowBasis.Restatement>> mine = "FY".equals(label) ? restated : Map.of();
+                out.add(new FlowBasis(year, label, r.publishedAt(), judged, verdict.getOrDefault(label, Map.of()), mine));
             }
         }
         return out;
+    }
+
+    static List<FlowBasis> bases(int year, Map<String, RawFinancialReport> reports, Set<String> judged,
+                                 Map<String, Map<String, LocalDate>> verdict) {
+        return bases(year, reports, judged, verdict, Map.of());
     }
 
     /**

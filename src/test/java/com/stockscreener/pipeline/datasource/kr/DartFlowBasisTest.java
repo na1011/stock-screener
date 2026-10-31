@@ -79,6 +79,18 @@ class DartFlowBasisTest {
     }
 
     @Test
+    @DisplayName("FY의 새 값 — 전기 · 전전기 FY 열이 저장 FY와 안 닫히면 그 열이 그 공시일부터의 FY다 · 닫히면 없다")
+    void restatedFiscalYearCarriesTheComparativeValue() {
+        DartFlowBasis.Dates dates = new DartFlowBasis.Dates(Q1, H1, Q3, FY, NQ1, NH1, NQ3, NFY, LocalDate.of(2027, 3, 16));
+        DartFlowBasis.Values v = new DartFlowBasis.Values(null, null, null, null, null, b(500L), null, null, null, null, null,
+                b(480L), b(470L));
+        var out = DartFlowBasis.restatedFiscalYear(Map.of("revenue", v), dates);
+        assertThat(out.get("revenue")).extracting(com.stockscreener.pipeline.datasource.FlowBasis.Restatement::since)
+                .containsExactly(NFY, LocalDate.of(2027, 3, 16));
+        assertThat(DartFlowBasis.restatedFiscalYear(Map.of("revenue", year(null, null, null, null, null, 500L)), DATES)).isEmpty();
+    }
+
+    @Test
     @DisplayName("저장 값이 0이면 0이 아닌 전기 열이 곧 어긋남이다(중단영업은 대개 0에서 생긴다)")
     void zeroStoredValueIsApartFromAnyNonZero() {
         assertThat(DartFlowBasis.apart(BigDecimal.valueOf(5), BigDecimal.ZERO, null)).isTrue();

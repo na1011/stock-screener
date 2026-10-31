@@ -104,7 +104,7 @@ class DartRecordedSweepTest {
         for (com.stockscreener.pipeline.datasource.FlowBasis b : bases) {
             if (!b.superseded().isEmpty()) {
                 out.println(ticker + "\t" + source + "\t" + b.fiscalYear() + "\t" + b.fiscalPeriod() + "\t" + b.publishedAt() + "\t"
-                        + new java.util.TreeMap<>(b.superseded()));
+                        + new java.util.TreeMap<>(b.superseded()) + (b.restated().isEmpty() ? "" : "\t" + new java.util.TreeMap<>(b.restated())));
             }
         }
     }

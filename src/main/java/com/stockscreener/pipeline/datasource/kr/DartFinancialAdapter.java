@@ -389,7 +389,8 @@ public class DartFinancialAdapter implements FinancialDataSource {
         DartFlowBasis.Dates dates = new DartFlowBasis.Dates(published(reports.get("Q1")), published(reports.get("Q2")),
                 published(reports.get("Q3")), published(reports.get("FY")), filed(nq1, year + 1), filed(nh1, year + 1),
                 filed(nq3, year + 1), filed(nfy, year + 1), filed(n2fy, year + 2));
-        return DartFlowBasis.bases(year, reports, FLOW_COLUMNS.keySet(), DartFlowBasis.judge(values, dates));
+        return DartFlowBasis.bases(year, reports, FLOW_COLUMNS.keySet(), DartFlowBasis.judge(values, dates),
+                DartFlowBasis.restatedFiscalYear(values, dates));
     }
 
     private static BigDecimal firstOf(BigDecimal a, BigDecimal b) {

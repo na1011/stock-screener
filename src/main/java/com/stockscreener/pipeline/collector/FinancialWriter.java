@@ -217,7 +217,19 @@ public class FinancialWriter {
                 if (json.length() > 1) {
                     json.append(',');
                 }
-                json.append('"').append(e.getKey()).append("\":\"").append(e.getValue()).append('"');
+                List<com.stockscreener.pipeline.datasource.FlowBasis.Restatement> restated = b.restated().get(e.getKey());
+                json.append('"').append(e.getKey()).append("\":");
+                if (restated == null || restated.isEmpty()) {
+                    json.append('"').append(e.getValue()).append('"');
+                } else {
+                    // 원장이 다시 실은 FY 값 — 그날부터 그 값(ADR-0200 · 두 시장 한 기준).
+                    json.append("{\"since\":\"").append(e.getValue()).append("\",\"restated\":[");
+                    for (int i = 0; i < restated.size(); i++) {
+                        json.append(i == 0 ? "" : ",").append("[\"").append(restated.get(i).since()).append("\",\"")
+                                .append(restated.get(i).value().toPlainString()).append("\"]");
+                    }
+                    json.append("]}");
+                }
             });
             json.append('}');
             changed += jdbcTemplate.update("""

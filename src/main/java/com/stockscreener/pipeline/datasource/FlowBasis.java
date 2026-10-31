@@ -13,10 +13,23 @@ import java.util.Set;
  * @param superseded 그중 대체된 칸 → 대체일(그날 이후 봉은 그 칸을 모른다)
  */
 public record FlowBasis(int fiscalYear, String fiscalPeriod, LocalDate publishedAt, Set<String> judged,
-                        Map<String, LocalDate> superseded) {
+                        Map<String, LocalDate> superseded, Map<String, java.util.List<Restatement>> restated) {
+
+    /**
+     * 원장이 그 기간 칸을 새 기저로 다시 실은 값 — 그 보고서 공시일부터 그 값이다(FY만 · 다음 해 · 두 해 뒤 사업보고서의 전기 · 전전기 FY 열 ·
+     * ADR-0200). 미국이 같은 비교열을 새 판으로 받는 것과 같은 기준이다(두 시장 한 기준).
+     */
+    public record Restatement(LocalDate since, java.math.BigDecimal value) {
+    }
 
     public FlowBasis {
         judged = Set.copyOf(judged);
         superseded = Map.copyOf(superseded);
+        restated = restated == null ? Map.of() : Map.copyOf(restated);
+    }
+
+    public FlowBasis(int fiscalYear, String fiscalPeriod, LocalDate publishedAt, Set<String> judged,
+                     Map<String, LocalDate> superseded) {
+        this(fiscalYear, fiscalPeriod, publishedAt, judged, superseded, Map.of());
     }
 }
