@@ -183,9 +183,15 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
 
         // ── 3패스: 보고서 생성.
         List<RawFinancialReport> reports = new ArrayList<>();
+        Map<Integer, Map<StatementPeriod, Pending>> pendingByYear = new java.util.HashMap<>();
+        Map<Integer, Map<String, RawFinancialReport>> reportsByYear = new java.util.HashMap<>();
         for (int year = fromFiscalYear; year <= toFiscalYear; year++) {
             JsonNode annual = null;
             JsonNode third = null;
+            Map<StatementPeriod, Pending> yearPending = new java.util.EnumMap<>(StatementPeriod.class);
+            Map<String, RawFinancialReport> yearReports = new java.util.LinkedHashMap<>();
+            pendingByYear.put(year, yearPending);
+            reportsByYear.put(year, yearReports);
             boolean annualConsolidated = false;
             boolean thirdConsolidated = false;
             // Q4의 지배주주 순이익을 유도하려면 그 해 FY와 Q1~Q3가 한자리에 있어야 한다.
@@ -198,6 +204,8 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
                         gateOpen(p, lastNoncontrolling), p.consolidated());
                 reports.add(report);
                 thisYear.add(report);
+                yearPending.put(p.period(), p);
+                yearReports.put(p.period().label(), report);
                 if (p.period() == StatementPeriod.FY) {
                     annual = p.list();
                     annualConsolidated = p.consolidated();
@@ -209,10 +217,19 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
             }
             if (annual != null && periods.contains(StatementPeriod.Q3)) {
                 RawFinancialReport q4 = toFourthQuarterBalance(annual, year, security, thisYear);
-                reports.add(krGate ? withFourthQuarterDiscontinued(q4, annual, annualConsolidated, third, thirdConsolidated) : q4);
+                RawFinancialReport fourth = krGate ? withFourthQuarterDiscontinued(q4, annual, annualConsolidated, third, thirdConsolidated) : q4;
+                reports.add(fourth);
+                yearReports.put("Q4", fourth);
             }
         }
-        return new FullStatementResult(reports, calls, missing, FilingTrace.ofReports(seen));
+        List<com.stockscreener.pipeline.datasource.FlowBasis> bases = new ArrayList<>();
+        if (krGate) {
+            for (int year = fromFiscalYear; year <= toFiscalYear; year++) {
+                bases.addAll(flowBases(year, pendingByYear.get(year), pendingByYear.getOrDefault(year + 1, Map.of()),
+                        reportsByYear.get(year)));
+            }
+        }
+        return new FullStatementResult(reports, calls, missing, FilingTrace.ofReports(seen), bases);
     }
 
     /**
@@ -466,6 +483,76 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
         }
         return q4.withDiscontinued(consolidated, controlling,
                 discontinuedAbsence(q4.assertedAbsent(), consolidated, controlling));
+    }
+
+    /** 전체 재무제표 어댑터가 재는 손익 계정(재고 A6) — DB 컬럼명 → 표준계정 ID. 싣는 칸은 매출원가 · 지배주주 순이익(순이익 판정을 따른다)뿐이다. */
+    private static final Map<String, java.util.Set<String>> FLOW_COLUMNS = new java.util.LinkedHashMap<>();
+
+    static {
+        FLOW_COLUMNS.put("revenue", DartFullAccountMapper.ID_REVENUE);
+        FLOW_COLUMNS.put("operating_income", DartFullAccountMapper.ID_OPERATING_INCOME);
+        FLOW_COLUMNS.put("net_income", DartFullAccountMapper.ID_NET_INCOME);
+        FLOW_COLUMNS.put("cost_of_sales", DartFullAccountMapper.ID_COST_OF_SALES);
+    }
+
+    /**
+     * 국내 관문 켬(재고 A6): 그 해 분기 손익의 기저 판정 — 주요계정 어댑터와 같은 규칙({@link DartFlowBasis}). 같은 연결 기저(CFS/OFS)의
+     * 보고서끼리만 잰다. 지배주주 순이익은 순이익과 같은 재작성을 탄다(그 칸의 누계를 따로 지을 갈래가 넷이라 같은 재료로 다시 재지 않는다).
+     */
+    static List<com.stockscreener.pipeline.datasource.FlowBasis> flowBases(int year, Map<StatementPeriod, Pending> pending,
+                                                                           Map<StatementPeriod, Pending> next,
+                                                                           Map<String, RawFinancialReport> reports) {
+        if (pending == null || reports == null || reports.isEmpty()) {
+            return List.of();
+        }
+        Pending first = pending.get(StatementPeriod.Q1);
+        Pending half = pending.get(StatementPeriod.Q2);
+        Pending third = pending.get(StatementPeriod.Q3);
+        Pending nextFirst = next.get(StatementPeriod.Q1);
+        java.util.function.Predicate<Pending> same = p -> p != null && first != null && p.consolidated() == first.consolidated();
+        Map<String, DartFlowBasis.Values> values = new java.util.LinkedHashMap<>();
+        for (Map.Entry<String, java.util.Set<String>> e : FLOW_COLUMNS.entrySet()) {
+            java.util.Set<String> ids = e.getValue();
+            values.put(e.getKey(), new DartFlowBasis.Values(
+                    first == null ? null : amount(first, ids, "thstrm_amount"),
+                    same.test(half) ? amount(half, ids, "thstrm_amount") : null,
+                    same.test(half) ? amount(half, ids, "thstrm_add_amount") : null,
+                    same.test(third) ? amount(third, ids, "thstrm_amount") : null,
+                    same.test(third) ? amount(third, ids, "thstrm_add_amount") : null,
+                    // 전체 재무제표 분기 손익의 전기 3개월 칸은 frmtrm_q_amount다(frmtrm_amount는 비어 있다 — 주요계정과 다르다).
+                    same.test(nextFirst) ? amount(nextFirst, ids, "frmtrm_q_amount") : null));
+        }
+        DartFlowBasis.Dates dates = new DartFlowBasis.Dates(published(reports.get("Q1")), published(reports.get("Q2")),
+                published(reports.get("Q3")), nextFirst == null ? null : DartReportPeriods.publishedAt(nextFirst.list().get(0), year + 1));
+        Map<String, Map<String, java.time.LocalDate>> verdict = DartFlowBasis.judge(values, dates);
+        // 칸마다 주인 하나 — 매출 · 영업이익 · 순이익은 주요계정 어댑터가 싣는다(두 잡이 같은 칸을 번갈아 덮지 않게). 여기는 이 소스에만 있는
+        // 매출원가와, 이 소스의 순이익 판정을 따르는 지배주주 순이익이다.
+        Map<String, Map<String, java.time.LocalDate>> owned = new java.util.HashMap<>();
+        verdict.forEach((label, byColumn) -> {
+            Map<String, java.time.LocalDate> mine = new java.util.HashMap<>();
+            if (byColumn.containsKey("cost_of_sales")) {
+                mine.put("cost_of_sales", byColumn.get("cost_of_sales"));
+            }
+            if (byColumn.containsKey("net_income")) {
+                mine.put("net_income_controlling", byColumn.get("net_income"));
+            }
+            if (!mine.isEmpty()) {
+                owned.put(label, mine);
+            }
+        });
+        return DartFlowBasis.bases(year, reports, java.util.Set.of("cost_of_sales", "net_income_controlling"), owned);
+    }
+
+    private static BigDecimal amount(Pending p, java.util.Set<String> ids, String field) {
+        return DartFullAccountMapper.findBy(incomeOf(p.list()), ids, "account_id", field);
+    }
+
+    private static List<JsonNode> incomeOf(JsonNode list) {
+        return DartFullAccountMapper.sections(list, DartFullAccountMapper.SJ_INCOME, DartFullAccountMapper.SJ_COMPREHENSIVE_INCOME);
+    }
+
+    private static java.time.LocalDate published(RawFinancialReport report) {
+        return report == null ? null : report.publishedAt();
     }
 
     /** 못 정한 칸은 「없다」 판정으로 실어 저장의 옛 값을 지운다(소스 행의 null은 저장이 안 지운다). */

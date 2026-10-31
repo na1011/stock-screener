@@ -17,6 +17,8 @@ import java.time.LocalDate;
  */
 final class FinancialFiguresFixture {
 
+    private java.util.Map<String, LocalDate> flowsSupersededOn;
+
     private int fiscalYear;
     private FinancialFigures.FiscalPeriod fiscalPeriod = FinancialFigures.FiscalPeriod.Q4;
     private LocalDate periodStart;
@@ -132,6 +134,7 @@ final class FinancialFiguresFixture {
         fixture.discontinuedIncomeControlling = source.discontinuedIncomeControlling();
         fixture.discontinuedRule = source.discontinuedRule();
         fixture.common = source.common();
+        fixture.flowsSupersededOn = source.flowsSupersededOn();
         return fixture;
     }
 
@@ -347,6 +350,12 @@ final class FinancialFiguresFixture {
         return this;
     }
 
+    /** 국내 관문 켬 행(재고 A6) — 손익 칸의 기저 대체일. */
+    FinancialFiguresFixture flowsSupersededOn(java.util.Map<String, LocalDate> superseded) {
+        this.flowsSupersededOn = superseded;
+        return this;
+    }
+
     FinancialFigures build() {
         return new FinancialFigures(
                 fiscalYear, fiscalPeriod, periodStart, periodEnd, publishedAt, currencyCode,
@@ -359,6 +368,7 @@ final class FinancialFiguresFixture {
                 noninterestExpense, benefitsLossesAndExpenses,
                 grossProfit, operatingExpenses, costsAndExpenses,
                 incomeTaxExpense, profitBeforeTax, shareBasisMultiple, shareBasisStatus, shareClassState,
-                weightedShares, weightedSharesJudged, discontinuedIncome, discontinuedIncomeControlling, discontinuedRule, common);
+                weightedShares, weightedSharesJudged, discontinuedIncome, discontinuedIncomeControlling, discontinuedRule, common,
+                flowsSupersededOn);
     }
 }

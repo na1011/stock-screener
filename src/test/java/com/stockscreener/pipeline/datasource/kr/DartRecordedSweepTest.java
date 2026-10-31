@@ -82,6 +82,8 @@ class DartRecordedSweepTest {
                 if (out != null) {
                     print(out, ticker, "summary", fetched.reports());
                     print(out, ticker, "full", statements.reports());
+                    printFlows(out, ticker, "flow-summary", fetched.flowBases());
+                    printFlows(out, ticker, "flow-full", statements.flowBases());
                 }
             } catch (DataSourceException e) {
                 // 종목 단위로 격리하되 삼키지 않는다 — 이유를 행으로 남긴다.
@@ -92,6 +94,17 @@ class DartRecordedSweepTest {
             }
             if (++done % 25 == 0) {
                 System.out.printf("[%s] %d/%d · 오늘 콜 %d%n", mode, done, tickers.size(), limiter.usedToday());
+            }
+        }
+    }
+
+    /** 손익 칸 기저 판정(국내 관문 켬 · 재고 A6) — 대체가 있는 행만 · 칸은 이름순. */
+    private static void printFlows(PrintWriter out, String ticker, String source,
+                                   List<com.stockscreener.pipeline.datasource.FlowBasis> bases) {
+        for (com.stockscreener.pipeline.datasource.FlowBasis b : bases) {
+            if (!b.superseded().isEmpty()) {
+                out.println(ticker + "\t" + source + "\t" + b.fiscalYear() + "\t" + b.fiscalPeriod() + "\t" + b.publishedAt() + "\t"
+                        + new java.util.TreeMap<>(b.superseded()));
             }
         }
     }

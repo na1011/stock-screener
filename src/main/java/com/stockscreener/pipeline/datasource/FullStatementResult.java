@@ -23,7 +23,12 @@ import java.util.List;
  * @param filingTrace     응답에서 본 공시 번호 — 공시 소비의 근거다({@link FilingTrace} · ADR-0176 2차)
  */
 public record FullStatementResult(List<RawFinancialReport> reports, int apiCalls,
-                                  int missingReports, FilingTrace filingTrace) {
+                                  int missingReports, FilingTrace filingTrace, List<FlowBasis> flowBases) {
+
+    /** 손익 칸 기저 판정을 안 싣는 호출(국내 관문 켬 밖 · 재고 A6). */
+    public FullStatementResult(List<RawFinancialReport> reports, int apiCalls, int missingReports, FilingTrace filingTrace) {
+        this(reports, apiCalls, missingReports, filingTrace, List.of());
+    }
 
     /** 공시 근거를 안 내는 소스·시험용. */
     public FullStatementResult(List<RawFinancialReport> reports, int apiCalls, int missingReports) {
@@ -42,5 +47,6 @@ public record FullStatementResult(List<RawFinancialReport> reports, int apiCalls
         }
         reports = List.copyOf(reports);
         filingTrace = filingTrace == null ? FilingTrace.NONE : filingTrace;
+        flowBases = flowBases == null ? List.of() : List.copyOf(flowBases);
     }
 }

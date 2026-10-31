@@ -97,6 +97,8 @@ public class FinancialCollector {
                         fetch.vintagesUncertain(), fetch.withheldVintages()));
         absenceWriter.write(security.stockId(), source.sourceName(), fetch.absences(),
                 LocalDate.now());
+        // 국내 관문 켬 어댑터만 싣는다(재고 A6) — 보고서를 쓴 뒤, 그 공시일의 행에 붙인다.
+        writer.applyFlowBases(security.stockId(), fetch.flowBases());
         if (bindRegistrant && !reports.isEmpty()) {
             int bound = jdbcTemplate.update("UPDATE stock SET sec_cik = ?, updated_at = now() WHERE id = ? AND sec_cik IS NULL",
                     fetch.registrant().cik(), security.stockId());

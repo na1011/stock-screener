@@ -78,6 +78,25 @@ class CommonEquityBasisTest {
     }
 
     @Test
+    @DisplayName("손익 칸 기저 대체일(재고 A6) — 그날부터의 봉은 그 칸을 모른다 · 잔액과 다른 칸은 그대로")
+    void supersededFlowIsUnknownFromThatDay() {
+        FinancialFigures f = FinancialFiguresFixture.annual(END).revenue(new BigDecimal("100")).netIncome(new BigDecimal("10"))
+                .totalEquity(new BigDecimal("500")).flowsSupersededOn(java.util.Map.of("revenue", LocalDate.of(2026, 5, 15))).build();
+        assertThat(f.asSeenOn(LocalDate.of(2026, 5, 14)).revenue()).isEqualByComparingTo("100");
+        FinancialFigures after = f.asSeenOn(LocalDate.of(2026, 5, 15));
+        assertThat(after.revenue()).isNull();
+        assertThat(after.netIncome()).isEqualByComparingTo("10");
+        assertThat(after.totalEquity()).isEqualByComparingTo("500");
+
+        FinancialFigures controlling = FinancialFiguresFixture.annual(END).netIncome(new BigDecimal("10"))
+                .netIncomeControlling(new BigDecimal("8"))
+                .flowsSupersededOn(java.util.Map.of("net_income_controlling", LocalDate.of(2026, 5, 15))).build()
+                .asSeenOn(LocalDate.of(2026, 6, 1));
+        assertThat(controlling.netIncomeControlling()).isNull();
+        assertThat(controlling.netIncome()).as("한쪽만 비우면 연결 폴백이 기저를 바꾼다").isNull();
+    }
+
+    @Test
     @DisplayName("못 정함은 미표시다 — 지배 자본으로 메우지 않는다")
     void undecidedIsNotShown() {
         FinancialFigures f = bank().commonEquity(null, null, "open").build();

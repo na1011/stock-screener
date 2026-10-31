@@ -22,7 +22,7 @@ public record FinancialFetch(List<RawFinancialReport> reports, List<FinancialCol
                              Set<LocalDate> supplementedVintages, boolean vintagesUncertain,
                              List<DataSourceException.Kind> unfetchedSupplements, FilingTrace filingTrace,
                              List<DataSourceException.Kind> unfetchedClassFacts, Registrant registrant,
-                             Set<WithheldVintage> withheldVintages) {
+                             Set<WithheldVintage> withheldVintages, List<FlowBasis> flowBases) {
 
     public FinancialFetch {
         filingTrace = filingTrace == null ? FilingTrace.NONE : filingTrace;
@@ -33,6 +33,18 @@ public record FinancialFetch(List<RawFinancialReport> reports, List<FinancialCol
         unfetchedSupplements = unfetchedSupplements == null ? List.of() : List.copyOf(unfetchedSupplements);
         unfetchedClassFacts = unfetchedClassFacts == null ? List.of() : List.copyOf(unfetchedClassFacts);
         withheldVintages = withheldVintages == null ? Set.of() : Set.copyOf(withheldVintages);
+        flowBases = flowBases == null ? List.of() : List.copyOf(flowBases);
+    }
+
+    /** 손익 칸 기저 판정을 안 싣는 호출(국내 관문 켬 어댑터 밖 · 재고 A6). */
+    public FinancialFetch(List<RawFinancialReport> reports, List<FinancialColumnAbsence> absences,
+                          boolean completeVintageHistory, Set<LocalDate> unconfirmedVintages,
+                          Set<LocalDate> supplementedVintages, boolean vintagesUncertain,
+                          List<DataSourceException.Kind> unfetchedSupplements, FilingTrace filingTrace,
+                          List<DataSourceException.Kind> unfetchedClassFacts, Registrant registrant,
+                          Set<WithheldVintage> withheldVintages) {
+        this(reports, absences, completeVintageHistory, unconfirmedVintages, supplementedVintages, vintagesUncertain,
+                unfetchedSupplements, filingTrace, unfetchedClassFacts, registrant, withheldVintages, List.of());
     }
 
     /** 원장이 준 판을 안 담는 갈래가 없는 소스용(국내 · 시험). */
@@ -158,13 +170,19 @@ public record FinancialFetch(List<RawFinancialReport> reports, List<FinancialCol
     /** 같은 결과에 공시 근거를 싣는다. */
     public FinancialFetch withFilingTrace(FilingTrace trace) {
         return new FinancialFetch(reports, absences, completeVintageHistory, unconfirmedVintages, supplementedVintages,
-                vintagesUncertain, unfetchedSupplements, trace, unfetchedClassFacts, registrant, withheldVintages);
+                vintagesUncertain, unfetchedSupplements, trace, unfetchedClassFacts, registrant, withheldVintages, flowBases);
     }
 
     /** 같은 결과에 받지 못한 클래스 축 인스턴스를 싣는다. */
     public FinancialFetch withUnfetchedClassFacts(List<DataSourceException.Kind> kinds) {
         return new FinancialFetch(reports, absences, completeVintageHistory, unconfirmedVintages, supplementedVintages,
-                vintagesUncertain, unfetchedSupplements, filingTrace, kinds, registrant, withheldVintages);
+                vintagesUncertain, unfetchedSupplements, filingTrace, kinds, registrant, withheldVintages, flowBases);
+    }
+
+    /** 같은 결과에 손익 칸 기저 판정을 싣는다(국내 관문 켬 · 재고 A6). */
+    public FinancialFetch withFlowBases(List<FlowBasis> bases) {
+        return new FinancialFetch(reports, absences, completeVintageHistory, unconfirmedVintages, supplementedVintages,
+                vintagesUncertain, unfetchedSupplements, filingTrace, unfetchedClassFacts, registrant, withheldVintages, bases);
     }
 
     /**

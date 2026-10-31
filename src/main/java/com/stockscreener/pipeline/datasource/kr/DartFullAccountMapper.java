@@ -576,7 +576,7 @@ final class DartFullAccountMapper {
     }
 
     /** {@code amountField}로 금액 칸을 고르는 판 — 누계({@code thstrm_add_amount})를 읽는 자리(F2b Q4)가 쓴다. */
-    private static BigDecimal findBy(List<JsonNode> rows, Set<String> candidates, String field, String amountField) {
+    static BigDecimal findBy(List<JsonNode> rows, Set<String> candidates, String field, String amountField) {
         for (String candidate : candidates) {
             List<JsonNode> matches = new ArrayList<>();
             for (JsonNode row : rows) {

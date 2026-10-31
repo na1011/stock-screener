@@ -201,6 +201,36 @@ public class FinancialWriter {
     }
 
     /**
+     * <b>손익 칸 기저 판정을 그 공시일의 행에 싣는다</b>(국내 관문 켬 · 재고 A6 · {@link com.stockscreener.pipeline.datasource.FlowBasis}).
+     * 쓰기 모드와 무관하다 — 값이 아니라 그 행의 칸이 언제부터 낡았는가라는 속성이고, 판정한 칸만 다시 지어 다음 판정이 대체를 안 내면
+     * 지운다(회수). 그 공시일의 행이 없으면 아무것도 안 한다(판정은 저장된 판에 붙는다).
+     *
+     * @return 고친 행 수
+     */
+    public int applyFlowBases(long stockId, List<com.stockscreener.pipeline.datasource.FlowBasis> bases) {
+        int changed = 0;
+        for (com.stockscreener.pipeline.datasource.FlowBasis b : bases) {
+            String judged = "{" + String.join(",", b.judged()) + "}";
+            StringBuilder json = new StringBuilder("{");
+            b.superseded().entrySet().stream().sorted(java.util.Map.Entry.comparingByKey()).forEach(e -> {
+                if (json.length() > 1) {
+                    json.append(',');
+                }
+                json.append('"').append(e.getKey()).append("\":\"").append(e.getValue()).append('"');
+            });
+            json.append('}');
+            changed += jdbcTemplate.update("""
+                    UPDATE financial_statement
+                       SET flow_superseded = nullif((coalesce(flow_superseded, '{}'::jsonb) - ?::text[]) || ?::jsonb, '{}'::jsonb)
+                     WHERE stock_id = ? AND fiscal_year = ? AND fiscal_period = ? AND published_at = ?
+                       AND flow_superseded IS DISTINCT FROM nullif((coalesce(flow_superseded, '{}'::jsonb) - ?::text[]) || ?::jsonb,
+                                                                  '{}'::jsonb)
+                    """, judged, json.toString(), stockId, b.fiscalYear(), b.fiscalPeriod(), b.publishedAt(), judged, json.toString());
+        }
+        return changed;
+    }
+
+    /**
      * 위와 같되 내역을 함께 낸다.
      *
      * <p>{@link WriteMode#FILL_WITHOUT_REVISION}으로 도는 잡이 <b>무엇을 채우지 못했는지</b>를

@@ -347,6 +347,8 @@ public final class IndicatorContext {
                                                               LocalDate tradeDate) {
         return figures.stream()
                 .filter(f -> f.publishedAt() == null || !f.publishedAt().isAfter(tradeDate))
+                // 기저가 대체된 손익 칸은 그날부터 모른다(국내 관문 켬 · A6 — 비면 그대로).
+                .map(f -> f.asSeenOn(tradeDate))
                 .toList();
     }
 

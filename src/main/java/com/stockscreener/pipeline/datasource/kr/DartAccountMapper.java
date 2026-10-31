@@ -91,6 +91,26 @@ final class DartAccountMapper {
      * <p>실측 형태가 {@code "333,605,938,000,000"}처럼 <b>콤마 포함 문자열</b>이다.
      * 빈 문자열과 {@code "-"}는 null로 둔다 — 0으로 대체하면 "값이 0"이라는 다른 사실이 된다.
      */
+    /**
+     * {@link #find}와 같은 행을 고르되 <b>그 칸만</b> 읽는다 — 빈 칸을 다른 칸으로 메우지 않는다. 기저 판정(재고 A6)이 누계 · 전기 열의
+     * 「안 실었다」를 당기 값으로 읽으면 언제나 어긋남으로 걸린다.
+     */
+    static BigDecimal findField(List<JsonNode> rows, Set<String> candidates, String field) {
+        for (String candidate : candidates) {
+            JsonNode first = rows.stream()
+                    .filter(row -> candidate.equals(row.path("account_nm").asString("")))
+                    .min(java.util.Comparator.comparingInt(row -> parseOrd(row.path("ord").asString(""))))
+                    .orElse(null);
+            if (first != null) {
+                BigDecimal value = parseAmount(first.path(field).asString(""));
+                if (value != null) {
+                    return value;
+                }
+            }
+        }
+        return null;
+    }
+
     static BigDecimal amount(JsonNode row, boolean cumulative) {
         String field = cumulative ? "thstrm_add_amount" : "thstrm_amount";
         String raw = row.path(field).asString("");

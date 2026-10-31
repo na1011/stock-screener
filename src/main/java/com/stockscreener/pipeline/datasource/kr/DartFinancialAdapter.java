@@ -114,9 +114,14 @@ public class DartFinancialAdapter implements FinancialDataSource {
         // 공시 소비의 근거(ADR-0176 2차) — 보고서마다 응답의 접수번호. 출력과 무관하다.
         Map<FilingTrace.ReportKey, String> seen = FilingTrace.newReportMap();
 
+        Map<Integer, Map<String, PeriodRows>> rowsByYear = new java.util.HashMap<>();
+        Map<Integer, Map<String, RawFinancialReport>> reportsByYear = new java.util.HashMap<>();
         for (int year = fromFiscalYear; year <= currentYear; year++) {
             // 연간 누계와 3분기 누적을 함께 들고 있어야 Q4를 유도할 수 있다.
             Map<String, PeriodRows> byPeriod = new LinkedHashMap<>();
+            Map<String, RawFinancialReport> byLabel = new LinkedHashMap<>();
+            rowsByYear.put(year, byPeriod);
+            reportsByYear.put(year, byLabel);
             for (Map.Entry<String, String> entry : REPORT_CODES.entrySet()) {
                 PeriodRows rows = fetchOne(corpCode, year, entry.getKey(), security);
                 if (rows != null) {
@@ -125,10 +130,23 @@ public class DartFinancialAdapter implements FinancialDataSource {
                                 row.path("rcept_no").asString(""));
                     }
                     byPeriod.put(entry.getValue(), rows);
-                    reports.add(toReport(rows, year, entry.getValue(), false));
+                    RawFinancialReport report = toReport(rows, year, entry.getValue(), false);
+                    byLabel.put(entry.getValue(), report);
+                    reports.add(report);
                 }
             }
-            deriveFourthQuarter(byPeriod, year).ifPresent(reports::add);
+            deriveFourthQuarter(byPeriod, year).ifPresent(q4 -> {
+                byLabel.put("Q4", q4);
+                reports.add(q4);
+            });
+        }
+        if (krGate) {
+            List<com.stockscreener.pipeline.datasource.FlowBasis> bases = new ArrayList<>();
+            for (int year = fromFiscalYear; year <= currentYear; year++) {
+                bases.addAll(flowBases(year, rowsByYear.get(year), rowsByYear.getOrDefault(year + 1, Map.of()),
+                        reportsByYear.get(year)));
+            }
+            return FinancialFetch.of(reports).withFilingTrace(FilingTrace.ofReports(seen)).withFlowBases(bases);
         }
         // DART는 이 축을 안 본다 — 빈 목록은 「모른다」이지 「없다」가 아니다.
         // 같은 판정을 낼 재료는 있다(DartFullAccountMapper.find가 후보 account_id가 손익 행에
@@ -315,6 +333,56 @@ public class DartFinancialAdapter implements FinancialDataSource {
                 // 그냥 안 실린 것이다. 담으면 「안 실었다」가 「없다」로 읽혀 멀쩡한 값이 지워진다
                 // (2026-09-22 실측: 국내 net_income이 null인 행 298개).
                 java.util.Set.of()));
+    }
+
+    /** 주요계정 어댑터가 판정하는 손익 칸(재고 A6) — DB 컬럼명 → 계정명 후보. */
+    private static final Map<String, Set<String>> FLOW_COLUMNS = new LinkedHashMap<>();
+
+    static {
+        FLOW_COLUMNS.put("revenue", DartAccountMapper.REVENUE);
+        FLOW_COLUMNS.put("operating_income", DartAccountMapper.OPERATING_INCOME);
+        FLOW_COLUMNS.put("net_income", DartAccountMapper.NET_INCOME);
+    }
+
+    /**
+     * 국내 관문 켬(재고 A6): 그 해 분기 손익의 기저 판정({@link DartFlowBasis}) — 1분기 · 반기 · 3분기 보고서와 다음 해 1분기 보고서의 전기 열.
+     * 한 통화 · 한 연결 기저(CFS/OFS)인 보고서끼리만 잰다.
+     */
+    private static List<com.stockscreener.pipeline.datasource.FlowBasis> flowBases(int year, Map<String, PeriodRows> rows,
+                                                                                   Map<String, PeriodRows> next,
+                                                                                   Map<String, RawFinancialReport> reports) {
+        if (rows == null || reports == null || reports.isEmpty()) {
+            return List.of();
+        }
+        PeriodRows first = rows.get("Q1");
+        PeriodRows half = rows.get("Q2");
+        PeriodRows third = rows.get("Q3");
+        PeriodRows nextFirst = next.get("Q1");
+        String basis = first != null ? first.fsDiv() : null;
+        java.util.function.Predicate<PeriodRows> same = r -> r != null && basis != null && basis.equals(r.fsDiv())
+                && singleCurrency(r.rows()) != null && singleCurrency(r.rows()).equals(singleCurrency(first.rows()));
+        Map<String, DartFlowBasis.Values> values = new LinkedHashMap<>();
+        for (Map.Entry<String, Set<String>> e : FLOW_COLUMNS.entrySet()) {
+            Set<String> c = e.getValue();
+            values.put(e.getKey(), new DartFlowBasis.Values(
+                    first == null ? null : field(first, c, "thstrm_amount"),
+                    same.test(half) ? field(half, c, "thstrm_amount") : null,
+                    same.test(half) ? field(half, c, "thstrm_add_amount") : null,
+                    same.test(third) ? field(third, c, "thstrm_amount") : null,
+                    same.test(third) ? field(third, c, "thstrm_add_amount") : null,
+                    same.test(nextFirst) ? field(nextFirst, c, "frmtrm_amount") : null));
+        }
+        DartFlowBasis.Dates dates = new DartFlowBasis.Dates(published(reports.get("Q1")), published(reports.get("Q2")),
+                published(reports.get("Q3")), nextFirst == null ? null : publishedAt(nextFirst.rows().get(0), year + 1));
+        return DartFlowBasis.bases(year, reports, FLOW_COLUMNS.keySet(), DartFlowBasis.judge(values, dates));
+    }
+
+    private static BigDecimal field(PeriodRows rows, Set<String> candidates, String field) {
+        return DartAccountMapper.findField(filterBy(rows.rows(), DartAccountMapper.SJ_INCOME), candidates, field);
+    }
+
+    private static LocalDate published(RawFinancialReport report) {
+        return report == null ? null : report.publishedAt();
     }
 
     /**

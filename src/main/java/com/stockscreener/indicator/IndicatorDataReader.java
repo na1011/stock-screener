@@ -156,6 +156,7 @@ public class IndicatorDataReader {
             , (SELECT ci.ncav_non_common FROM financial_common_income ci WHERE %1$s) AS equity_ncav_non_common
             , (SELECT ci.equity_branch FROM financial_common_income ci WHERE %1$s) AS equity_branch
             , (SELECT ci.common_fraction FROM financial_common_income ci WHERE %1$s) AS equity_common_fraction
+            , financial_statement.flow_superseded::text AS flow_superseded
             """.formatted(COMMON_KR_MATCH);
 
     /**
@@ -824,6 +825,18 @@ public class IndicatorDataReader {
                         true, rs.getBigDecimal("equity_common_fraction"))
                         : line == null ? null : new CommonIncomeRead(rs.getBigDecimal("common_income"), rs.getString("common_basis"),
                         rs.getString("common_branch"), rs.getBigDecimal("equity_non_common"), rs.getBigDecimal("equity_ncav_non_common"),
-                        rs.getString("equity_branch")));
+                        rs.getString("equity_branch")),
+                krCommon ? supersession(rs.getString("flow_superseded")) : null);
+    }
+
+    /** 기저 대체일 jsonb({@code {"revenue": "2024-11-14", …}}) — 국내 관문 켬 행만 싣는다(재고 A6). */
+    private static java.util.Map<String, LocalDate> supersession(String json) {
+        if (json == null || json.isBlank()) {
+            return null;
+        }
+        java.util.Map<String, LocalDate> out = new java.util.HashMap<>();
+        tools.jackson.databind.JsonNode node = new tools.jackson.databind.ObjectMapper().readTree(json);
+        node.properties().forEach(e -> out.put(e.getKey(), LocalDate.parse(e.getValue().asString())));
+        return out;
     }
 }

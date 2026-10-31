@@ -46,6 +46,8 @@ public class FullStatementCollector {
         FinancialWriter.Outcome outcome = writer.writeDetailed(
                 security.stockId(), fetched.reports(),
                 FinancialWriter.WriteMode.FILL_WITHOUT_REVISION);
+        // 국내 관문 켬 어댑터만 싣는다(재고 A6) — 보고서를 쓴 뒤, 그 공시일의 행에 붙인다.
+        writer.applyFlowBases(security.stockId(), fetched.flowBases());
         return new Collected(outcome.withFilingTrace(fetched.filingTrace()), fetched.apiCalls(),
                 fetched.reports().size(), fetched.missingReports());
     }

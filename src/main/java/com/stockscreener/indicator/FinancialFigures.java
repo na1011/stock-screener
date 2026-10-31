@@ -149,8 +149,73 @@ public record FinancialFigures(
          * <b>보통주 귀속 이익</b>(미국 관문 켬만 · {@link CommonIncomeRead}). {@code null}은 「이 규칙으로 안 읽었다」(관문 꺼짐 · 국내)
          * — 그때 주당 지표 분자는 이 축이 생기기 전과 같다.
          */
-        CommonIncomeRead common
+        CommonIncomeRead common,
+
+        /**
+         * <b>손익 칸의 기저 대체일</b>(국내 관문 켬 · 재고 A6) — DB 컬럼명 → 그날. 뒤 보고서가 이 기간의 그 계정을 다른 기저로 다시 실었는데
+         * (반기 · 3분기 누계 · 다음 해 전기 열이 저장 값과 안 닫힌다) 새 기저의 이 기간 값은 안 줬다. 그날부터의 봉은 그 칸을 모른다
+         * ({@link #asSeenOn}) — 두 기저를 한 TTM 창에 섞지 않는다. 비면 이 규칙으로 안 읽은 행이다.
+         */
+        java.util.Map<String, LocalDate> flowsSupersededOn
 ) {
+
+    public FinancialFigures {
+        flowsSupersededOn = flowsSupersededOn == null ? java.util.Map.of() : java.util.Map.copyOf(flowsSupersededOn);
+    }
+
+    /** {@link #flowsSupersededOn}을 안 싣는 호출 — 이 규칙으로 안 읽은 행. */
+    public FinancialFigures(int fiscalYear, FiscalPeriod fiscalPeriod, LocalDate periodStart, LocalDate periodEnd,
+                            LocalDate publishedAt, String currencyCode, BigDecimal revenue, BigDecimal operatingIncome,
+                            BigDecimal netIncome, BigDecimal totalAssets, BigDecimal totalEquity, BigDecimal totalEquityControlling,
+                            BigDecimal totalLiabilities, BigDecimal currentAssets, BigDecimal currentLiabilities,
+                            BigDecimal retainedEarnings, BigDecimal operatingCashFlow, BigDecimal sharesOutstanding, BigDecimal eps,
+                            BigDecimal bps, BigDecimal costOfSales, BigDecimal cashAndEquivalents, BigDecimal capex,
+                            BigDecimal inventories, BigDecimal netIncomeControlling, BigDecimal interestAndDividendIncome,
+                            BigDecimal noninterestIncome, BigDecimal interestExpense, BigDecimal noninterestExpense,
+                            BigDecimal benefitsLossesAndExpenses, BigDecimal grossProfit, BigDecimal operatingExpenses,
+                            BigDecimal costsAndExpenses, BigDecimal incomeTaxExpense, BigDecimal profitBeforeTax,
+                            BigDecimal shareBasisMultiple, String shareBasisStatus, ShareClassLine.State shareClassState,
+                            BigDecimal weightedShares, boolean weightedSharesJudged, BigDecimal discontinuedIncome,
+                            BigDecimal discontinuedIncomeControlling, BigDecimal discontinuedRule, CommonIncomeRead common) {
+        this(fiscalYear, fiscalPeriod, periodStart, periodEnd, publishedAt, currencyCode, revenue, operatingIncome, netIncome,
+                totalAssets, totalEquity, totalEquityControlling, totalLiabilities, currentAssets, currentLiabilities,
+                retainedEarnings, operatingCashFlow, sharesOutstanding, eps, bps, costOfSales, cashAndEquivalents, capex,
+                inventories, netIncomeControlling, interestAndDividendIncome, noninterestIncome, interestExpense,
+                noninterestExpense, benefitsLossesAndExpenses, grossProfit, operatingExpenses, costsAndExpenses,
+                incomeTaxExpense, profitBeforeTax, shareBasisMultiple, shareBasisStatus, shareClassState, weightedShares,
+                weightedSharesJudged, discontinuedIncome, discontinuedIncomeControlling, discontinuedRule, common, null);
+    }
+
+    /**
+     * {@code day}의 봉이 보는 이 행 — 기저 대체일이 그날 이하인 손익 칸을 비운다({@link #flowsSupersededOn}). 대체가 없으면 그대로다.
+     */
+    public FinancialFigures asSeenOn(LocalDate day) {
+        if (flowsSupersededOn.isEmpty()) {
+            return this;
+        }
+        java.util.function.Predicate<String> stale = column -> {
+            LocalDate since = flowsSupersededOn.get(column);
+            return since != null && !since.isAfter(day);
+        };
+        // 순이익과 지배주주 순이익은 같은 재작성을 탄다 — 한쪽만 비우면 창 단위 연결 폴백(FinancialMath.sumControllingContinuingIncome)이
+        // 지배 계열을 연결 계속영업으로 떨어뜨린다(F2b MUST NOT). 둘 중 하나가 낡으면 둘 다 모른다.
+        boolean income = stale.test("net_income") || stale.test("net_income_controlling");
+        java.util.function.Predicate<String> gone = column -> "net_income".equals(column) || "net_income_controlling".equals(column)
+                ? income : stale.test(column);
+        if (flowsSupersededOn.keySet().stream().noneMatch(stale)) {
+            return this;
+        }
+        return new FinancialFigures(fiscalYear, fiscalPeriod, periodStart, periodEnd, publishedAt, currencyCode,
+                gone.test("revenue") ? null : revenue, gone.test("operating_income") ? null : operatingIncome,
+                gone.test("net_income") ? null : netIncome, totalAssets, totalEquity, totalEquityControlling, totalLiabilities,
+                currentAssets, currentLiabilities, retainedEarnings, operatingCashFlow, sharesOutstanding, eps, bps,
+                gone.test("cost_of_sales") ? null : costOfSales, cashAndEquivalents, capex, inventories,
+                gone.test("net_income_controlling") ? null : netIncomeControlling, interestAndDividendIncome, noninterestIncome,
+                interestExpense, noninterestExpense, benefitsLossesAndExpenses, gone.test("gross_profit") ? null : grossProfit,
+                operatingExpenses, costsAndExpenses, incomeTaxExpense, profitBeforeTax, shareBasisMultiple, shareBasisStatus,
+                shareClassState, weightedShares, weightedSharesJudged, discontinuedIncome, discontinuedIncomeControlling,
+                discontinuedRule, common, flowsSupersededOn);
+    }
 
     /**
      * <b>계속영업 순이익(연결).</b> 순이익에서 중단영업을 뺀다 — 중단영업은 정의상(ASC 205-20 · K-IFRS 1105) 이어지지 않는

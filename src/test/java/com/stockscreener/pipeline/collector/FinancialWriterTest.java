@@ -92,6 +92,29 @@ class FinancialWriterTest {
     }
 
     @Test
+    @DisplayName("손익 칸 기저 판정(재고 A6)은 그 공시일 행에 판정한 칸만 다시 짓는다 — 다른 주인의 칸은 두고, 대체가 사라지면 지운다")
+    void flowBasesRebuildOnlyTheJudgedColumns() {
+        writer.write(stockId, List.of(report(2025, "FY", "2026-03-15", "1000")));
+        LocalDate day = LocalDate.parse("2026-03-15");
+        writer.applyFlowBases(stockId, List.of(new com.stockscreener.pipeline.datasource.FlowBasis(2025, "FY", day,
+                java.util.Set.of("revenue", "net_income"), Map.of("revenue", LocalDate.parse("2026-05-15")))));
+        writer.applyFlowBases(stockId, List.of(new com.stockscreener.pipeline.datasource.FlowBasis(2025, "FY", day,
+                java.util.Set.of("cost_of_sales"), Map.of("cost_of_sales", LocalDate.parse("2026-08-14")))));
+        assertThat(superseded()).isEqualTo("{\"revenue\": \"2026-05-15\", \"cost_of_sales\": \"2026-08-14\"}");
+
+        writer.applyFlowBases(stockId, List.of(new com.stockscreener.pipeline.datasource.FlowBasis(2025, "FY", day,
+                java.util.Set.of("revenue", "net_income"), Map.of())));
+        writer.applyFlowBases(stockId, List.of(new com.stockscreener.pipeline.datasource.FlowBasis(2025, "FY", day,
+                java.util.Set.of("cost_of_sales"), Map.of())));
+        assertThat(superseded()).as("대체가 다 사라지면 NULL").isNull();
+    }
+
+    private String superseded() {
+        return jdbcTemplate.queryForObject("SELECT flow_superseded::text FROM financial_statement WHERE stock_id = ?", String.class,
+                stockId);
+    }
+
+    @Test
     @DisplayName("같은 공시일의 재수집은 아무것도 하지 않는다 — 멱등해야 한다")
     void isIdempotentForSamePublicationDate() {
         RawFinancialReport report = report(2025, "FY", "2026-03-15", "1000");

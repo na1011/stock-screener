@@ -49,9 +49,10 @@ class FinancialFiguresFixtureTest {
      * 안 잡히고, {@code null}을 쓰면 안 복사된 것과 구분되지 않는다.
      */
     private static FinancialFigures everyComponentDistinct() throws Exception {
-        @SuppressWarnings("unchecked")
-        Constructor<FinancialFigures> canonical = (Constructor<FinancialFigures>)
-                FinancialFigures.class.getDeclaredConstructors()[0];
+        // 정준 생성자를 컴포넌트 타입으로 고른다 — 보조 생성자가 생기면 선언 순서의 첫 생성자가 정준이라는 보장이 없다.
+        Constructor<FinancialFigures> canonical = FinancialFigures.class.getDeclaredConstructor(
+                java.util.Arrays.stream(FinancialFigures.class.getRecordComponents()).map(RecordComponent::getType)
+                        .toArray(Class<?>[]::new));
 
         List<Object> args = new ArrayList<>();
         int seq = 0;
@@ -73,6 +74,8 @@ class FinancialFiguresFixtureTest {
                 args.add(type.getEnumConstants()[0]);
             } else if (type == com.stockscreener.indicator.CommonIncomeRead.class) {
                 args.add(new com.stockscreener.indicator.CommonIncomeRead(BigDecimal.valueOf(seq), "T", "decl"));
+            } else if (type == java.util.Map.class) {
+                args.add(java.util.Map.of("revenue", LocalDate.of(2026, 1, 1).plusDays(seq)));
             } else {
                 throw new AssertionError(
                         "새 컴포넌트 타입이다. 이 표본에 그 타입의 값을 더해라: " + type);
