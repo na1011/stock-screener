@@ -191,7 +191,6 @@ public class KrEarlierVintages {
         for (Integer year : new java.util.TreeSet<>(renumber.stream().map(r -> (Integer) r[0]).toList())) {
             writer.renumberLabel(stockId, year, "Q4");
         }
-        invalidateFromEarliest(stockId, changed);
         return changed.size();
     }
 
@@ -222,10 +221,8 @@ public class KrEarlierVintages {
                 anyFillable), yearAndDay, stockId);
     }
 
-    /** 판을 고친 가장 이른 공시일부터 지운다 — 그 판이 보이던 봉의 값이 바뀐다(쓰기기와 같은 무효화). */
-    private void invalidateFromEarliest(long stockId, List<Object[]> changed) {
-        changed.stream().map(r -> (LocalDate) r[1]).min(LocalDate::compareTo).ifPresent(day -> writer.invalidateFrom(stockId, day));
-    }
+    // 판을 고쳐도 무효화하지 않는다 — 이 잡은 평일 14:16 사슬 끝이고 14:20 화해(ADR-0166)가 창 전체 원본층 · 파생층을 다시 쓴다(무효화는 그때까지
+    // 0행 구간만 만든다 · FinancialWriter.fillMissing javadoc).
 
     /** 그 FY 판의 공시일에 보이던 그 해 분기 판 하나(공시일 · 번호가 가장 늦은 것). */
     private static final String QUARTER = """
@@ -258,7 +255,6 @@ public class KrEarlierVintages {
                 RETURNING c.fiscal_year, c.published_at
                 """.formatted(target, source, current), (rs, i) -> new Object[]{rs.getInt(1), rs.getObject(2, LocalDate.class)},
                 stockId);
-        invalidateFromEarliest(stockId, changed);
         return changed.size();
     }
 

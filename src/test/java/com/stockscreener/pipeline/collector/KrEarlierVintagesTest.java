@@ -118,7 +118,7 @@ class KrEarlierVintagesTest {
     }
 
     @Test
-    @DisplayName("국내 관문 켬 — FY 판 날짜의 소스 4분기 이른 판은 빈 유량 칸만 같은 항등식으로 채우고 그 공시일부터 지운다")
+    @DisplayName("국내 관문 켬 — FY 판 날짜의 소스 4분기 이른 판은 빈 유량 칸만 같은 항등식으로 채운다(무효화는 안 한다 — 화해가 덮는다)")
     void gatedFillsTheEmptyFlowsOfASourceFourthQuarterVintage() {
         List<String> invalidations = new java.util.ArrayList<>();
         KrEarlierVintages gated = new KrEarlierVintages(jdbc, new FinancialWriter(jdbc,
@@ -140,7 +140,7 @@ class KrEarlierVintagesTest {
                 SELECT net_income || '/' || net_income_controlling FROM financial_statement
                 WHERE stock_id = ? AND fiscal_period = 'Q4' ORDER BY published_at
                 """, String.class, stockId)).as("값이 있는 칸은 그대로 · 빈 칸만").containsExactly("2000.00/1800.00", "2200.00/2000.00");
-        assertThat(invalidations).containsExactly("2026-03-13");
+        assertThat(invalidations).as("화해(ADR-0166)가 같은 날 다시 쓴다 — 0행 구간을 안 만든다").isEmpty();
         assertThat(gated.restoreFourthQuarters(stockId)).as("멱등").isZero();
     }
 
