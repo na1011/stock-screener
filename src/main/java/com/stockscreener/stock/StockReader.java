@@ -201,6 +201,11 @@ public class StockReader {
                         + equityColumn("equity_branch", "equity_branch", us, commonMatch)
                         : "");
         boolean withEquity = withCommon;
+        // 국내 관문 켬 — 손익 칸의 기저 대체일(ADR-0200). 화면은 원값을 그리되 낡은 칸의 전년 동기 대비는 안 낸다.
+        boolean withStale = withCommon && !us;
+        if (withStale) {
+            extra = extra + ", flow_superseded::text AS flow_superseded";
+        }
         return jdbcTemplate.query("""
                 SELECT fiscal_year, fiscal_period, published_at, revision_no, report_code,
                        currency_code,
@@ -231,8 +236,23 @@ public class StockReader {
                         withCommon ? rs.getBigDecimal("common_income") : null,
                         withEquity ? commonEquity(rs.getBigDecimal("total_equity_controlling"), rs.getBigDecimal("total_equity"),
                                 rs.getBigDecimal("equity_non_common"), rs.getBigDecimal("equity_common_fraction"),
-                                rs.getString("equity_branch")) : null),
+                                rs.getString("equity_branch")) : null,
+                        withStale ? staleOn(rs.getString("flow_superseded"), LocalDate.now()) : null),
                 stockId, limit);
+    }
+
+    /** 기저 대체일 jsonb에서 {@code day}까지 대체된 칸. */
+    private static java.util.Set<String> staleOn(String json, LocalDate day) {
+        if (json == null || json.isBlank()) {
+            return null;
+        }
+        java.util.Set<String> out = new java.util.HashSet<>();
+        new tools.jackson.databind.ObjectMapper().readTree(json).properties().forEach(e -> {
+            if (!LocalDate.parse(e.getValue().asString()).isAfter(day)) {
+                out.add(e.getKey());
+            }
+        });
+        return out;
     }
 
     private static String equityColumn(String column, String alias, boolean us, String commonMatch) {
@@ -528,7 +548,24 @@ public class StockReader {
                                BigDecimal revenue, BigDecimal operatingIncome, BigDecimal netIncome,
                                BigDecimal operatingCashFlow, BigDecimal totalAssets,
                                BigDecimal totalLiabilities, BigDecimal totalEquity,
-                               BigDecimal discontinuedIncome, BigDecimal commonIncome, BigDecimal commonEquity) {
+                               BigDecimal discontinuedIncome, BigDecimal commonIncome, BigDecimal commonEquity,
+                               java.util.Set<String> staleFlows) {
+
+        /**
+         * @param staleFlows 오늘 기준 기저가 대체된 손익 칸(DB 컬럼명 · 국내 관문 켬 · ADR-0200) — 화면은 원값을 그리되 전년 동기 대비는 안 낸다
+         */
+        public FinancialRow {
+            staleFlows = staleFlows == null ? java.util.Set.of() : java.util.Set.copyOf(staleFlows);
+        }
+
+        public FinancialRow(int fiscalYear, String fiscalPeriod, LocalDate publishedAt, int revisionNo, String reportCode,
+                            String currencyCode, BigDecimal revenue, BigDecimal operatingIncome, BigDecimal netIncome,
+                            BigDecimal operatingCashFlow, BigDecimal totalAssets, BigDecimal totalLiabilities, BigDecimal totalEquity,
+                            BigDecimal discontinuedIncome, BigDecimal commonIncome, BigDecimal commonEquity) {
+            this(fiscalYear, fiscalPeriod, publishedAt, revisionNo, reportCode, currencyCode, revenue, operatingIncome, netIncome,
+                    operatingCashFlow, totalAssets, totalLiabilities, totalEquity, discontinuedIncome, commonIncome, commonEquity,
+                    null);
+        }
     }
 
     /** 업종 자체의 크기. 지표별 표본은 {@code _SECTOR_N}이 따로 답한다. */

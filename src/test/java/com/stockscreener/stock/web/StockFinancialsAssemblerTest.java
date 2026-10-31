@@ -59,6 +59,19 @@ class StockFinancialsAssemblerTest {
     }
 
     @Test
+    @DisplayName("국내 관문 켬 — 한쪽 칸의 기저가 대체됐으면(ADR-0200) 그 칸의 전년 동기 대비는 안 낸다 · 원값과 다른 칸은 그대로")
+    void refusesGrowthAcrossASupersededBasis() {
+        StockReader.FinancialRow stale = new StockReader.FinancialRow(2024, "Q1", LocalDate.of(2024, 5, 15), 0, "11013", "KRW",
+                new BigDecimal("1000"), new BigDecimal("100"), new BigDecimal("50"), null, null, null, null, null, null, null,
+                java.util.Set.of("revenue"));
+        StockFinancialsResponse.Period latest = byLabel(assembler.assemble(List.of(row(2025, "Q1", "KRW", "1500"), stale))
+                .quarterly()).get("2025:Q1");
+        assertThat(latest.revenueYoy()).isNull();
+        assertThat(latest.revenue()).isEqualByComparingTo("1500");
+        assertThat(latest.operatingIncomeYoy()).isNotNull();
+    }
+
+    @Test
     @DisplayName("통화가 갈린 전년 동기와는 증감률을 내지 않는다 — 환산 없이 뺀 값이다")
     void refusesGrowthAcrossACurrencyChange() {
         List<StockFinancialsResponse.Period> quarterly = assembler.assemble(List.of(

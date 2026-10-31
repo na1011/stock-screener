@@ -118,9 +118,9 @@ public class StockFinancialsAssembler {
                 row.totalAssets(),
                 row.totalLiabilities(),
                 row.totalEquity(),
-                unusable ? null : yoy(row, prior, StockReader.FinancialRow::revenue),
-                unusable ? null : yoy(row, prior, StockReader.FinancialRow::operatingIncome),
-                unusable ? null : yoy(row, prior, StockReader.FinancialRow::netIncome),
+                unusable ? null : yoy(row, prior, StockReader.FinancialRow::revenue, "revenue"),
+                unusable ? null : yoy(row, prior, StockReader.FinancialRow::operatingIncome, "operating_income"),
+                unusable ? null : yoy(row, prior, StockReader.FinancialRow::netIncome, "net_income"),
                 unusable ? null : row.discontinuedIncome(),
                 unusable ? null : row.commonIncome(),
                 row.commonEquity());
@@ -144,8 +144,12 @@ public class StockFinancialsAssembler {
      * {@link #toPeriod}의 {@code unusable}이다.
      */
     private static BigDecimal yoy(StockReader.FinancialRow row, StockReader.FinancialRow prior,
-                                  Function<StockReader.FinancialRow, BigDecimal> field) {
+                                  Function<StockReader.FinancialRow, BigDecimal> field, String column) {
         if (prior == null || !row.currencyCode().equals(prior.currencyCode())) {
+            return null;
+        }
+        // 국내 관문 켬: 한쪽 칸의 기저가 대체됐으면(ADR-0200) 두 해가 다른 기저다 — 지표와 같이 비교하지 않는다.
+        if (row.staleFlows().contains(column) || prior.staleFlows().contains(column)) {
             return null;
         }
         return YearOverYear.between(field.apply(row), field.apply(prior));
