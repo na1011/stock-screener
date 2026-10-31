@@ -66,7 +66,7 @@ ADR-0098 기록). 재료는 정기 공시 판마다의 **DART 재무제표 원�
 
 **저장 · 관문**
 - MUST: 재료 표(`V69_5`)는 main 마이그레이션이다 — 관문 꺼짐에서 읽는 코드가 없어 「마이그레이션은 관문 직전」의 사유가 안 선다.
-  `financial_common_income`의 국내 열(`V70_6`)은 시험 마이그레이션이고, **먼저 여는 관문이 V70~V70_10 전부를 번호 순서대로** main으로
+  `financial_common_income`의 국내 열(`V70_6`)은 시험 마이그레이션이고, **먼저 여는 관문이 V70~V70_11 전부를 번호 순서대로** main으로
   옮긴다(운영 Flyway는 out-of-order가 꺼져 있다).
 - MUST: 읽는 쪽은 붙일 때의 행 스냅숏(`published_at` · `coalesce(net_income_controlling, net_income)`)이 지금 행과 같을 때만 쓴다 — 국내
   `report_code`는 판을 안 가른다.

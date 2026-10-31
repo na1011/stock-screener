@@ -5,6 +5,7 @@ import org.springframework.stereotype.Component;
 
 import java.sql.Date;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -91,6 +92,7 @@ public class KrEarlierVintages {
                 rs.getString("fiscal_period"), rs.getObject("earliest", LocalDate.class)), stockId, stockId, stockId);
         if (candidates.isEmpty()) {
             if (krGate) {
+                restoreFourthQuarters(stockId);
                 resync(stockId);
             }
             return 0;
@@ -109,10 +111,91 @@ public class KrEarlierVintages {
             writer.renumberLabel(stockId, c.fiscalYear(), c.fiscalPeriod());
         }
         if (krGate) {
+            restoreFourthQuarters(stockId);
             resync(stockId);
         }
         return inserted;
     }
+
+    /** 4분기 유량 칸 — FY − 그날 보이던 1~3분기로 짓는다(어댑터의 4분기 유도와 같은 칸). 나머지 유량은 국내 4분기 행이 안 싣는다. */
+    private static final List<String> FOURTH_QUARTER_FLOWS = List.of("revenue", "operating_income", "net_income",
+            "net_income_controlling", "discontinued_income", "discontinued_income_controlling");
+    private static final java.util.Set<String> QUARTER_EMPTY = java.util.Set.of("cost_of_sales", "gross_profit", "operating_cash_flow",
+            "capex", "income_tax_expense", "profit_before_tax", "interest_and_dividend_income", "noninterest_income", "interest_expense",
+            "noninterest_expense", "benefits_losses_and_expenses", "operating_expenses", "costs_and_expenses", "eps");
+
+    /**
+     * 국내 관문 켬 — 저장된 FY 판마다 같은 공시일의 4분기 판이 없으면 짓는다(재고 「유도 Q4 가시성」 남은 것). 옛 회수가 지운 4분기 판은 DART가
+     * 옛 FY를 다시 안 줘 어댑터로는 안 되살아난다 — 4분기 = FY − 그날 보이던 1~3분기(어댑터와 같은 항등식 · 같은 해 분기가 다 보이고 통화가
+     * 같을 때만 · 칸이 하나라도 비면 그 칸은 비운다 · 그 라벨에 더 늦은 소스 4분기 판이 있을 때만). 잔액은 그 FY 판의 잔액이다. 지은 판은 원천 FY
+     * 판을 적고({@code derived_from} · 관문 시험 마이그레이션 V70_11) 매 실행 같은 식으로 다시 맞춘다 — 넣고 · 바뀐 것만 고치고 · 식이 더는 안
+     * 서면 지운다. 바꾼 판 수.
+     */
+    int restoreFourthQuarters(long stockId) {
+        List<String> names = java.util.Arrays.asList(copiedColumns().split(", "));
+        List<String> exprs = new ArrayList<>();
+        for (String n : names) {
+            if ("fiscal_period".equals(n)) {
+                exprs.add("'Q4'");
+            } else if ("period_start".equals(n) || "flow_superseded".equals(n)) {
+                // 기간 시작과 기저 대체 표지는 그 라벨의 판이 공유한다(applyFlowBases가 판 전부에 싣는다) — 소스 4분기 판에서.
+                exprs.add("t." + n);
+            } else if (FOURTH_QUARTER_FLOWS.contains(n)) {
+                exprs.add("fy.%1$s - (q1.%1$s + q2.%1$s + q3.%1$s)".formatted(n));
+            } else if (QUARTER_EMPTY.contains(n)) {
+                exprs.add("NULL::numeric");
+            } else {
+                exprs.add("fy." + n);
+            }
+        }
+        String columns = String.join(", ", names);
+        String desired = """
+                SELECT fy.id AS fy_id, fy.published_at AS fy_published, fy.fiscal_year AS fy_year, %1$s
+                  FROM financial_statement fy
+                  JOIN LATERAL (SELECT * FROM financial_statement x WHERE x.stock_id = fy.stock_id AND x.fiscal_year = fy.fiscal_year
+                                  AND x.fiscal_period = 'Q4' AND x.derived_from IS NULL ORDER BY x.published_at LIMIT 1) t ON true
+                  JOIN %2$s ON true
+                  JOIN %3$s ON true
+                  JOIN %4$s ON true
+                 WHERE fy.stock_id = ? AND fy.fiscal_period = 'FY'
+                   AND q1.currency_code = fy.currency_code AND q2.currency_code = fy.currency_code AND q3.currency_code = fy.currency_code
+                   AND NOT EXISTS (SELECT 1 FROM financial_statement x WHERE x.stock_id = fy.stock_id AND x.fiscal_year = fy.fiscal_year
+                                     AND x.fiscal_period = 'Q4' AND x.derived_from IS NULL AND x.published_at = fy.published_at)
+                   AND EXISTS (SELECT 1 FROM financial_statement x WHERE x.stock_id = fy.stock_id AND x.fiscal_year = fy.fiscal_year
+                                 AND x.fiscal_period = 'Q4' AND x.derived_from IS NULL AND x.published_at > fy.published_at)
+                """.formatted(java.util.stream.IntStream.range(0, names.size())
+                        .mapToObj(i -> exprs.get(i) + " AS " + names.get(i)).collect(Collectors.joining(", ")),
+                QUARTER.formatted("Q1", "q1"), QUARTER.formatted("Q2", "q2"), QUARTER.formatted("Q3", "q3"));
+        String fromDesired = names.stream().map(n -> "d." + n).collect(Collectors.joining(", "));
+        String current = names.stream().map(n -> "c." + n).collect(Collectors.joining(", "));
+        List<Integer> touched = new ArrayList<>(jdbc.queryForList("""
+                DELETE FROM financial_statement c WHERE c.stock_id = ? AND c.derived_from IS NOT NULL
+                   AND c.derived_from NOT IN (SELECT d.fy_id FROM (%s) d)
+                RETURNING c.fiscal_year
+                """.formatted(desired), Integer.class, stockId, stockId));
+        int updated = jdbc.update("""
+                UPDATE financial_statement c SET (%1$s) = (%2$s)
+                  FROM (%3$s) d
+                 WHERE c.derived_from = d.fy_id AND ROW(%4$s) IS DISTINCT FROM ROW(%2$s)
+                """.formatted(columns, fromDesired, desired, current), stockId);
+        touched.addAll(jdbc.queryForList("""
+                INSERT INTO financial_statement (%1$s, published_at, revision_no, is_latest, derived_from)
+                SELECT %2$s, d.fy_published, 10000 + row_number() OVER (), false, d.fy_id
+                  FROM (%3$s) d
+                 WHERE NOT EXISTS (SELECT 1 FROM financial_statement c WHERE c.derived_from = d.fy_id)
+                RETURNING fiscal_year
+                """.formatted(columns, fromDesired, desired), Integer.class, stockId));
+        for (Integer year : new java.util.TreeSet<>(touched)) {
+            writer.renumberLabel(stockId, year, "Q4");
+        }
+        return touched.size() + updated;
+    }
+
+    /** 그 FY 판의 공시일에 보이던 그 해 분기 판 하나(공시일 · 번호가 가장 늦은 것). */
+    private static final String QUARTER = """
+            LATERAL (SELECT * FROM financial_statement q WHERE q.stock_id = fy.stock_id AND q.fiscal_year = fy.fiscal_year
+                      AND q.fiscal_period = '%s' AND q.published_at <= fy.published_at
+                      ORDER BY q.published_at DESC, q.revision_no DESC LIMIT 1) %s""";
 
     /** 국내 관문 켬 — 그 종목의 복사본을 원천 값으로 다시 맞춘다. 고친 행 수. */
     int resync(long stockId) {
@@ -123,7 +206,7 @@ public class KrEarlierVintages {
                                        WHERE s.stock_id = r.stock_id AND s.fiscal_year = r.fiscal_year AND s.fiscal_period = r.fiscal_period
                                          AND s.published_at > r.published_at AND s.created_at < r.created_at
                                        ORDER BY s.published_at LIMIT 1)
-                 WHERE r.stock_id = ? AND r.copied_from IS NULL
+                 WHERE r.stock_id = ? AND r.copied_from IS NULL AND r.derived_from IS NULL
                    AND EXISTS (SELECT 1 FROM financial_statement s
                                 WHERE s.stock_id = r.stock_id AND s.fiscal_year = r.fiscal_year AND s.fiscal_period = r.fiscal_period
                                   AND s.published_at > r.published_at AND s.created_at < r.created_at)
@@ -144,7 +227,7 @@ public class KrEarlierVintages {
         return jdbc.queryForList("""
                 SELECT column_name FROM information_schema.columns
                 WHERE table_schema = current_schema() AND table_name = 'financial_statement'
-                  AND column_name NOT IN ('id', 'created_at', 'published_at', 'revision_no', 'is_latest', 'copied_from')
+                  AND column_name NOT IN ('id', 'created_at', 'published_at', 'revision_no', 'is_latest', 'copied_from', 'derived_from')
                 ORDER BY ordinal_position
                 """, String.class).stream().collect(Collectors.joining(", "));
     }

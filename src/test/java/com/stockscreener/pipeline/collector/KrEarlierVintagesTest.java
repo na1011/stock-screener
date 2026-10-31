@@ -82,6 +82,62 @@ class KrEarlierVintagesTest {
     }
 
     @Test
+    @DisplayName("국내 관문 켬 — FY 판에 같은 날 4분기 판이 없으면 FY − 그날 보이던 1~3분기로 짓는다(잔액은 그 FY 판 · 뒤에 낸 정정 분기는 안 쓴다)")
+    void gatedRestoresTheFourthQuarterOfEveryAnnualVintage() {
+        KrEarlierVintages gated = new KrEarlierVintages(jdbc, new FinancialWriter(jdbc, new NoOpIndicatorInvalidationPort()), true);
+        jdbc.update("""
+                INSERT INTO financial_statement (stock_id, fiscal_year, fiscal_period, period_start, period_end, published_at,
+                    revision_no, is_latest, report_code, currency_code, net_income, total_assets)
+                VALUES (?, 2025, 'Q1', DATE '2025-01-01', DATE '2025-03-31', DATE '2025-05-15', 0, true, '11013', 'KRW', 1000, 1),
+                       (?, 2025, 'Q2', DATE '2025-04-01', DATE '2025-06-30', DATE '2025-08-14', 0, true, '11012', 'KRW', 1000, 1),
+                       (?, 2025, 'Q3', DATE '2025-07-01', DATE '2025-09-30', DATE '2025-11-14', 0, false, '11014', 'KRW', 1000, 1),
+                       (?, 2025, 'Q3', DATE '2025-07-01', DATE '2025-09-30', DATE '2026-04-01', 1, true, '11014', 'KRW', 1100, 1),
+                       (?, 2025, 'FY', DATE '2025-01-01', DATE '2025-12-31', DATE '2026-03-13', 0, false, '11011', 'KRW', 5000, 80),
+                       (?, 2025, 'FY', DATE '2025-01-01', DATE '2025-12-31', DATE '2026-06-19', 1, true, '11011', 'KRW', 5200, 90),
+                       (?, 2025, 'Q4', DATE '2025-10-01', DATE '2025-12-31', DATE '2026-06-19', 0, true, '11011', 'KRW', 2100, 90)
+                """, stockId, stockId, stockId, stockId, stockId, stockId, stockId);
+
+        // 소스 판은 지은 판보다 먼저 만들어졌다 — 복사본 원천 붙이기(같은 라벨의 더 늦은 판보다 뒤에 만들어진 행)가 지은 판을 안 잡아야 한다.
+        jdbc.update("UPDATE financial_statement SET created_at = now() - interval '1 day' WHERE stock_id = ?", stockId);
+
+        assertThat(gated.insert(stockId)).as("넣는 것은 이른 판 넣기만 센다").isZero();
+        assertThat(gated.insert(stockId)).isZero();
+        assertThat(gated.restoreFourthQuarters(stockId)).as("멱등").isZero();
+
+        assertThat(vintages("Q4")).containsExactly("2026-03-13 0 false 2000", "2026-06-19 1 true 2100");
+        assertThat(jdbc.queryForObject("""
+                SELECT total_assets FROM financial_statement WHERE stock_id = ? AND fiscal_period = 'Q4' AND published_at = DATE '2026-03-13'
+                """, java.math.BigDecimal.class, stockId)).as("잔액은 그 FY 판").isEqualByComparingTo("80");
+
+        jdbc.update("UPDATE financial_statement SET net_income = 5050 WHERE stock_id = ? AND fiscal_period = 'FY' AND NOT is_latest", stockId);
+        assertThat(gated.restoreFourthQuarters(stockId)).as("원천 FY 판이 바뀌면 다시 맞춘다").isOne();
+        assertThat(vintages("Q4")).containsExactly("2026-03-13 0 false 2050", "2026-06-19 1 true 2100");
+
+        jdbc.update("DELETE FROM financial_statement WHERE stock_id = ? AND fiscal_period = 'FY' AND NOT is_latest", stockId);
+        assertThat(vintages("Q4")).as("원천 FY 판이 회수되면 함께 간다").containsExactly("2026-06-19 1 true 2100");
+    }
+
+    @Test
+    @DisplayName("관문 꺼짐 · 1~3분기가 다 안 보이면 4분기 판을 짓지 않는다")
+    void doesNotRestoreWithoutTheGateOrTheQuarters() {
+        jdbc.update("""
+                INSERT INTO financial_statement (stock_id, fiscal_year, fiscal_period, period_start, period_end, published_at,
+                    revision_no, is_latest, report_code, currency_code, net_income)
+                VALUES (?, 2025, 'Q1', DATE '2025-01-01', DATE '2025-03-31', DATE '2025-05-15', 0, true, '11013', 'KRW', 1000),
+                       (?, 2025, 'Q2', DATE '2025-04-01', DATE '2025-06-30', DATE '2025-08-14', 0, true, '11012', 'KRW', 1000),
+                       (?, 2025, 'Q3', DATE '2025-07-01', DATE '2025-09-30', DATE '2026-04-01', 0, true, '11014', 'KRW', 1100),
+                       (?, 2025, 'FY', DATE '2025-01-01', DATE '2025-12-31', DATE '2026-03-13', 0, false, '11011', 'KRW', 5000),
+                       (?, 2025, 'FY', DATE '2025-01-01', DATE '2025-12-31', DATE '2026-06-19', 1, true, '11011', 'KRW', 5200),
+                       (?, 2025, 'Q4', DATE '2025-10-01', DATE '2025-12-31', DATE '2026-06-19', 0, true, '11011', 'KRW', 2100)
+                """, stockId, stockId, stockId, stockId, stockId, stockId);
+
+        earlier.insert(stockId);
+        assertThat(vintages("Q4")).as("관문 꺼짐").containsExactly("2026-06-19 0 true 2100");
+        KrEarlierVintages gated = new KrEarlierVintages(jdbc, new FinancialWriter(jdbc, new NoOpIndicatorInvalidationPort()), true);
+        assertThat(gated.restoreFourthQuarters(stockId)).as("03-13엔 3분기가 아직 없다").isZero();
+    }
+
+    @Test
     @DisplayName("정정이 숫자를 바꿨으면 원본 날짜로 넣지 않는다 — 그 값은 원본 날에 공개되지 않았다")
     void keepsTheCorrectionDateWhenTheNumbersChanged() {
         annual(LocalDate.of(2026, 6, 19));
