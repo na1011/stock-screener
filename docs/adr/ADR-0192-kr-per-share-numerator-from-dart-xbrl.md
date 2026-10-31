@@ -42,7 +42,7 @@ ADR-0098 기록). 재료는 정기 공시 판마다의 **DART 재무제표 원�
   고치지 않는다(사용자 기준 — 정합성 훼손).
 
 **판정(재무 행 하나 · 그 기간 · 그 기저)**
-- MUST: 앵커 — 행 지배 NI = 연결 `ProfitLossAttributableToOwnersOfParent`(그 태그가 없으면 연결 `ProfitLoss`) · 지배 NULL 행은 행 NI = 별도
+- MUST: 앵커 — 행 지배 NI = 연결 `ProfitLossAttributableToOwnersOfParent`(그 태그가 없으면 연결 `ProfitLoss`가 행 지배 NI나 행 NI와 같을 때 행 지배 NI · 2026-11-01 판 2) · 지배 NULL 행은 행 NI = 별도
   (또는 연결 맥락이 없는 파일의 축 없는) `ProfitLoss`. 안 맞으면 미표시(`none:anchor`). 그 뒤 재료는 앵커가 정한 기저의 맥락만.
 - MUST: 보통주 밖 지분상품이 있으면 값은 E × W(표준 보통주 EPS × 표준 보통주 가중평균 · 허용 구성원 {보통주 · `dart:ReportedAmountMember` ·
   `EquityAttributableToOwnersOfParentMember` · `ParentMember`})다 — 검산이 닫혀도 지배 NI로 안 바꾼다. 원장 EPS가 반올림이면 참 몫은
@@ -97,3 +97,9 @@ EPS 없음 3 · W 단위 2 · 같은 기간 E 상충 2 · 앵커 1) · 배당성
   `EPS_CAGR_5Y` · `PER_MEDIAN_5Y` · `PER_DISCOUNT_5Y`). 대조군 SK하이닉스는 2018~2026 전 분기가 선다.
 
 **관문 꺼짐**: 판정 · 읽기 · 꼬리 유도는 `gate.kr` 뒤 · 재료 받기는 값을 안 바꾼다 · 전체 빌드 초록(2026-10-25).
+
+**판 2 — 앵커가 매퍼의 항등식 지배 NI를 받는다**(2026-11-01): 매퍼가 비표준 계정 행에서 지배 + 비지배 = 순이익으로 지배 NI를 정한 행은 그 판에
+지배 귀속 개념이 없어(그 꼴 463칸 중 표준 귀속 0 · 자본 축 111 · 둘 다 없음 352) 앵커가 안 섰다 — 「그 태그가 없으면 연결 `ProfitLoss`」가 비지배
+0을 가정했다. 판 2는 연결 `ProfitLoss`가 행 NI와 같으면(행이 이 판의 연결 맥락이다) 행 지배 NI를 받는다. 0콜 스윕(영향 49종목 · 2019~ 전 판):
+새로 값을 정한 행 370 · 값 → 빈칸 0 · 판 2 앵커만으로 닿는 기존 행 30 · 9종목(운영 SELECT). 뒤 판정(증인 · E × W)은 그대로라 틀린 지배 NI는
+증인에서 걸린다(15행 미표시).

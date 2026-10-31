@@ -25,7 +25,7 @@ import java.util.Set;
 public final class KrCommonIncome {
 
     /** 판정 엔진 판. 저장 행({@code financial_common_income.engine_version})이 이 값과 다르면 다음 유도가 다시 붙인다. */
-    public static final int ENGINE_VERSION = 1;
+    public static final int ENGINE_VERSION = 2;
 
     /** 보통주 EPS · 가중평균 사실이 달 수 있는 표준 구성원(연결 축 밖). 회사 구성원은 이름이 같아도 받지 않는다. */
     static final Set<String> COMMON_MEMBERS = Set.of(
@@ -380,8 +380,11 @@ public final class KrCommonIncome {
             if (owners.stream().anyMatch(v -> same(v, row.netIncomeControlling()))) {
                 return new Anchor(row.netIncomeControlling(), consolidated, 'C');
             }
+            // 그 판이 지배 귀속을 표준으로 안 주면 행이 이 판의 연결 맥락인지만 묻는다 — 연결 순이익이 행 지배 NI(비지배 0)나 행 NI(비지배 ≠ 0 ·
+            // 매퍼가 지배 + 비지배 = 순이익으로 확인한 비표준 줄 · reload-gate 국내 「매퍼가 지배주주 순이익을 못 집는다」)와 같으면 행 지배 NI를 받는다.
             if (owners.isEmpty() && axisless(facts, PROFIT, period, consolidated).stream()
-                    .anyMatch(v -> same(v, row.netIncomeControlling()))) {
+                    .anyMatch(v -> same(v, row.netIncomeControlling())
+                            || row.netIncome() != null && same(v, row.netIncome()))) {
                 return new Anchor(row.netIncomeControlling(), consolidated, 'C');
             }
             return null;

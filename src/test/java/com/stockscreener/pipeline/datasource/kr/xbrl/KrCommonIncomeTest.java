@@ -155,6 +155,22 @@ class KrCommonIncomeTest {
     }
 
     @Test
+    void aRowWhoseControllingIncomeCameFromTheIdentityAnchorsOnConsolidatedProfit() {
+        // 펌텍코리아 꼴 — 그 판에 지배 귀속 개념이 없고 연결 순이익뿐이다. 행 NI가 연결 순이익과 같으면 행은 이 판의 연결 맥락이고, 행 지배 NI는
+        // 매퍼가 지배 + 비지배 = 순이익으로 확인한 값이다.
+        Fact profit = fact(Source.IFRS, "ProfitLoss", Q2, List.of(), 10_300_000_000L);
+        RowIncome row = new RowIncome(BigDecimal.valueOf(10_000_000_000L), BigDecimal.valueOf(10_300_000_000L));
+        Judged j = KrCommonIncome.judge(Q2, row, List.of(profit, eps(1000), weighted(10_000_000)), COMMON_ONLY, null, NO_ACTIONS);
+        assertThat(j.branch()).isEqualTo("kr-ni");
+        assertThat(j.common()).isEqualByComparingTo("10000000000");
+
+        // 행 NI도 연결 순이익과 갈리면 이 판의 행이 아니다.
+        RowIncome other = new RowIncome(BigDecimal.valueOf(10_000_000_000L), BigDecimal.valueOf(10_500_000_000L));
+        assertThat(KrCommonIncome.judge(Q2, other, List.of(profit, eps(1000), weighted(10_000_000)), COMMON_ONLY, null, NO_ACTIONS)
+                .branch()).isEqualTo("none:anchor");
+    }
+
+    @Test
     void theOwnersShareMayComeFromTheEquityStatementAxis() {
         // NAVER 2018 반기 꼴 — 손익계산서에 표준 지배 귀속 줄이 없고 자본변동표의 지배주주 지분 구성원으로만 온다.
         Fact profit = fact(Source.IFRS, "ProfitLoss", Q2, List.of(), 10_300_000_000L);
