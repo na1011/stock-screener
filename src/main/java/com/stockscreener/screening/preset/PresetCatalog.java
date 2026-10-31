@@ -1107,7 +1107,8 @@ public class PresetCatalog {
                 null,
                 ConditionGroup.and(List.of(
                         // 절대 변동폭 하위 약 30%
-                        weightedIn(AtrPct14Calculator.CODE, ComparisonOperator.LTE, "5.9", "3.29", "3"),
+                        // USD 3.12는 2026-10-31 재측정(ADR-0134 §결과 · 3.29가 국내와 5.0%p 갈림)
+                        weightedIn(AtrPct14Calculator.CODE, ComparisonOperator.LTE, "5.9", "3.12", "3"),
                         // 시장 동조 하위 약 30%. 국내 중앙값이 0.75라 0.9로는 축이 되지 않는다.
                         weightedIn(Beta104wCalculator.CODE, ComparisonOperator.LTE, "0.40", "0.428", "3"),
                         weighted(ProfitableQuarters4Calculator.CODE,
