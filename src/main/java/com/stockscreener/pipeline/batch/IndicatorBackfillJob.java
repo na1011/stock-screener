@@ -426,6 +426,10 @@ public class IndicatorBackfillJob {
                     + sectorRelativeCalculator.removeOrphansInWindow(floor);
             execution.stage("거래일 색인 갱신");
             int indexed = tradeDateIndex.rebuild();
+            // 무효화가 낀 날 이 한 판이 창 전체 파생층을 수십만~백칠십만 행 다시 쓴다(10-05 1,744,921행) — 백필과 같은 붕괴 자리다.
+            // 바뀐 행이 없으면 VACUUM이 all-visible 페이지를 건너뛰어 싸다.
+            execution.stage("가시성 맵 복구");
+            vacuumIndicatorValue(execution);
             return execution.finish("파생층 %d거래일 · 쓴 %d · 지운 %d · 고아 정리 %d · 색인 %d%s"
                     .formatted(tradeDates.size(), changed.written(), changed.deleted(), orphans, indexed,
                             failures.isEmpty() ? "" : " · " + failures.describe()));
@@ -614,7 +618,7 @@ public class IndicatorBackfillJob {
     }
 
     /**
-     * 백필 한 판이 남긴 죽은 튜플을 그 자리에서 치운다(A59 · ADR-0011 「그 비가 2배 아래면 VACUUM」).
+     * 백필 한 판 · 화해 ②가 남긴 죽은 튜플을 그 자리에서 치운다(A59 · ADR-0011 「그 비가 2배 아래면 VACUUM」).
      *
      * <p>백필 한 판의 dead 생산(약 110만)이 {@code indicator_value}의 autovacuum 발동선(약 108만 · ADR-0140)과 같은 자리라,
      * 넘긴 직후부터 autovacuum이 따라오기 전까지 가시성 맵이 내려앉아 Index Only Scan이 힙을 읽는다 — 전제 검사가 판정 불가

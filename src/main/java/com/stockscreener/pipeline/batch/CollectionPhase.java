@@ -19,7 +19,7 @@ public enum CollectionPhase {
      * 시세 구멍 구간 수집 — 일일 갱신의 15일 창 밖에서 지표가 읽는 범위의 빈 거래일
      * ({@code StockRegistrar.priceGapRuns}).
      *
-     * <p><b>{@link #PRICE}와 단계를 가르는 이유</b>: 실패는 같은 잡의 같은 (종목, 단계)가 뒤에 성공해야 닫힌다.
+     * <p><b>{@link #PRICE}와 단계를 가르는 이유</b>: 실패는 같은 (종목, 단계)가 뒤에 성공해야 닫힌다 — 단계는 「받은 것의 종류」다.
      * 한 단계로 두면 다음 날 창 수집의 성공이 구간 실패를 닫아 <b>안 받은 구간이 해결로 접힌다.</b>
      */
     PRICE_GAP,
@@ -107,5 +107,18 @@ public enum CollectionPhase {
      * 실적 발표 감지(ADR-0195 · {@code EarningsReleaseJob}) — 미국 항목 묻기와 종목별 과거 훑기. 단위는 <b>시장</b>이다 — 종목 실패는
      * 그 시장의 실패 수로 센다({@code countExternally}).
      */
-    EARNINGS_RELEASE
+    EARNINGS_RELEASE,
+    /**
+     * 국내 전체 재무제표 받기({@code FullStatementRefillJob} · {@code fnlttSinglAcntAll}). {@link #FINANCIAL}과 가르는 이유는 받는 것이
+     * 다르기 때문이다 — 실패는 같은 (종목, 단계)가 뒤에 성공해야 닫히는데, 한 단계였을 때 요약 재무(FR)의 성공이 전체 재무제표 실패를
+     * 닫았고 그 반대도 그랬다(spec §4 미해결 에러 건수 · 2026-10-31).
+     */
+    FULL_STATEMENT,
+    /** 국내 보통주 몫 재료 받기({@code KrXbrlCollectJob} · {@code fnlttXbrl} · ADR-0192). 재무 행이 아니라 XBRL 원문이라 {@link #FINANCIAL}과 가른다. */
+    XBRL_MATERIAL,
+    /**
+     * 거버넌스 사실 유도({@code GovernanceDeriveJob} — 저장 원문에서 짓는다 · 외부 호출 0). 원문 받기({@link #GOVERNANCE})와 가른다 —
+     * 유도의 성공이 받기 실패를 닫으면 원문이 안 들어온 종목이 해결로 접힌다.
+     */
+    GOVERNANCE_DERIVE
 }

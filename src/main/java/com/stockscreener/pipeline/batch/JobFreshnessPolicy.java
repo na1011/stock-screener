@@ -131,8 +131,8 @@ public class JobFreshnessPolicy {
         // 실적 발표 감지(ADR-0195) — 평일 13:30 일일 갱신 앞 · 14:16 사슬 끝. 공시 목록과 같은 주기다. 과거 훑기가 남은 실행은 시장
         // 미완료라 시계를 안 민다 — 첫 백필(손 실행)이 끝나기 전에는 이 예산이 붉는 것이 맞다.
         map.put(EarningsReleaseJob.JOB_NAME, new Budget(5, "--job=earnings-release"));
-        // 소스가 미래 휴장일을 모르므로 실행일까지만 찬다 — 그만큼 천천히 낡는다.
-        map.put(MarketCalendarJob.JOB_NAME, new Budget(60, null));
+        // 세션 달력 — 평일 13:30 사슬(2026-10-31). 손 실행 시절 60일이었고, 그 예산이 달력이 두 달 멈춘 것을 못 알렸다.
+        map.put(MarketCalendarJob.JOB_NAME, new Budget(5, "--job=market-calendar"));
         return Map.copyOf(map);
     }
 

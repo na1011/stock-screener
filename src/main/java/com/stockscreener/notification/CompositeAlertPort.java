@@ -73,9 +73,15 @@ public class CompositeAlertPort implements AlertPort {
 
         // 「대상이 아니다」와 「보내다 실패했다」를 한 줄로 찍지 않는다. 웹훅 임계(WARNING) 아래의
         // INFO 알림이 매주 실패처럼 읽혀 정상을 사고로 좇게 했다(2026-09-26 리밸런싱 3건).
-        if (accepted == 0) {
-            log.info("이 알림은 어느 채널의 대상도 아니다(심각도·수신자 임계). 로그로 남긴다. severity={}, channels={}",
+        // 다만 그 내림은 운영자 알림에만 선다 — 사용자 알림(워치리스트)을 받을 채널이 하나도 없으면 사용자가 그 알림을 영영
+        // 못 받으므로 그것은 정상이 아니다(웹훅은 운영자 알림만 받는다 · 메일이 꺼진 환경).
+        if (accepted == 0 && event.isForOperator()) {
+            log.info("이 운영자 알림은 어느 채널의 임계에도 안 걸린다. 로그로 남긴다. severity={}, channels={}",
                     event.severity(), channels.stream().map(AlertChannel::name).toList());
+            fallback.send(event);
+        } else if (accepted == 0) {
+            log.warn("이 사용자 알림을 받을 채널이 없다 — 사용자에게 안 간다. 로그로 남긴다. channels={}",
+                    channels.stream().map(AlertChannel::name).toList());
             fallback.send(event);
         } else if (delivered == 0) {
             log.warn("알림을 받은 채널이 전부 전송에 실패했다. 로그로 남긴다. channels={}",

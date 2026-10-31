@@ -129,7 +129,9 @@ public class TurnoverRatio60Calculator implements IndicatorCalculator {
                     counted++;
                 }
             }
-            if (counted == 0) {
+            // 관문 켬: 창 60봉 전부에 회전율이 있어야 값을 낸다 — 빠진 날(주식수를 모르는 날)을 빼고 평균하면 짧은 창의 평균이
+            // 60일 평균으로 나간다(TURNOVER_60과 같은 원칙 · ADR-0196). 미국 상장 초기처럼 첫 재무 앞 봉이 섞인 창이 값을 잃으므로 관문 뒤다.
+            if (counted == 0 || (context.gateOn() && counted < WINDOW)) {
                 continue;
             }
             points.add(new IndicatorPoint(bars.get(end).tradeDate(),

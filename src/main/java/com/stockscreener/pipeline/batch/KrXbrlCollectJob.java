@@ -87,7 +87,7 @@ public class KrXbrlCollectJob {
         log.info("국내 보통주 몫 재료를 받는다. 대상 {}종목 · 새로 받기 상한 {} · 미해결(시작) {}",
                 targets.size(), budget == Integer.MAX_VALUE ? "없음" : budget, store.unresolved());
         BatchExecutionContext execution = batchExecutions.start(JOB_NAME, asOf, triggeredBy, targets.size(), scope, coverage);
-        execution.plan(CollectionPhase.FINANCIAL, targets.size());
+        execution.plan(CollectionPhase.XBRL_MATERIAL, targets.size());
         execution.stage("종목별 판 재료 · 주식총수 명부");
         AtomicInteger fetched = new AtomicInteger();
         AtomicInteger reread = new AtomicInteger();
@@ -98,7 +98,7 @@ public class KrXbrlCollectJob {
         try {
             for (KrXbrlStore.Target target : targets) {
                 SecurityRef security = new SecurityRef(target.stockId(), target.market(), target.ticker());
-                execution.process(security, CollectionPhase.FINANCIAL, s -> {
+                execution.process(security, CollectionPhase.XBRL_MATERIAL, s -> {
                     KrXbrlCollector.Collected c = collector.collect(target, asOf, remaining);
                     fetched.addAndGet(c.fetched());
                     reread.addAndGet(c.reread());

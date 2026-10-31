@@ -95,9 +95,14 @@ class CompositeAlertPortTest {
             port(List.of(new ThrowingChannel("broken")))
                     .send(AlertEvent.toOperator(AlertSeverity.ERROR, "제목", "본문", "b"));
 
-            assertThat(logs.list).filteredOn(e -> e.getMessage().contains("대상도 아니다"))
+            assertThat(logs.list).filteredOn(e -> e.getMessage().contains("임계에도 안 걸린다"))
                     .singleElement().extracting(ILoggingEvent::getLevel).isEqualTo(Level.INFO);
             assertThat(logs.list).filteredOn(e -> e.getMessage().contains("전부 전송에 실패했다"))
+                    .singleElement().extracting(ILoggingEvent::getLevel).isEqualTo(Level.WARN);
+
+            // 사용자 알림인데 받는 채널이 없으면 정상이 아니다 — 경고로 남는다.
+            port(List.of(picky)).send(AlertEvent.toUser(42L, AlertSeverity.INFO, "제목", "본문", "c"));
+            assertThat(logs.list).filteredOn(e -> e.getMessage().contains("사용자 알림을 받을 채널이 없다"))
                     .singleElement().extracting(ILoggingEvent::getLevel).isEqualTo(Level.WARN);
         } finally {
             logger.detachAppender(logs);

@@ -50,12 +50,12 @@ public class GovernanceDeriveJob {
         }
         BatchExecutionContext execution =
                 batchExecutions.start(JOB_NAME, asOf, triggeredBy, stocks.size(), scope);
-        execution.plan(CollectionPhase.GOVERNANCE, stocks.size());
+        execution.plan(CollectionPhase.GOVERNANCE_DERIVE, stocks.size());
         execution.stage("원문에서 거버넌스 사실 유도");
 
         try {
             for (SecurityRef stock : stocks) {
-                execution.process(stock, CollectionPhase.GOVERNANCE,
+                execution.process(stock, CollectionPhase.GOVERNANCE_DERIVE,
                         security -> deriver.derive(security.stockId()));
             }
         } catch (com.stockscreener.pipeline.datasource.DataSourceException e) {

@@ -188,33 +188,27 @@ class StockFailureIsolationTest {
     }
 
     /**
-     * <b>다른 잡</b>의 같은 단계 성공은 남의 실패를 닫지 않는다 — {@code FINANCIAL}을 FR · FSR · initial-load가 함께 쓰고 받는 범위가
-     * 다르다. FSR이 성공했다고 FR 실패를 닫으면 spec §4의 미해결 수가 그만큼 거짓이다.
+     * 단계는 「받은 것의 종류」다 — 요약 재무({@code FINANCIAL})의 성공이 전체 재무제표({@code FULL_STATEMENT}) 실패를 닫지 않는다.
+     * 한 단계였을 때 FR·FSR이 서로의 실패를 닫아 spec §4의 미해결 수가 거짓이었다(2026-10-31).
      */
     @Test
-    @DisplayName("IMPORTANT — 다른 잡의 같은 단계 성공은 남의 실패를 닫지 않고, 같은 잡의 성공은 닫는다")
-    void successOfAnotherJobInSamePhaseDoesNotResolve() throws Exception {
-        SecurityRef broken = insertStock("000022", "잡실패");
+    @DisplayName("IMPORTANT — 요약 재무의 성공은 전체 재무제표 실패를 닫지 않는다(받는 것이 다르면 단계가 다르다)")
+    void summaryFinancialSuccessDoesNotResolveFullStatementFailure() throws Exception {
+        SecurityRef broken = insertStock("000022", "전체실패");
 
         BatchExecutionContext first = batchExecutions.start(
                 JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.SCHEDULER, 1, BatchExecutionRecorder.DeclaredScope.FULL);
-        first.process(broken, CollectionPhase.FINANCIAL, s -> {
+        first.process(broken, CollectionPhase.FULL_STATEMENT, s -> {
             throw new DataSourceException(
                     DataSourceException.Kind.TRANSIENT, "stub-source", "일시적 오류");
         });
         first.finish();
 
         BatchExecutionContext other = batchExecutions.start(
-                JOB_NAME + "-other", TARGET_DATE, BatchExecutionRecorder.TriggeredBy.SCHEDULER, 1, BatchExecutionRecorder.DeclaredScope.FULL);
+                JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.SCHEDULER, 1, BatchExecutionRecorder.DeclaredScope.FULL);
         other.process(broken, CollectionPhase.FINANCIAL, s -> 3L);
         other.finish();
-        assertThat(unresolved(broken)).as("다른 잡의 성공으로는 안 닫힌다").isEqualTo(1);
-
-        BatchExecutionContext again = batchExecutions.start(
-                JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.SCHEDULER, 1, BatchExecutionRecorder.DeclaredScope.FULL);
-        again.process(broken, CollectionPhase.FINANCIAL, s -> 3L);
-        again.finish();
-        assertThat(unresolved(broken)).as("같은 잡이 다시 성공하면 닫힌다").isZero();
+        assertThat(unresolved(broken)).as("받는 것이 다른 단계의 성공으로는 안 닫힌다").isEqualTo(1);
     }
 
     private int unresolved(SecurityRef security) {

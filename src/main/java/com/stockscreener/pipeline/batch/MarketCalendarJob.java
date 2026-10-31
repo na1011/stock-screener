@@ -53,6 +53,9 @@ public class MarketCalendarJob {
      */
     static final LocalDate SOURCE_HISTORY_START = LocalDate.of(2016, 1, 1);
 
+    /** 적재 뒤 알림이 보는 창(일). 그 앞의 결측은 이미 알렸다 — 일일 갱신의 시세 창(15일)과 구멍 채움이 메울 시간을 덮는다. */
+    static final int ALERT_WINDOW_DAYS = 30;
+
     /** 알림에 이름을 적는 상한. 넘으면 수만 적고 나머지는 로그로 보낸다. */
     private static final int GAPS_IN_ALERT = 20;
 
@@ -112,7 +115,7 @@ public class MarketCalendarJob {
         collectAll(execution, exchanges, windowStart, asOf);
 
         // 표를 채우고 아무도 안 보면 이 잡은 아무것도 답하지 않는다. 그래서 여기서 한 번 잰다.
-        alertOnGaps(execution);
+        alertOnGaps(execution, asOf);
         return execution.finish();
     }
 
@@ -181,8 +184,10 @@ public class MarketCalendarJob {
      * <p>이것이 없으면 표를 채우고도 아무도 결과를 안 본다 — 미국은 일일 갱신 대상이 아니라
      * {@code DailyUpdateJob}의 결손 알림이 원리적으로 닿지 않는다.
      */
-    private void alertOnGaps(BatchExecutionContext execution) {
-        BarGapReader.Report report = gapReader.read(List.of(), null);
+    private void alertOnGaps(BatchExecutionContext execution, LocalDate asOf) {
+        // 매 평일 도는 잡이라 알림은 최근 창의 결측만 — 전 이력을 다시 세면 오래된 같은 결측(DRS 2022-11-28 · LNZA 2023-02-09)이
+        // 평일마다 WARNING으로 가서 정상을 사고로 읽게 한다. 전 이력은 bar-gap-review가 답한다.
+        BarGapReader.Report report = gapReader.read(List.of(), asOf.minusDays(ALERT_WINDOW_DAYS));
         log.info("봉 결측 판정 — {}", summary(report));
         if (report.gaps().isEmpty()) {
             return;

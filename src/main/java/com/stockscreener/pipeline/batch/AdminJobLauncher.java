@@ -163,9 +163,8 @@ public class AdminJobLauncher {
                 request -> governanceDeriveJob.run(
                         request.orDefault(request.targetDate(), LocalDate.now()),
                         BatchExecutionRecorder.TriggeredBy.ADMIN, List.of()),
-                // 거래소당 1콜(둘)이고 되돌릴 수 있다. 화면에 두는 이유는 **적재 창이 낡으면
-                // 판정이 조용히 판정불가로 퇴화하기 때문**이다 — 스케줄러에 못 걸어서
-                // (미국 장이 한국 시각 새벽에 닫는다) 사람이 주기적으로 눌러야 한다.
+                // 거래소당 1콜(둘)이고 되돌릴 수 있다. 평일 13:30 사슬이 매일 돌리고(2026-10-31), 화면에 두는 이유는
+                // 그 크론이 못 돈 날 사람이 메우게 하려는 것이다 — 적재 창이 낡으면 판정이 조용히 판정불가로 퇴화한다.
                 //
                 // MUST NOT: bar-gap-review는 여기 올리지 않는다. 그 잡은 실행 행을 안 만들어
                 // 화면이 202를 받고 **아무것도 안 뜬다** — corporate-action-review가 카탈로그에

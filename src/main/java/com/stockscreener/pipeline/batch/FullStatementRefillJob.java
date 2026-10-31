@@ -171,7 +171,7 @@ public class FullStatementRefillJob {
                 targets.stream().map(SecurityRef::stockId).toList()));
         BatchExecutionContext execution =
                 batchExecutions.start(JOB_NAME, asOf, triggeredBy, targets.size(), scope, coverage);
-        execution.plan(CollectionPhase.FINANCIAL, targets.size());
+        execution.plan(CollectionPhase.FULL_STATEMENT, targets.size());
         execution.stage("종목별 전체 재무제표 보정");
         // 종목별 「정기 범위로 맞췄다」 표지(ADR-0177) — 정기 실행은 전 종목 분기·기본 연수다. 분기를 안 받으면 주당 지표가 읽는
         // 분기 행이 낡은 채라 정기 범위가 아니다. 기준일이 지금이 아니면 최근 연도를 안 받는다.
@@ -191,7 +191,7 @@ public class FullStatementRefillJob {
 
         try {
             for (SecurityRef target : targets) {
-                execution.process(target, CollectionPhase.FINANCIAL, security -> {
+                execution.process(target, CollectionPhase.FULL_STATEMENT, security -> {
                     FullStatementCollector.Collected collected =
                             collector.collect(security, fromFiscalYear, toFiscalYear, periods);
                     actualCalls.addAndGet(collected.apiCalls());

@@ -159,7 +159,7 @@ public final class BatchExecutionContext {
      * 시장마다 끝까지 마쳤는가를 세는 자리(ADR-0174). 시장 집합을 선언한 잡(FR·FSR·G)만 있고 나머지는 {@code null}이다.
      *
      * <p>판정 재료를 실행 안에서 센다 — 마감 때 실패 행을 SQL로 다시 읽으면 다른 실행이 그 사이 해결로 표시한
-     * ({@code resolveFailures}는 실행 id로 안 좁힌다 — 같은 잡의 다른 실행이 닫는다) 행이 빠져 못 받은 시장이 끝난 것으로 읽힌다.
+     * ({@code resolveFailures}는 실행 id로 안 좁힌다) 행이 빠져 못 받은 시장이 끝난 것으로 읽힌다.
      */
     private final MarketCompleteness completeness;
 
@@ -197,8 +197,7 @@ public final class BatchExecutionContext {
         this.recorder = recorder;
         this.alertPort = alertPort;
         this.onTerminal = onTerminal;
-        // 같은 잡의 실패만 이 실행의 성공이 닫는다(받는 범위가 잡마다 다르다 — resolveFailures javadoc).
-        this.unresolvedAtStart = recorder.unresolvedStockPhases(jobName);
+        this.unresolvedAtStart = recorder.unresolvedStockPhases();
     }
 
     public long executionId() {
@@ -808,7 +807,7 @@ public final class BatchExecutionContext {
         if (pending == null || !pending.remove(stockId)) {
             return;
         }
-        int resolved = recorder.resolveFailures(stockId, phase, jobName);
+        int resolved = recorder.resolveFailures(stockId, phase);
         if (resolved > 0) {
             log.debug("이전 실패를 해결로 표시했다. stockId={} phase={} 건수={}",
                     stockId, phase, resolved);

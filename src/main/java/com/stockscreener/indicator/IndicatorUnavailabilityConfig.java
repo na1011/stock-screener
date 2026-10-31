@@ -109,6 +109,18 @@ public class IndicatorUnavailabilityConfig {
                         context -> AltmanZCalculator.isInapplicable(context.industryDivisionKey()),
                         "보험·금융서비스에는 적용하지 않는 지표입니다. "
                                 + "계산 자체는 되지만 그 업종의 재무 구조에서는 뜻을 갖지 않습니다."),
+                // 위 둘(정의역 밖)에 안 걸리는 금융·부동산 업종에서 값이 없을 때 — 재료가 오지 않는다(KR 64 · 미국 SIC 65·67 —
+                // 2026-10-31에 정의역을 좁혀 REIT · 부동산 보유 임대가 여기로 온다). 첫 규칙이 이기므로 정의역 밖 카드를 가리지 않는다.
+                new UnavailabilityRule(
+                        AltmanZCalculator.CODE,
+                        context -> isFinancialDivision(context.industryDivisionKey()),
+                        "이 업종은 재무상태표를 유동·비유동으로 나누지 않는 경우가 많아 "
+                                + "운전자본을 계산할 재료가 없습니다."),
+                new UnavailabilityRule(
+                        AltmanZDoublePrimeCalculator.CODE,
+                        context -> isFinancialDivision(context.industryDivisionKey()),
+                        "이 업종은 재무상태표를 유동·비유동으로 나누지 않는 경우가 많아 "
+                                + "운전자본을 계산할 재료가 없습니다."),
                 new UnavailabilityRule(
                         RoicPretaxCalculator.CODE,
                         // 계산기가 업종으로 거르는 것이 아니라 재료가 원리적으로 없다 —
