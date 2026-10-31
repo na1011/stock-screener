@@ -106,6 +106,20 @@ class SecEdgarRevenueConceptTest {
     }
 
     @Test
+    @DisplayName("관문 켬 P4: 은행이 이자수익 후보 태그를 안 내면 같은 판의 순이자손익 + 이자비용으로 채운다 — 은행형 영업이익 재료")
+    void bankInterestIncomeFromNetInterestIdentity() throws Exception {
+        String accn = "0000000001-18-000001";
+        String filed = "2018-02-15";
+        String json = String.join(",",
+                tag("InterestIncomeExpenseNet", List.of(fact("2017-01-01", "2017-12-31", 90 * MILLION, accn, "10-K", "FY", 2017, filed))),
+                tag("InterestExpense", List.of(fact("2017-01-01", "2017-12-31", 30 * MILLION, accn, "10-K", "FY", 2017, filed))),
+                tag("NoninterestIncome", List.of(fact("2017-01-01", "2017-12-31", 70 * MILLION, accn, "10-K", "FY", 2017, filed))),
+                tag("NoninterestExpense", List.of(fact("2017-01-01", "2017-12-31", 100 * MILLION, accn, "10-K", "FY", 2017, filed))));
+        assertThat(latest(build(json, true), "FY").interestAndDividendIncome()).isEqualByComparingTo("120000000");
+        assertThat(latest(build(json, false), "FY").interestAndDividendIncome()).as("관문 꺼짐은 옛 출력 그대로").isNull();
+    }
+
+    @Test
     @DisplayName("관문 켬: 뒤 판의 고정 태그 매출이 떨어져도 같은 판이 다른 후보 태그로 앞 판 값을 실었으면 앞 판 값을 잇는다(태그 변경)")
     void retaggedRevenueKeepsThePreviousTotal() throws Exception {
         String first = "0000000001-18-000001";

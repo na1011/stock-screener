@@ -2275,6 +2275,9 @@ final class SecEdgarFacts {
                 noNoncontrollingEquity = noNci;
             }
         }
+        if (usGate) {
+            equity = withInterestIncome(equity);
+        }
         RawFinancialReport report = toReport(label, window, anchor, currency, equity, noNoncontrollingEquity,
                 noNoncontrollingIncome, noDiscontinued);
         // 4분기 라벨(10-K 분기 표)은 여기서 판정하지 않는다 — 그 표의 「중단 줄 없음」은 0이 아니다. 판정은 4분기 유도 뒤
@@ -2771,6 +2774,28 @@ final class SecEdgarFacts {
             return netInterest.add(noninterest);
         }
         return v.get(SecEdgarColumn.REVENUE);
+    }
+
+    /**
+     * <b>이자수익이 비면 같은 판의 순이자손익 + 이자비용</b>(관문 켬 · P4). 순이자손익의 정의가 이자수익 − 이자비용이라 항등식이다 — 답을 아는
+     * 칸(이자수익 태그 · 순이자손익 · 이자비용이 같은 공시 · 같은 창)에서 4,728 중 4,715가 1% 안이다(2019~ · 캐시 1,218). 이자수익 후보
+     * {@code InterestAndDividendIncomeOperating}을 안 내고 {@code InterestIncomeOperating}을 내는 은행(JPM · FHN · SYF · SOFI · RJF ·
+     * IBKR)은 영업이익 유도(은행형 · ADR-0104)가 재료 하나 때문에 통째로 비었다. {@code InterestIncomeOperating}을 후보로 더하지 않는 것은
+     * 두 태그가 함께 실린 칸의 95/581만 1% 안이라 같은 개념이 아니어서다.
+     */
+    private static Map<SecEdgarColumn, BigDecimal> withInterestIncome(Map<SecEdgarColumn, BigDecimal> v) {
+        BigDecimal net = v.get(SecEdgarColumn.NET_INTEREST_INCOME);
+        BigDecimal expense = v.get(SecEdgarColumn.INTEREST_EXPENSE);
+        // 은행형 갈래의 나머지 재료(비이자수익 · 비이자비용)가 같은 판에 있을 때만 — 그 갈래만 이 값을 읽는다. 순이자비용을 내는 비금융
+        // 회사(164종목 중 대부분)까지 채우면 순이자 · 이자비용이 공시마다 조금씩 갈릴 때마다 판이 새로 난다(첫 스윕 +231).
+        if (v.get(SecEdgarColumn.INTEREST_AND_DIVIDEND_INCOME) != null || net == null || expense == null
+                || v.get(SecEdgarColumn.NONINTEREST_INCOME) == null || v.get(SecEdgarColumn.NONINTEREST_EXPENSE) == null) {
+            return v;
+        }
+        Map<SecEdgarColumn, BigDecimal> w = new EnumMap<>(SecEdgarColumn.class);
+        w.putAll(v);
+        w.put(SecEdgarColumn.INTEREST_AND_DIVIDEND_INCOME, net.add(expense));
+        return w;
     }
 
     /** {@code partnersControlling}: LP 지배 태그를 지배자본 자리에 실었다 — 그 판의 비지배 판정은 관문 켬 술어를 쓴다. */
