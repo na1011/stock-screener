@@ -52,11 +52,13 @@ public class CompositeAlertPort implements AlertPort {
             return;
         }
 
+        int accepted = 0;
         int delivered = 0;
         for (AlertChannel channel : channels) {
             if (!channel.accepts(event)) {
                 continue;
             }
+            accepted++;
             try {
                 channel.deliver(event);
                 delivered++;
@@ -69,8 +71,14 @@ public class CompositeAlertPort implements AlertPort {
             }
         }
 
-        if (delivered == 0) {
-            log.warn("어느 채널도 이 알림을 보내지 못했다. 로그로 남긴다. channels={}",
+        // 「대상이 아니다」와 「보내다 실패했다」를 한 줄로 찍지 않는다. 웹훅 임계(WARNING) 아래의
+        // INFO 알림이 매주 실패처럼 읽혀 정상을 사고로 좇게 했다(2026-09-26 리밸런싱 3건).
+        if (accepted == 0) {
+            log.info("이 알림은 어느 채널의 대상도 아니다(심각도·수신자 임계). 로그로 남긴다. severity={}, channels={}",
+                    event.severity(), channels.stream().map(AlertChannel::name).toList());
+            fallback.send(event);
+        } else if (delivered == 0) {
+            log.warn("알림을 받은 채널이 전부 전송에 실패했다. 로그로 남긴다. channels={}",
                     channels.stream().map(AlertChannel::name).toList());
             fallback.send(event);
         }

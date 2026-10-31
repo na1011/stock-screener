@@ -1,7 +1,12 @@
 package com.stockscreener.notification;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -70,6 +75,33 @@ class CompositeAlertPortTest {
 
         assertThat(picky.received).isEmpty();
         assertThat(fallbackReceived).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("대상 아님은 INFO, 받고 실패함은 WARN — 두 사건을 한 줄로 찍지 않는다")
+    void separatesNotAcceptedFromFailed() {
+        ListAppender<ILoggingEvent> logs = new ListAppender<>();
+        logs.start();
+        Logger logger = (Logger) LoggerFactory.getLogger(CompositeAlertPort.class);
+        logger.addAppender(logs);
+        try {
+            RecordingChannel picky = new RecordingChannel("picky") {
+                @Override
+                public boolean accepts(AlertEvent event) {
+                    return false;
+                }
+            };
+            port(List.of(picky)).send(AlertEvent.toOperator(AlertSeverity.INFO, "제목", "본문", "a"));
+            port(List.of(new ThrowingChannel("broken")))
+                    .send(AlertEvent.toOperator(AlertSeverity.ERROR, "제목", "본문", "b"));
+
+            assertThat(logs.list).filteredOn(e -> e.getMessage().contains("대상도 아니다"))
+                    .singleElement().extracting(ILoggingEvent::getLevel).isEqualTo(Level.INFO);
+            assertThat(logs.list).filteredOn(e -> e.getMessage().contains("전부 전송에 실패했다"))
+                    .singleElement().extracting(ILoggingEvent::getLevel).isEqualTo(Level.WARN);
+        } finally {
+            logger.detachAppender(logs);
+        }
     }
 
     @Test
