@@ -79,23 +79,9 @@ public class FinancialWriter {
     private final IndicatorInvalidationPort invalidationPort;
 
     public FinancialWriter(JdbcTemplate jdbcTemplate, IndicatorInvalidationPort invalidationPort) {
-        this(jdbcTemplate, invalidationPort, false);
-    }
-
-    @org.springframework.beans.factory.annotation.Autowired
-    public FinancialWriter(JdbcTemplate jdbcTemplate, IndicatorInvalidationPort invalidationPort,
-                           @org.springframework.beans.factory.annotation.Value("${stockscreener.gate.kr}") boolean krGate) {
         this.jdbcTemplate = jdbcTemplate;
         this.invalidationPort = invalidationPort;
-        this.derivedFollowsStoredAnnual = krGate;
     }
-
-    /**
-     * 국내 관문 켬 — 판 이력을 다 안 내는 소스(DART)의 유도 4분기는 <b>저장된 FY 판의 공시일</b>을 회수에서 지킨다(재고 「유도 Q4 가시성」).
-     * DART는 FY의 마지막 판만 주므로 어댑터가 4분기를 그 판 하나로만 낸다 — 회수가 「이번 호출의 공시일」만 남기면 옛 FY 판에 기대던 4분기 판이
-     * 지워지고, 원 FY 공시일 ~ 정정일 사이 TTM이 한 분기 밀린다(010130 2024 · FY 2025-03-20 · 4분기 첫 판 2026-08-13).
-     */
-    private final boolean derivedFollowsStoredAnnual;
 
     /** 같은 회계기간이 다시 들어왔을 때 무엇까지 할지. */
     public enum WriteMode {
@@ -497,7 +483,11 @@ public class FinancialWriter {
             Stream<LocalDate> withheldDates = withheld.stream()
                     .filter(w -> w.fiscalYear() == label.fiscalYear() && w.fiscalPeriod().equals(label.fiscalPeriod()))
                     .map(FinancialFetch.WithheldVintage::publishedAt);
-            Stream<LocalDate> annualDates = derivedFollowsStoredAnnual && !completeVintageHistory && "Q4".equals(label.fiscalPeriod())
+            // 판 이력을 다 안 내는 소스(DART)의 유도 4분기는 저장된 FY 판의 공시일을 지킨다(재고 「유도 Q4 가시성」). DART는 FY의 마지막 판만
+            // 주므로 어댑터가 4분기를 그 판 하나로만 낸다 — 「이번 호출의 공시일」만 남기면 옛 FY 판에 기대던 4분기 판(원본 접수일 판 넣기
+            // KrEarlierVintages가 FY와 함께 넣은 것 포함 · 관문 밖)이 지워져 원 FY 공시일 ~ 정정일 사이 TTM이 한 분기 밀린다. 값을 만들지 않고
+            // 이미 있는 판을 지킬 뿐이라 관문 밖이다(10-31 실측: 그 판 Q4 738행 중 둘이 같은 날 GAP_FILL FR에 지워졌다).
+            Stream<LocalDate> annualDates = !completeVintageHistory && "Q4".equals(label.fiscalPeriod())
                     ? jdbcTemplate.queryForList("""
                             SELECT published_at FROM financial_statement WHERE stock_id = ? AND fiscal_year = ? AND fiscal_period = 'FY'
                             """, LocalDate.class, stockId, label.fiscalYear()).stream()
@@ -1184,8 +1174,14 @@ public class FinancialWriter {
         }
     }
 
-    /** 관리하는 칸이 전부 직전 판과 같은가 — 빈 칸도 같아야 같다(새 판이 칸을 비우면 값이 바뀐 것이다). */
+    /**
+     * 관리하는 칸이 전부 직전 판과 같은가 — 빈 칸도 같아야 같다(새 판이 칸을 비우면 값이 바뀐 것이다). 보고서 코드도 같아야 같다 — 판독기가
+     * 그 코드로 주식수 클래스 축 · 보통주 몫 줄을 맞추므로(관문 켬) 코드가 바뀐 정정은 지표를 바꿀 수 있다.
+     */
     private boolean sameAmounts(Existing existing, RawFinancialReport report, Set<Amount> managed) {
+        if (!java.util.Objects.equals(existing.reportCode(), report.reportCode())) {
+            return false;
+        }
         for (Amount amount : columnsFor(managed)) {
             BigDecimal stored = existing.amounts().get(amount);
             BigDecimal incoming = amount.accessor.apply(report);
