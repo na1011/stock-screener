@@ -345,8 +345,8 @@ public class DartFinancialAdapter implements FinancialDataSource {
     }
 
     /**
-     * 국내 관문 켬(재고 A6): 그 해 분기 손익의 기저 판정({@link DartFlowBasis}) — 1분기 · 반기 · 3분기 보고서와 다음 해 1분기 보고서의 전기 열.
-     * 한 통화 · 한 연결 기저(CFS/OFS)인 보고서끼리만 잰다.
+     * 국내 관문 켬(재고 A6): 그 해 손익의 기저 판정({@link DartFlowBasis}) — 그 해 보고서와 다음 해 보고서 넷의 전기 열. 한 통화의 보고서끼리
+     * 잰다(연결 · 별도 기저는 가리지 않는다 — 다른 기저로 다시 실은 것도 같은 원칙이다).
      */
     private static List<com.stockscreener.pipeline.datasource.FlowBasis> flowBases(int year, Map<String, PeriodRows> rows,
                                                                                    Map<String, PeriodRows> next,

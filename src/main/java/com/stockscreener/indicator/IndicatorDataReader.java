@@ -345,6 +345,13 @@ public class IndicatorDataReader {
             ORDER BY stock_id, period_end DESC, published_at DESC
             """.formatted(FINANCIAL_COLUMNS);
 
+    /**
+     * 국내 관문 켬 — 같은 판 이력을 지표와 같은 공시일(공시 목록의 접수일 · {@link #KR_PUBLISHED})로 읽는다. 미국 행은 {@code kr_report_xbrl}에
+     * 판이 없어 저장 공시일 그대로다.
+     */
+    private static final String SELECT_FINANCIALS_KNOWN_ON_BATCH_KR =
+            domestic(SELECT_FINANCIALS_KNOWN_ON_BATCH).replace("SELECT stock_id, ", "SELECT stock_id, published_effective, ");
+
     private static final RowMapper<PriceBar> PRICE_BAR_MAPPER = (rs, rowNum) -> new PriceBar(
             rs.getObject("trade_date", LocalDate.class),
             rs.getBigDecimal("open"),
@@ -638,7 +645,7 @@ public class IndicatorDataReader {
         }
         Timestamp bound = writtenBy == null ? null : Timestamp.from(writtenBy);
         jdbcTemplate.query(con -> {
-            var ps = con.prepareStatement(SELECT_FINANCIALS_KNOWN_ON_BATCH);
+            var ps = con.prepareStatement(krGate ? SELECT_FINANCIALS_KNOWN_ON_BATCH_KR : SELECT_FINANCIALS_KNOWN_ON_BATCH);
             java.sql.Array ids = con.createArrayOf("bigint", stockIds.toArray());
             ps.setArray(1, ids);
             ps.setObject(2, asOf);
@@ -649,7 +656,7 @@ public class IndicatorDataReader {
             return ps;
         }, rs -> {
             long stockId = rs.getLong("stock_id");
-            FinancialFigures figures = mapFigures(rs, null, false, false);
+            FinancialFigures figures = mapFigures(rs, null, false, false, krGate);
             (figures.fiscalPeriod() == FinancialFigures.FiscalPeriod.FY ? annual : quarterly)
                     .computeIfAbsent(stockId, k -> new ArrayList<>()).add(figures);
             String code = rs.getString("report_code");
@@ -749,7 +756,7 @@ public class IndicatorDataReader {
         ShareClassLine line = usGate && us ? shareClasses.line(stockId) : null;
         // 국내 보통주 몫(ADR-0192) — 국내 관문이 켜졌고 그 행이 국내일 때만(미국 행은 위 클래스 축 갈래).
         boolean krCommon = krGate && market != null && !us;
-        RowMapper<FinancialFigures> mapper = (rs, rowNum) -> mapFigures(rs, line, discontinued, krCommon);
+        RowMapper<FinancialFigures> mapper = (rs, rowNum) -> mapFigures(rs, line, discontinued, krCommon, krCommon);
         return switch (visibility) {
             case LATEST -> jdbcTemplate.query(
                     (krCommon ? SELECT_FINANCIALS_LATEST_COMMON_KR
@@ -789,7 +796,9 @@ public class IndicatorDataReader {
      * @param discontinued 그 행 시장의 관문이 켜졌는가 — 켜졌을 때만 질의가 중단영업 두 컬럼을 싣는다
      * @param krCommon 국내 관문 켬 · 국내 행 — 질의가 국내 보통주 몫 네 열을 싣는다(ADR-0192)
      */
-    private static FinancialFigures mapFigures(ResultSet rs, ShareClassLine line, boolean discontinued, boolean krCommon)
+    /** @param effectivePublished 질의가 {@code published_effective}(국내 접수일)를 실었는가 */
+    private static FinancialFigures mapFigures(ResultSet rs, ShareClassLine line, boolean discontinued, boolean krCommon,
+                                               boolean effectivePublished)
             throws SQLException {
         BigDecimal shares = rs.getBigDecimal("shares_outstanding");
         ShareClassLine.State state = null;
@@ -808,7 +817,7 @@ public class IndicatorDataReader {
                 FinancialFigures.FiscalPeriod.valueOf(rs.getString("fiscal_period")),
                 rs.getObject("period_start", LocalDate.class),
                 rs.getObject("period_end", LocalDate.class),
-                rs.getObject(krCommon ? "published_effective" : "published_at", LocalDate.class),
+                rs.getObject(effectivePublished ? "published_effective" : "published_at", LocalDate.class),
                 rs.getString("currency_code"),
                 rs.getBigDecimal("revenue"),
                 rs.getBigDecimal("operating_income"),
