@@ -3143,6 +3143,14 @@ final class SecEdgarFacts {
             if (inside.size() != 3
                     || Math.abs(ChronoUnit.DAYS.between(
                             inside.get(0).periodStart(), fy.periodStart())) > START_TOLERANCE_DAYS) {
+                // 관문 켬(27행): 그 4분기를 소스로 낸 판이 하나도 없을 때만 — 소스 판과 합치면 최신 소스 판이 원 FY 날짜에 앉아 뒤 공시의 값이
+                // 이른 판에 들어간다(첫 스윕 BE 2018 4분기 매출 213 → 157 · 잔액까지).
+                if (usGate && !byLabel.containsKey(q4)) {
+                    RawFinancialReport nine = nineMonthFourthQuarter(label, inside, byLabel, byColumn);
+                    if (nine != null) {
+                        derived.add(nine);
+                    }
+                }
                 continue;
             }
             RawFinancialReport q3 = inside.get(2);
@@ -3404,6 +3412,97 @@ final class SecEdgarFacts {
             });
         }
         return kept.isEmpty() ? java.util.Set.of() : kept;
+    }
+
+    /**
+     * 관문 켬(27행) — <b>1분기가 없어 분기 셋으로 4분기를 못 지으면 FY − 9개월 누계</b>로 짓는다. 10-Q 상장 첫해는 상장 전 1분기를 자기 기간으로 낸
+     * 공시가 없어 그해 4분기가 안 생기고 TTM이 다음 FY까지 FY에 멈췄다(CRCL · CAI · FIG · HNGE · NIQ · CHYM 2025 — CRCL은 2027-03까지). 3분기 10-Q는
+     * 자기 공시로 9개월 누계를 싣는다.
+     *
+     * <p>규칙: 그 해 분기 중 마지막이 FY 끝 석 달 전에 끝나는 3분기이고 FY 시작에 맞는 1분기가 없을 때만 선다. 컬럼마다 <b>FY 원 판이 실은 값과 같은
+     * 태그</b>의 9개월 누계(3분기 원 10-Q가 자기 공시로 실은 것 · FY 시작과 7일 안)를 뺀다 — 태그가 갈리면 그 칸은 비운다(개념이 섞이지 않게). FY는
+     * 원 판 하나로 한 번만 짓는다 — 9개월 누계는 원 10-Q의 값이라 같은 세대다. 비교표로 상장 전 1분기 라벨을 세우는 안은 버렸다(반증 두 렌즈 ·
+     * 2026-11-01): 잔액만 실은 뒤 공시가 첫 판이 되어 유량이 빈 분기가 사슬을 이어 TTM이 비고(66종목 · 1만 종목-일) · 미래 공시의 주식수가 이른 판에
+     * 앉고 · 취득자 비교열이 다른 실체를 들이고(WCN 2015) · 20-F 분기 표(매출만)가 기저를 바꿨다(DOX).
+     */
+    private static RawFinancialReport nineMonthFourthQuarter(Label label, List<RawFinancialReport> inside,
+                                                            Map<Label, List<RawFinancialReport>> byLabel,
+                                                            Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn) {
+        List<RawFinancialReport> annuals = byLabel.get(label);
+        if (inside.isEmpty() || annuals == null || annuals.isEmpty()) {
+            return null;
+        }
+        RawFinancialReport fy = annuals.get(0);
+        RawFinancialReport latestThird = inside.get(inside.size() - 1);
+        long toYearEnd = ChronoUnit.DAYS.between(latestThird.periodEnd(), fy.periodEnd());
+        boolean firstPresent = inside.stream().anyMatch(q -> Math.abs(ChronoUnit.DAYS.between(q.periodStart(), fy.periodStart()))
+                <= START_TOLERANCE_DAYS);
+        if (firstPresent || toYearEnd < 80 || toYearEnd > 100) {
+            return null;
+        }
+        List<RawFinancialReport> thirds = byLabel.get(new Label(latestThird.fiscalYear(), latestThird.fiscalPeriod()));
+        RawFinancialReport third = thirds == null || thirds.isEmpty() ? latestThird : thirds.get(0);
+        String fyAccn = accnOf(fy.reportCode());
+        String thirdAccn = accnOf(third.reportCode());
+        java.util.function.BiFunction<SecEdgarColumn, BigDecimal, BigDecimal> nineMonths = (column, annual) -> {
+            if (annual == null) {
+                return null;
+            }
+            for (Map<Slot, Fact> slots : byColumn.getOrDefault(column, Map.of()).values()) {
+                Fact year = null;
+                Fact cumulative = null;
+                for (Fact f : slots.values()) {
+                    if (f.start() == null) {
+                        continue;
+                    }
+                    if (f.accn().equals(fyAccn) && f.end().equals(fy.periodEnd()) && near(f.start(), fy.periodStart())) {
+                        year = f;
+                    } else if (f.accn().equals(thirdAccn) && f.end().equals(third.periodEnd()) && near(f.start(), fy.periodStart())) {
+                        cumulative = f;
+                    }
+                }
+                if (year != null && cumulative != null && year.value().compareTo(annual) == 0) {
+                    return cumulative.value();
+                }
+            }
+            return null;
+        };
+        BigDecimal zero = BigDecimal.ZERO;
+        RawFinancialReport nine = new RawFinancialReport(third.fiscalYear(), third.fiscalPeriod(), fy.periodStart(), third.periodEnd(),
+                third.publishedAt(), third.reportCode(), third.currencyCode(),
+                nineMonths.apply(SecEdgarColumn.REVENUE, fy.revenue()), nineMonths.apply(SecEdgarColumn.OPERATING_INCOME, fy.operatingIncome()),
+                nineMonthsAny(nineMonths, fy.netIncome(), SecEdgarColumn.NET_INCOME_TOTAL, SecEdgarColumn.NET_INCOME, SecEdgarColumn.NET_INCOME_CONTROLLING),
+                null, null, null, null, null, null, null, null, null, null, null,
+                nineMonths.apply(SecEdgarColumn.COST_OF_SALES, fy.costOfSales()), null, null, null,
+                nineMonthsAny(nineMonths, fy.netIncomeControlling(), SecEdgarColumn.NET_INCOME_CONTROLLING, SecEdgarColumn.NET_INCOME),
+                nineMonths.apply(SecEdgarColumn.INTEREST_AND_DIVIDEND_INCOME, fy.interestAndDividendIncome()),
+                nineMonths.apply(SecEdgarColumn.NONINTEREST_INCOME, fy.noninterestIncome()),
+                nineMonths.apply(SecEdgarColumn.INTEREST_EXPENSE, fy.interestExpense()),
+                nineMonths.apply(SecEdgarColumn.NONINTEREST_EXPENSE, fy.noninterestExpense()),
+                nineMonths.apply(SecEdgarColumn.BENEFITS_LOSSES_AND_EXPENSES, fy.benefitsLossesAndExpenses()),
+                nineMonths.apply(SecEdgarColumn.GROSS_PROFIT, fy.grossProfit()),
+                nineMonths.apply(SecEdgarColumn.OPERATING_EXPENSES, fy.operatingExpenses()),
+                nineMonths.apply(SecEdgarColumn.COSTS_AND_EXPENSES, fy.costsAndExpenses()),
+                null, null, false, Set.of(), null, null, null, Set.of());
+        // 뺄 것이 없는 자리(buildQ4가 분기 셋을 받는다) — 기간은 생성자 검사를 지나는 하루짜리 자리표다.
+        RawFinancialReport none = new RawFinancialReport(third.fiscalYear(), third.fiscalPeriod(), fy.periodStart(), fy.periodStart().plusDays(1),
+                third.publishedAt(), third.reportCode(), third.currencyCode(),
+                zero, zero, zero, null, null, null, null, null, null, null, null, null, null, null,
+                zero, null, null, null, zero, zero, zero, zero, zero, zero, zero, zero, zero,
+                null, null, false, Set.of(), null, null, null, Set.of());
+        return buildQ4(label.fiscalYear(), third.periodEnd().plusDays(1), fy, nine, none, none, byColumn, true);
+    }
+
+    /** 앞 컬럼부터 FY 값과 같은 태그의 9개월 누계를 찾는다(순이익은 연결 · 지배 태그가 행마다 갈린다). */
+    private static BigDecimal nineMonthsAny(java.util.function.BiFunction<SecEdgarColumn, BigDecimal, BigDecimal> nineMonths,
+                                            BigDecimal annual, SecEdgarColumn... columns) {
+        for (SecEdgarColumn column : columns) {
+            BigDecimal v = nineMonths.apply(column, annual);
+            if (v != null) {
+                return v;
+            }
+        }
+        return null;
     }
 
     /**
