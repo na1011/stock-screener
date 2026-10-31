@@ -186,6 +186,8 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
         for (int year = fromFiscalYear; year <= toFiscalYear; year++) {
             JsonNode annual = null;
             JsonNode third = null;
+            boolean annualConsolidated = false;
+            boolean thirdConsolidated = false;
             // Q4의 지배주주 순이익을 유도하려면 그 해 FY와 Q1~Q3가 한자리에 있어야 한다.
             List<RawFinancialReport> thisYear = new ArrayList<>();
             for (Pending p : pending) {
@@ -198,14 +200,16 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
                 thisYear.add(report);
                 if (p.period() == StatementPeriod.FY) {
                     annual = p.list();
+                    annualConsolidated = p.consolidated();
                 }
                 if (p.period() == StatementPeriod.Q3) {
                     third = p.list();
+                    thirdConsolidated = p.consolidated();
                 }
             }
             if (annual != null && periods.contains(StatementPeriod.Q3)) {
                 RawFinancialReport q4 = toFourthQuarterBalance(annual, year, security, thisYear);
-                reports.add(krGate ? withFourthQuarterDiscontinued(q4, annual, third) : q4);
+                reports.add(krGate ? withFourthQuarterDiscontinued(q4, annual, annualConsolidated, third, thirdConsolidated) : q4);
             }
         }
         return new FullStatementResult(reports, calls, missing, FilingTrace.ofReports(seen));
@@ -359,6 +363,11 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
             // 국내 관문 켬(F2b): 지배주주 순이익 줄 없이 계속 · 중단 지배 몫만 준 보고서(솔브레인홀딩스 FY2025 계속 42.1B + 중단 445.2B).
             controllingIncome = DartFullAccountMapper.controllingIncomeFromParts(income);
         }
+        if (krGate && controllingIncome == null && consolidated) {
+            // 국내 관문 켬: 지배 · 비지배 몫을 표준계정코드 없이 실은 연결 보고서 — 항등식(지배 + 비지배 = 당기순이익)이 확인할 때만.
+            controllingIncome = DartFullAccountMapper.controllingIncomeFromNonstandardRows(
+                    income, DartFullAccountMapper.consolidatedIncome(income), "thstrm_amount");
+        }
 
         RawFinancialReport report = new RawFinancialReport(
                 year, label, range[0], range[1],
@@ -427,7 +436,7 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
             // 손익 행이 안 온 보고서는 중단영업을 「읽지 않았다」(규칙 판 없음) — 줄이 없다고 0을 달면 그 판정이 틀린다.
             return report;
         }
-        BigDecimal[] discontinued = DartFullAccountMapper.discontinued(income, false);
+        BigDecimal[] discontinued = DartFullAccountMapper.discontinued(income, false, consolidated);
         return report.withDiscontinued(discontinued[0], discontinued[1],
                 discontinuedAbsence(report.assertedAbsent(), discontinued[0], discontinued[1]));
     }
@@ -437,9 +446,10 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
      * 분류되면 앞 분기 원보고서에는 줄이 없는데 FY 중단액에는 그 몫이 들어 있다(솔브레인홀딩스 2025: 445.2B 대 참값 424.4B).
      * Q3 보고서에 중단 줄이 없는데 FY ≠ 0이면(Q3 뒤 재분류 — 카카오 · CJ제일제당 꼴) 그 판에서는 원장이 안 쪼개 준다 — 모른다.
      */
-    static RawFinancialReport withFourthQuarterDiscontinued(RawFinancialReport q4, JsonNode annual, JsonNode third) {
+    static RawFinancialReport withFourthQuarterDiscontinued(RawFinancialReport q4, JsonNode annual, boolean annualConsolidated,
+                                                         JsonNode third, boolean thirdConsolidated) {
         BigDecimal[] fy = DartFullAccountMapper.discontinued(DartFullAccountMapper.sections(annual,
-                DartFullAccountMapper.SJ_INCOME, DartFullAccountMapper.SJ_COMPREHENSIVE_INCOME), false);
+                DartFullAccountMapper.SJ_INCOME, DartFullAccountMapper.SJ_COMPREHENSIVE_INCOME), false, annualConsolidated);
         BigDecimal consolidated = null;
         BigDecimal controlling = null;
         if (fy[0] != null && fy[0].signum() == 0) {
@@ -449,7 +459,7 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
             List<JsonNode> income = DartFullAccountMapper.sections(third,
                     DartFullAccountMapper.SJ_INCOME, DartFullAccountMapper.SJ_COMPREHENSIVE_INCOME);
             if (DartFullAccountMapper.hasDiscontinuedLine(income)) {
-                BigDecimal[] nine = DartFullAccountMapper.discontinued(income, true);
+                BigDecimal[] nine = DartFullAccountMapper.discontinued(income, true, thirdConsolidated);
                 consolidated = fy[0] != null && nine[0] != null ? fy[0].subtract(nine[0]) : null;
                 controlling = fy[1] != null && nine[1] != null ? fy[1].subtract(nine[1]) : null;
             }

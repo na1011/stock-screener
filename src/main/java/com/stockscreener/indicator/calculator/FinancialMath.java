@@ -563,6 +563,9 @@ final class FinancialMath {
      * 있다. 게이트가 256행의 {@code net_income_controlling}을 <b>실제로 채우면</b> 폴백이 그
      * 자리에서 안 돌고, 그때 남는 것으로 다시 판정한다.
      *
+     * <p>[2026-11-01] 국내 관문 켬은 비표준 계정 행의 지배 몫도 집는다 — 지배 + 비지배 = 당기순이익일 때만
+     * ({@code DartFullAccountMapper.controllingIncomeFromNonstandardRows}). 위 85행 중 그 꼴이 몇인지는 재지 않았다.
+     *
      * <p><b>MUST NOT: 「한 자릿수」만 보고 걷지 않는다 — 그 수는 어느 집합이 죽는지를 안 말한다.</b>
      * 2026-09-21에 내가 그 기준만 적어 뒀고, 열어 보니 걷는 쪽이 더 나빴다.
      */

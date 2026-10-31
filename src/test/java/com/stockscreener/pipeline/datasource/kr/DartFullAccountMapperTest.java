@@ -198,6 +198,40 @@ class DartFullAccountMapperTest {
                 """))).isFalse();
     }
 
+    @Test
+    @DisplayName("국내 관문 켬: 비표준 지배 몫은 비표준 비지배 몫과 더해 당기순이익과 같을 때만 — 총포괄이익의 귀속은 안 받는다")
+    void controllingIncomeFromNonstandardRowsNeedsTheIdentity() {
+        List<JsonNode> income = incomeRows("""
+                {"account_id":"ifrs-full_ProfitLoss","account_nm":"당기순이익","sj_div":"CIS","thstrm_amount":"366"}
+                {"account_id":"-표준계정코드 미사용-","account_nm":"총포괄이익, 지배기업소유주지분","sj_div":"CIS","thstrm_amount":"500"}
+                {"account_id":"-표준계정코드 미사용-","account_nm":"총포괄이익, 비지배지분","sj_div":"CIS","thstrm_amount":"-20"}
+                {"account_id":"-표준계정코드 미사용-","account_nm":"지배기업소유주지분","sj_div":"CIS","thstrm_amount":"400"}
+                {"account_id":"-표준계정코드 미사용-","account_nm":"비지배지분","sj_div":"CIS","thstrm_amount":"-34"}
+                """);
+        BigDecimal consolidated = DartFullAccountMapper.consolidatedIncome(income);
+        assertThat(consolidated).isEqualByComparingTo("366");
+        assertThat(DartFullAccountMapper.controllingIncomeFromNonstandardRows(income, consolidated, "thstrm_amount")).isEqualByComparingTo("400");
+        assertThat(DartFullAccountMapper.controllingIncomeFromNonstandardRows(income.subList(0, 3), consolidated, "thstrm_amount"))
+                .as("항등식이 안 서면 받지 않는다").isNull();
+    }
+
+    @Test
+    @DisplayName("국내 관문 켬: 비표준 비지배 줄이 없으면 비표준 지배 몫이 당기순이익과 같을 때만 받는다")
+    void controllingIncomeFromNonstandardRowsWithoutANoncontrollingRow() {
+        List<JsonNode> equal = incomeRows("""
+                {"account_id":"ifrs-full_ProfitLoss","account_nm":"당기순이익","sj_div":"CIS","thstrm_amount":"366"}
+                {"account_id":"-표준계정코드 미사용-","account_nm":"지배기업소유주지분","sj_div":"CIS","thstrm_amount":"366"}
+                """);
+        assertThat(DartFullAccountMapper.controllingIncomeFromNonstandardRows(equal, new BigDecimal("366"), "thstrm_amount"))
+                .isEqualByComparingTo("366");
+        List<JsonNode> apart = incomeRows("""
+                {"account_id":"ifrs-full_ProfitLoss","account_nm":"당기순이익","sj_div":"CIS","thstrm_amount":"366"}
+                {"account_id":"-표준계정코드 미사용-","account_nm":"지배기업소유주지분","sj_div":"CIS","thstrm_amount":"400"}
+                """);
+        assertThat(DartFullAccountMapper.controllingIncomeFromNonstandardRows(apart, new BigDecimal("366"), "thstrm_amount"))
+                .as("비지배 줄 없이 순이익과 갈리면 귀속을 확인할 수 없다").isNull();
+    }
+
     /** 한 줄에 행 하나씩 적은 JSON을 손익 행 목록으로 만든다. */
     private static List<JsonNode> incomeRows(String lines) {
         tools.jackson.databind.ObjectMapper mapper = new tools.jackson.databind.ObjectMapper();

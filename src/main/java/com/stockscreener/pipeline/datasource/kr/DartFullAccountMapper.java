@@ -226,6 +226,7 @@ final class DartFullAccountMapper {
     /** 기본주당이익(보통주)과 계속영업 기본주당이익 — 지배 계속영업을 비로 짓는 재료(국내만 · {@link #discontinued}). */
     static final Set<String> ID_BASIC_EPS = ordered("ifrs-full_BasicEarningsLossPerShare");
     static final Set<String> ID_BASIC_EPS_CONTINUING = ordered("ifrs-full_BasicEarningsLossPerShareFromContinuingOperations");
+    static final Set<String> ID_BASIC_EPS_DISCONTINUED = ordered("ifrs-full_BasicEarningsLossPerShareFromDiscontinuedOperations");
 
     /**
      * 주당이익 비로 지을 때 받는 반올림 오차 상한. 원화 주당이익은 원 단위 정수라 오차 상한은 {@code 0.5/|EPS| + 0.5/|계속 EPS|}다.
@@ -392,9 +393,13 @@ final class DartFullAccountMapper {
      * 지배주주 순이익 = 연결 순이익(그 기간 비지배 0)이면 연결 몫 → {@code null}. 「비지배 몫 0」 가정은 두지 않는다
      * (미국 답을 아는 칸에서 원장이 자기정합한데 그 가정만 틀린 것 104/144 — 탐색 F2B-PLAN-1023.md 1b).
      *
+     * <p>지배주주 순이익은 보고서와 같은 해석을 쓴다 — 표준 줄이 없으면 연결 응답의 비표준 지배 줄을 같은 항등식으로
+     * ({@link #controllingIncomeFromNonstandardRows}). 안 쓰면 보고서는 지배주주 순이익을 갖는데 중단 지배 몫만 비어 TTM이 빈다.
+     *
+     * @param consolidatedStatement 연결(CFS) 응답인가
      * @return 두 값 배열 {연결, 지배}. 중단 줄이 하나도 없으면 {0, 0}
      */
-    static BigDecimal[] discontinued(List<JsonNode> income, boolean cumulative) {
+    static BigDecimal[] discontinued(List<JsonNode> income, boolean cumulative, boolean consolidatedStatement) {
         String field = cumulative ? "thstrm_add_amount" : "thstrm_amount";
         BigDecimal total = findBy(income, ID_DISCONTINUED, "account_id", field);
         BigDecimal parent = findBy(income, ID_DISCONTINUED_CONTROLLING, "account_id", field);
@@ -404,6 +409,9 @@ final class DartFullAccountMapper {
         }
         BigDecimal net = findBy(income, ID_NET_INCOME, "account_id", field);
         BigDecimal controllingNet = findBy(income, ID_NET_INCOME_CONTROLLING, "account_id", field);
+        if (controllingNet == null && consolidatedStatement) {
+            controllingNet = controllingIncomeFromNonstandardRows(income, net, field);
+        }
         BigDecimal consolidated = total;
         if (consolidated == null && parent != null && noncontrolling != null) {
             consolidated = parent.add(noncontrolling);
@@ -439,15 +447,27 @@ final class DartFullAccountMapper {
      * 맞았다(2026-10-23 · 2025 사업 + 2026 반기 원응답). 원화 주당이익이 큰 정수라 반올림이 작다. <b>미국에는 옮기지 않는다</b> —
      * 같은 산수가 센트 반올림 · 우선주 배분으로 0.5% 안이 1,901/2,784(68%)였다(폴백 근거의 이식 금지).
      * 반올림 오차 상한이 {@link #EPS_RATIO_BOUND}를 넘으면(주당이익이 작은 회사) 받지 않는다.
+     *
+     * <p>EPS가 없으면 계속 EPS + 중단 EPS로 둔다(IAS 33 — 둘을 함께 표시한다 · 반올림 둘이라 오차 상한 1). 답을 아는 연결 보고서(지배 중단
+     * 직접 · 두 EPS)에서 이 합으로 지은 값이 반올림 상한 안 40/42 · 밖 둘은 LG전자 2024(우선주 배분 · 표준 EPS로도 같은 값 · 지배 계속영업의
+     * 0.25% · 0.56%)다(2026-11-01 · 녹화본 0콜).
      */
     private static BigDecimal byEpsRatio(List<JsonNode> income, String field, BigDecimal controllingNet) {
         BigDecimal eps = findBy(income, ID_BASIC_EPS, "account_id", field);
         BigDecimal continuingEps = findBy(income, ID_BASIC_EPS_CONTINUING, "account_id", field);
+        BigDecimal epsHalf = new BigDecimal("0.5");
+        if (eps == null && continuingEps != null) {
+            BigDecimal discontinuedEps = findBy(income, ID_BASIC_EPS_DISCONTINUED, "account_id", field);
+            if (discontinuedEps != null) {
+                eps = continuingEps.add(discontinuedEps);
+                epsHalf = BigDecimal.ONE;
+            }
+        }
         if (eps == null || continuingEps == null || eps.signum() == 0 || continuingEps.signum() == 0) {
             return null;
         }
         BigDecimal half = new BigDecimal("0.5");
-        BigDecimal bound = half.divide(eps.abs(), 12, java.math.RoundingMode.HALF_UP)
+        BigDecimal bound = epsHalf.divide(eps.abs(), 12, java.math.RoundingMode.HALF_UP)
                 .add(half.divide(continuingEps.abs(), 12, java.math.RoundingMode.HALF_UP));
         if (bound.compareTo(EPS_RATIO_BOUND) > 0) {
             return null;
@@ -477,6 +497,54 @@ final class DartFullAccountMapper {
         BigDecimal continuing = find(income, ID_CONTINUING_CONTROLLING, null);
         BigDecimal discontinued = find(income, ID_DISCONTINUED_CONTROLLING, null);
         return continuing != null && discontinued != null ? continuing.add(discontinued) : null;
+    }
+
+    /**
+     * <b>표준계정 ID 없이 실린 지배주주 순이익</b>(국내 관문 켬) — 손익 행 중 {@code account_id}가 표준계정코드를 안 쓴 행에서 이름이 지배 몫(지배 ·
+     * 비지배 아님)인 값을, <b>같은 보고서의 비표준 비지배 몫과 더해 당기순이익과 같을 때만</b>(비지배 행이 없으면 그 값이 당기순이익과 같을 때만)
+     * 받는다. 이름만으로 받지 않는 것은 같은 이름이 총포괄이익의 귀속에도 실려서다 — 항등식이 당기순이익의 귀속을 가른다.
+     *
+     * <p>근거(국내 주요계정 스윕 · 편입 350 × 2019~ 녹화 · 2026-11-01): 지배주주 순이익이 빈 판 1,439 중 손익 섹션에 비표준 지배 행이 있는 512 ·
+     * 그중 항등식이 서는 509(유한양행 2019 FY 연결 36.6B = 지배 40.0B + 비지배 −3.4B · 펌텍코리아 「-표준계정코드 미사용-」 지배기업소유주지분).
+     *
+     * <p>연결(CFS) 응답에서만 부른다 — 지배 · 비지배 귀속은 연결의 개념이다(별도 응답의 같은 이름 줄은 받지 않는다).
+     *
+     * @param consolidated 같은 보고서 · 같은 칸의 당기순이익(연결) — 없으면 받지 않는다
+     * @param field        읽을 칸 — 당기({@code thstrm_amount}) · 누계({@code thstrm_add_amount})
+     */
+    static BigDecimal controllingIncomeFromNonstandardRows(List<JsonNode> income, BigDecimal consolidated, String field) {
+        if (consolidated == null) {
+            return null;
+        }
+        List<BigDecimal> controlling = new ArrayList<>();
+        List<BigDecimal> noncontrolling = new ArrayList<>();
+        for (JsonNode row : income) {
+            if (!row.path("account_id").asString("").contains("표준계정코드")) {
+                continue;
+            }
+            String name = row.path("account_nm").asString("");
+            BigDecimal value = DartAccountMapper.parseAmount(row.path(field).asString(""));
+            if (value == null) {
+                continue;
+            }
+            if (name.contains("비지배")) {
+                noncontrolling.add(value);
+            } else if (name.contains("지배")) {
+                controlling.add(value);
+            }
+        }
+        for (BigDecimal c : controlling) {
+            if (noncontrolling.isEmpty() ? c.compareTo(consolidated) == 0
+                    : noncontrolling.stream().anyMatch(n -> c.add(n).compareTo(consolidated) == 0)) {
+                return c;
+            }
+        }
+        return null;
+    }
+
+    /** 같은 보고서의 당기순이익(연결) — {@link #controllingIncome}이 피감수로 쓰는 것과 같은 찾기. */
+    static BigDecimal consolidatedIncome(List<JsonNode> income) {
+        return find(income, ID_NET_INCOME, DartAccountMapper.NET_INCOME);
     }
 
     /**

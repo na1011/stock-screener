@@ -58,7 +58,7 @@ class DartDiscontinuedSweepTest {
                     continue;
                 }
                 answered++;
-                BigDecimal[] d = DartFullAccountMapper.discontinued(income, false);
+                BigDecimal[] d = DartFullAccountMapper.discontinued(income, false, true);
                 BigDecimal direct = DartFullAccountMapper.find(income, DartFullAccountMapper.ID_NET_INCOME_CONTROLLING, null);
                 BigDecimal parts = direct == null ? DartFullAccountMapper.controllingIncomeFromParts(income) : null;
                 if (d[0] == null || d[0].signum() != 0) {

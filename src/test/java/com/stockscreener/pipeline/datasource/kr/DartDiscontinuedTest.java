@@ -32,7 +32,7 @@ class DartDiscontinuedTest {
     @Test
     @DisplayName("중단 줄이 없는 손익계산서는 0이다")
     void noLineIsZero() throws Exception {
-        BigDecimal[] d = DartFullAccountMapper.discontinued(income(row("ifrs-full_ProfitLoss", "100", "300")), false);
+        BigDecimal[] d = DartFullAccountMapper.discontinued(income(row("ifrs-full_ProfitLoss", "100", "300")), false, true);
 
         assertThat(d[0]).isEqualByComparingTo("0");
         assertThat(d[1]).isEqualByComparingTo("0");
@@ -48,9 +48,49 @@ class DartDiscontinuedTest {
                 row("ifrs-full_IncomeFromDiscontinuedOperationsAttributableToOwnersOfParent", "445200000000", "")));
 
         assertThat(DartFullAccountMapper.controllingIncomeFromParts(rows)).isEqualByComparingTo("487300000000");
-        BigDecimal[] d = DartFullAccountMapper.discontinued(rows, false);
+        BigDecimal[] d = DartFullAccountMapper.discontinued(rows, false, true);
         assertThat(d[0]).isEqualByComparingTo("445245906229");
         assertThat(d[1]).as("지배 몫 직접").isEqualByComparingTo("445200000000");
+    }
+
+    private static String named(String name, String amount, String cumulative) {
+        return """
+                {"sj_div":"IS","account_id":"-표준계정코드 미사용-","account_nm":"%s","thstrm_amount":"%s","thstrm_add_amount":"%s"}"""
+                .formatted(name, amount, cumulative);
+    }
+
+    @Test
+    @DisplayName("국내 관문 켬: 지배주주 순이익이 비표준 줄뿐이면 보고서와 같은 항등식으로 읽어 중단 지배 몫을 짓는다 — 별도 응답은 안 읽는다")
+    void nonstandardControllingIncomeFeedsTheDiscontinuedShare() throws Exception {
+        // 순이익 1,000 = 지배 900 + 비지배 100 · 계속 지배 700 → 중단 지배 200(누계 칸도 같은 규칙: 3,000 = 2,700 + 300 · 계속 지배 2,100 → 600).
+        List<JsonNode> rows = income(String.join(",",
+                row("ifrs-full_ProfitLoss", "1000", "3000"),
+                row("ifrs-full_ProfitLossFromDiscontinuedOperations", "250", "750"),
+                row("ifrs-full_IncomeFromContinuingOperationsAttributableToOwnersOfParent", "700", "2100"),
+                named("지배기업소유주지분", "900", "2700"),
+                named("비지배지분", "100", "300")));
+
+        assertThat(DartFullAccountMapper.discontinued(rows, false, true)[1]).isEqualByComparingTo("200");
+        assertThat(DartFullAccountMapper.discontinued(rows, true, true)[1]).isEqualByComparingTo("600");
+        assertThat(DartFullAccountMapper.discontinued(rows, false, false)[1]).as("별도 응답").isNull();
+    }
+
+    @Test
+    @DisplayName("EPS 줄이 없으면 계속 EPS + 중단 EPS로 비를 짓는다(IAS 33 — 둘을 함께 표시한다)")
+    void epsRatioFromContinuingPlusDiscontinuedEps() throws Exception {
+        // 지배 49,869,473,200 × 73 / (415 + 73) = 7,459,982,671 — 원장의 지배 중단 7,451,908,974와 반올림 상한 안(007070 2022 반기 꼴).
+        List<JsonNode> rows = income(String.join(",",
+                row("ifrs-full_ProfitLoss", "45075317711", ""),
+                row("ifrs-full_ProfitLossFromDiscontinuedOperations", "7451908974", ""),
+                named("지배기업의 소유주지분", "49869473200", ""),
+                named("비지배지분", "-4794155489", ""),
+                row("ifrs-full_BasicEarningsLossPerShareFromContinuingOperations", "415", ""),
+                row("ifrs-full_BasicEarningsLossPerShareFromDiscontinuedOperations", "73", "")));
+
+        BigDecimal controlling = DartFullAccountMapper.discontinued(rows, false, true)[1];
+        assertThat(controlling).isEqualByComparingTo("7459982671");
+        assertThat(controlling.subtract(new BigDecimal("7451908974")).abs().doubleValue() / 49869473200.0)
+                .isLessThan(1.0 / 488 + 0.5 / 415);
     }
 
     @Test
@@ -59,7 +99,7 @@ class DartDiscontinuedTest {
         BigDecimal[] d = DartFullAccountMapper.discontinued(income(String.join(",",
                 row("ifrs-full_ProfitLoss", "1000", ""),
                 row("ifrs-full_ProfitLossAttributableToOwnersOfParent", "800", ""),
-                row("ifrs-full_ProfitLossFromDiscontinuedOperations", "100", ""))), false);
+                row("ifrs-full_ProfitLossFromDiscontinuedOperations", "100", ""))), false, true);
 
         assertThat(d[0]).isEqualByComparingTo("100");
         assertThat(d[1]).isNull();
@@ -74,14 +114,14 @@ class DartDiscontinuedTest {
                 row("ifrs-full_ProfitLossFromDiscontinuedOperations", "-5000000000", ""));
         BigDecimal[] d = DartFullAccountMapper.discontinued(income(String.join(",", base,
                 row("ifrs-full_BasicEarningsLossPerShare", "1445", ""),
-                row("ifrs-full_BasicEarningsLossPerShareFromContinuingOperations", "1504", ""))), false);
+                row("ifrs-full_BasicEarningsLossPerShareFromContinuingOperations", "1504", ""))), false, true);
         // 지배 계속 = 113,453 × 1504/1445 ≈ 118,085(직접 태그 118,128과 0.04%) → 지배 중단 ≈ −4,632(백만).
         assertThat(d[1]).isNotNull();
         assertThat(d[1].doubleValue()).isBetween(-4_700_000_000.0, -4_600_000_000.0);
 
         BigDecimal[] small = DartFullAccountMapper.discontinued(income(String.join(",", base,
                 row("ifrs-full_BasicEarningsLossPerShare", "45", ""),
-                row("ifrs-full_BasicEarningsLossPerShareFromContinuingOperations", "47", ""))), false);
+                row("ifrs-full_BasicEarningsLossPerShareFromContinuingOperations", "47", ""))), false, true);
         assertThat(small[1]).as("EPS가 작아 반올림 오차 상한이 2%를 넘는다").isNull();
     }
 
@@ -91,7 +131,7 @@ class DartDiscontinuedTest {
         BigDecimal[] d = DartFullAccountMapper.discontinued(income(String.join(",",
                 row("ifrs-full_ProfitLoss", "1000", ""),
                 row("ifrs-full_ProfitLossAttributableToOwnersOfParent", "1000", ""),
-                row("ifrs-full_ProfitLossFromDiscontinuedOperations", "100", ""))), false);
+                row("ifrs-full_ProfitLossFromDiscontinuedOperations", "100", ""))), false, true);
 
         assertThat(d[1]).isEqualByComparingTo("100");
     }
@@ -114,12 +154,12 @@ class DartDiscontinuedTest {
                 null, null, null, null, false, java.util.Set.of());
 
         com.stockscreener.pipeline.datasource.RawFinancialReport derived =
-                DartFullStatementAdapter.withFourthQuarterDiscontinued(q4, fy, q3);
+                DartFullStatementAdapter.withFourthQuarterDiscontinued(q4, fy, true, q3, true);
         assertThat(derived.discontinuedIncome()).as("445.2B − 20.85B").isEqualByComparingTo("424395906229");
         assertThat(derived.discontinuedIncomeControlling()).isEqualByComparingTo("424395906229");
 
         com.stockscreener.pipeline.datasource.RawFinancialReport unknown =
-                DartFullStatementAdapter.withFourthQuarterDiscontinued(q4, fy, q3WithoutLine);
+                DartFullStatementAdapter.withFourthQuarterDiscontinued(q4, fy, true, q3WithoutLine, true);
         assertThat(unknown.discontinuedRule()).isEqualByComparingTo("1");
         assertThat(unknown.discontinuedIncome()).isNull();
         assertThat(unknown.discontinuedIncomeControlling()).isNull();
@@ -133,6 +173,6 @@ class DartDiscontinuedTest {
                 row("ifrs-full_IncomeFromDiscontinuedOperationsAttributableToOwnersOfParent", "5", "20850000000")));
 
         assertThat(DartFullAccountMapper.hasDiscontinuedLine(rows)).isTrue();
-        assertThat(DartFullAccountMapper.discontinued(rows, true)[1]).isEqualByComparingTo("20850000000");
+        assertThat(DartFullAccountMapper.discontinued(rows, true, true)[1]).isEqualByComparingTo("20850000000");
     }
 }
