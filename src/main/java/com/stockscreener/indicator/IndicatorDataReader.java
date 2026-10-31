@@ -157,6 +157,7 @@ public class IndicatorDataReader {
             , (SELECT ci.equity_branch FROM financial_common_income ci WHERE %1$s) AS equity_branch
             , (SELECT ci.common_fraction FROM financial_common_income ci WHERE %1$s) AS equity_common_fraction
             , financial_statement.flow_superseded::text AS flow_superseded
+            , financial_statement.published_effective AS published_effective
             """.formatted(COMMON_KR_MATCH);
 
     /**
@@ -247,8 +248,33 @@ public class IndicatorDataReader {
     private static final String SELECT_FINANCIALS_LATEST_COMMON =
             SELECT_FINANCIALS_LATEST_TEMPLATE.formatted(FINANCIAL_COLUMNS + DISCONTINUED_COLUMNS + COMMON_COLUMNS);
 
+    /**
+     * 국내 관문 켬 — <b>공시일은 접수일(공개일)</b>이다(재고 「국내 공시일이 접수번호 앞 8자리라 접수일보다 하루 이를 수 있다」). 저장 공시일은
+     * 접수번호 앞 8자리(제출 시각)인데, 영업시간 밖 · 휴일에 낸 보고서는 공시 목록의 접수일이 다음 영업일이다(운영 22,044판 중 72 · 금 → 월 18 ·
+     * 평일 → 다음 날 47 · 휴일 낀 금 → 화 3). 공개 전 봉이 그 재무를 보지 않게 공시 목록의 접수일이 더 늦으면 그날을 쓴다 — 저장 행은 안 바꾸고
+     * 읽을 때 정한다(판 열쇠 · 보통주 몫 스냅숏은 저장 공시일 그대로).
+     */
+    private static final String KR_PUBLISHED = """
+            FROM (SELECT fs.*, coalesce((SELECT max(k.rcept_date) FROM kr_report_xbrl k
+                                          WHERE k.stock_id = fs.stock_id AND k.bsns_year = fs.fiscal_year
+                                            AND k.reprt_code = fs.report_code AND k.rcept_date > fs.published_at
+                                            AND k.rcept_no LIKE to_char(fs.published_at, 'YYYYMMDD') || '%%%%'), fs.published_at)
+                          AS published_effective
+                    FROM financial_statement fs) financial_statement
+            """;
+
+    private static String domestic(String template) {
+        String out = template.replace("FROM financial_statement\n", KR_PUBLISHED)
+                .replace("published_at <= ?", "published_effective <= ?")
+                .replace("published_at DESC", "published_effective DESC");
+        if (out.equals(template)) {
+            throw new IllegalStateException("국내 공시일 질의를 못 지었다 — 틀이 바뀌었다");
+        }
+        return out;
+    }
+
     private static final String SELECT_FINANCIALS_LATEST_COMMON_KR =
-            SELECT_FINANCIALS_LATEST_TEMPLATE.formatted(FINANCIAL_COLUMNS + DISCONTINUED_COLUMNS + COMMON_COLUMNS_KR);
+            domestic(SELECT_FINANCIALS_LATEST_TEMPLATE).formatted(FINANCIAL_COLUMNS + DISCONTINUED_COLUMNS + COMMON_COLUMNS_KR);
 
     /**
      * 그 시점까지 공시된 <b>판 이력 전부</b>를 읽는다({@link FinancialVisibility#KNOWN_ON}).
@@ -291,7 +317,7 @@ public class IndicatorDataReader {
             SELECT_FINANCIALS_KNOWN_ON_TEMPLATE.formatted(FINANCIAL_COLUMNS + DISCONTINUED_COLUMNS + COMMON_COLUMNS);
 
     private static final String SELECT_FINANCIALS_KNOWN_ON_COMMON_KR =
-            SELECT_FINANCIALS_KNOWN_ON_TEMPLATE.formatted(FINANCIAL_COLUMNS + DISCONTINUED_COLUMNS + COMMON_COLUMNS_KR);
+            domestic(SELECT_FINANCIALS_KNOWN_ON_TEMPLATE).formatted(FINANCIAL_COLUMNS + DISCONTINUED_COLUMNS + COMMON_COLUMNS_KR);
 
     /**
      * 화면의 재무 기준 표시(ADR-0195)가 읽는 판 이력 — {@link #SELECT_FINANCIALS_KNOWN_ON_TEMPLATE}와 <b>같은 술어</b>(공시일 · 기말 ·
@@ -782,7 +808,7 @@ public class IndicatorDataReader {
                 FinancialFigures.FiscalPeriod.valueOf(rs.getString("fiscal_period")),
                 rs.getObject("period_start", LocalDate.class),
                 rs.getObject("period_end", LocalDate.class),
-                rs.getObject("published_at", LocalDate.class),
+                rs.getObject(krCommon ? "published_effective" : "published_at", LocalDate.class),
                 rs.getString("currency_code"),
                 rs.getBigDecimal("revenue"),
                 rs.getBigDecimal("operating_income"),

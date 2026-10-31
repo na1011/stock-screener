@@ -63,6 +63,30 @@ class DiscontinuedGateTest {
                 .discontinuedIncomeControlling()).as("시점 경로도 같은 컬럼을 싣는다").isEqualByComparingTo("100");
     }
 
+    @Test
+    @DisplayName("국내 관문 켬 — 공시일은 공시 목록의 접수일이다: 금요일 밤에 낸 사업보고서는 월요일 봉부터 보인다 · 관문 꺼짐은 그대로")
+    void domesticPublicationIsTheReceiptDate() {
+        long kr = insertStock("KOSPI", "999982", "국내 접수일");
+        jdbcTemplate.update("""
+                INSERT INTO financial_statement
+                    (stock_id, fiscal_year, fiscal_period, period_start, period_end, published_at, revision_no, is_latest,
+                     currency_code, report_code, net_income)
+                VALUES (?, 2025, 'FY', '2025-01-01', '2025-12-31', '2026-03-13', 0, true, 'KRW', '11011', 1000)
+                """, kr);
+        jdbcTemplate.update("""
+                INSERT INTO kr_report_xbrl (rcept_no, stock_id, corp_code, detail_type, report_name, rcept_date, bsns_year, reprt_code)
+                VALUES ('20260313900123', ?, '00000001', 'A001', '사업보고서 (2025.12)', '2026-03-16', 2025, '11011')
+                """, kr);
+
+        IndicatorDataReader krOnly = reader(false, true);
+        assertThat(krOnly.readAnnualFigures(kr, LocalDate.of(2026, 3, 14), 5, FinancialVisibility.KNOWN_ON))
+                .as("토요일 봉은 아직 공개 전").isEmpty();
+        assertThat(krOnly.readAnnualFigures(kr, LocalDate.of(2026, 3, 16), 5, FinancialVisibility.KNOWN_ON).get(0).publishedAt())
+                .isEqualTo(LocalDate.of(2026, 3, 16));
+        assertThat(reader(false, false).readAnnualFigures(kr, LocalDate.of(2026, 3, 14), 5, FinancialVisibility.KNOWN_ON))
+                .as("관문 꺼짐은 저장 공시일 그대로").hasSize(1);
+    }
+
     private IndicatorDataReader reader(boolean usGate, boolean krGate) {
         return new IndicatorDataReader(jdbcTemplate, corporateActions, shareClasses, usGate, krGate);
     }
