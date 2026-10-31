@@ -164,7 +164,12 @@ public final class CommonIncomeRows {
                 source = e.getValue();
             }
         }
-        if (source != null && source.decided()) {
+        // 키의 지배 NI가 그 4분기 행(어댑터가 P1 · K8 · 세대 맞춤을 거쳐 지은 값)과 1% 넘게 다르면 그 키는 그 행의 것이 아니다 — 원시 companyfacts의
+        // Q4 키는 그 거르기를 안 거친다(10-K가 3개월 문맥에 12개월 값을 실은 꼴 · LHX FY2025). FY − 분기 셋 갈래로 간다.
+        boolean sameBasis = source == null || source.income() == null || q4.netIncomeControlling() == null
+                || Math.abs(source.income() - q4.netIncomeControlling().doubleValue())
+                <= 0.01 * Math.max(Math.abs(source.income()), Math.abs(q4.netIncomeControlling().doubleValue()));
+        if (source != null && source.decided() && sameBasis) {
             return resolvedOwn(q4, source);
         }
         Row fy = rows.stream().filter(x -> x.fiscalYear() == q4.fiscalYear() && "FY".equals(x.fiscalPeriod())

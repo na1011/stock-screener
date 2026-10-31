@@ -234,6 +234,22 @@ class CommonIncomeTest {
     }
 
     @Test
+    void fourthQuarterKeyOnAnotherBasisThanTheRowIsNotUsed() {
+        // LHX FY2025 꼴 — 10-K가 3개월 문맥에 12개월 값을 실었다. 어댑터(K8)는 그 Q4를 FY − 분기 셋(1,075M)으로 지었는데 원시 키는 4,000M을 말한다.
+        // 그 키를 쓰면 보통주 몫이 다른 기저가 된다 — FY − 분기 셋 갈래로 간다.
+        LocalDate fyPub = LocalDate.of(2026, 2, 17);
+        LocalDate q4s = LocalDate.of(2025, 10, 1);
+        LocalDate q4e = LocalDate.of(2025, 12, 31);
+        Map<IssuerFacts.Key, CommonIncome.Value> keys = new LinkedHashMap<>();
+        keys.put(new IssuerFacts.Key("K", new ClassFacts.Period(q4s, q4e)),
+                new CommonIncome.Value(3_700_000_000d, CommonIncome.Basis.T, "decl", fyPub, 0, 4_000_000_000d));
+        List<CommonIncomeRows.Row> rows = List.of(
+                row("FY", 0, LocalDate.of(2025, 1, 1), q4e, fyPub, "10-K:K", 4_000_000_000L),
+                row("Q4", 0, q4s, q4e, fyPub, "10-K:K", 1_075_000_000));
+        assertThat(CommonIncomeRows.resolve(rows, keys).get(1).branch()).isNotEqualTo("decl");
+    }
+
+    @Test
     void fourthQuarterSubtractsTheQuarterVintagesTheAdapterUsed() {
         // 어댑터의 Q4 = FY − 그 FY 공시일까지의 세 분기 판. 뒤 판(공시일이 FY 뒤)은 안 쓴다.
         LocalDate fyPub = LocalDate.of(2026, 2, 17);
