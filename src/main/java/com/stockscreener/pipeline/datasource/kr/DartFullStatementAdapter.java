@@ -226,7 +226,7 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
         if (krGate) {
             for (int year = fromFiscalYear; year <= toFiscalYear; year++) {
                 bases.addAll(flowBases(year, pendingByYear.get(year), pendingByYear.getOrDefault(year + 1, Map.of()),
-                        reportsByYear.get(year)));
+                        pendingByYear.getOrDefault(year + 2, Map.of()), reportsByYear.get(year)));
             }
         }
         return new FullStatementResult(reports, calls, missing, FilingTrace.ofReports(seen), bases);
@@ -518,6 +518,7 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
      */
     static List<com.stockscreener.pipeline.datasource.FlowBasis> flowBases(int year, Map<StatementPeriod, Pending> pending,
                                                                            Map<StatementPeriod, Pending> next,
+                                                                           Map<StatementPeriod, Pending> twoLater,
                                                                            Map<String, RawFinancialReport> reports) {
         if (pending == null || reports == null || reports.isEmpty()) {
             return List.of();
@@ -537,6 +538,7 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
         Pending nh1 = same.apply(next.get(StatementPeriod.Q2));
         Pending nq3 = same.apply(next.get(StatementPeriod.Q3));
         Pending nfy = same.apply(next.get(StatementPeriod.FY));
+        Pending n2fy = same.apply(twoLater.get(StatementPeriod.FY));
         Map<String, DartFlowBasis.Values> values = new java.util.LinkedHashMap<>();
         for (Map.Entry<String, java.util.Set<String>> e : FLOW_COLUMNS.entrySet()) {
             java.util.Set<String> ids = e.getValue();
@@ -549,17 +551,17 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
                     firstOf(amount(nq1, ids, "frmtrm_q_amount", zero), amount(nq1, ids, "frmtrm_add_amount", zero)),
                     amount(nh1, ids, "frmtrm_q_amount", zero), amount(nh1, ids, "frmtrm_add_amount", zero),
                     amount(nq3, ids, "frmtrm_q_amount", zero), amount(nq3, ids, "frmtrm_add_amount", zero),
-                    amount(nfy, ids, "frmtrm_amount", zero)));
+                    amount(nfy, ids, "frmtrm_amount", zero), amount(n2fy, ids, "bfefrmtrm_amount", zero)));
         }
         for (Map.Entry<String, java.util.Set<String>> e : ANNUAL_ONLY.entrySet()) {
             boolean cash = !"income_tax_expense".equals(e.getKey()) && !"profit_before_tax".equals(e.getKey());
             values.put(e.getKey(), new DartFlowBasis.Values(null, null, null, null, null,
                     annualAmount(fy, e.getValue(), "thstrm_amount", cash), null, null, null, null, null,
-                    annualAmount(nfy, e.getValue(), "frmtrm_amount", cash)));
+                    annualAmount(nfy, e.getValue(), "frmtrm_amount", cash), annualAmount(n2fy, e.getValue(), "bfefrmtrm_amount", cash)));
         }
         DartFlowBasis.Dates dates = new DartFlowBasis.Dates(published(reports.get("Q1")), published(reports.get("Q2")),
                 published(reports.get("Q3")), published(reports.get("FY")), filed(nq1, year + 1), filed(nh1, year + 1),
-                filed(nq3, year + 1), filed(nfy, year + 1));
+                filed(nq3, year + 1), filed(nfy, year + 1), filed(n2fy, year + 2));
         Map<String, Map<String, java.time.LocalDate>> verdict = DartFlowBasis.judge(values, dates);
         // 지배주주 순이익 표준 줄이 그 해 판에 없으면(지배 몫을 비표준 줄 · 계속 + 중단으로 지은 판) 이 소스의 순이익 판정을 따른다. 순이익 칸
         // 자체는 주요계정 어댑터가 싣는다.

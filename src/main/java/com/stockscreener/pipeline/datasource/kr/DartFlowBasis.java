@@ -20,7 +20,7 @@ import java.util.Set;
  * 짝은 그 해 안의 누계(① 반기 누계 ↔ 1 + 2분기 → 1분기 · ② 9개월 누계 ↔ 반기 누계 + 3분기 → 1 · 2분기)와 다음 해 보고서 넷의 전기 열이다
  * (3개월 열의 신호는 그 분기와 그 뒤 분기 — 뒤 분기의 새 기저 값은 아직 확인할 재료가 없다 · 누계 열의 신호는 1~4분기: ③ 1분기 →
  * 1~4분기 ④ 반기: 전기 2분기 → 2~4분기 · 전기 반기 누계 → 1~4분기 ⑤ 3분기: 전기 3분기 → 3 · 4분기 · 전기 9개월 → 1~4분기 ⑥ 사업보고서:
- * 전기 FY → FY · 전기 FY − 전기 9개월 → 4분기). 대체일은 쓴 보고서 공시일의 최댓값이고, 한 칸이 여러 짝에 걸리면 이른 날이다.
+ * 전기 FY → FY · 전기 FY − 전기 9개월 → 4분기 ⑦ 두 해 뒤 사업보고서의 전전기 FY → FY). 대체일은 쓴 보고서 공시일의 최댓값이고, 한 칸이 여러 짝에 걸리면 이른 날이다.
  *
  * <p>닫힘의 허용: 저장된 항 절댓값 합의 1% — 미국의 같은 꼴(비교열 세대 맞춤 {@code SecEdgarFacts.keepSameGeneration} · 「1% 안의 변화는 같은
  * 세대」)과 같은 문턱. 저장된 항이 0이면 0이 아닌 값이 곧 어긋남이다(중단영업은 대개 0에서 생긴다).
@@ -39,12 +39,22 @@ final class DartFlowBasis {
      */
     record Values(BigDecimal q1, BigDecimal q2, BigDecimal h1, BigDecimal q3, BigDecimal nine, BigDecimal fy,
                   BigDecimal priorQ1, BigDecimal priorQ2, BigDecimal priorH1, BigDecimal priorQ3, BigDecimal priorNine,
-                  BigDecimal priorFy) {
+                  BigDecimal priorFy, BigDecimal twoYearsPriorFy) {
+
+        Values(BigDecimal q1, BigDecimal q2, BigDecimal h1, BigDecimal q3, BigDecimal nine, BigDecimal fy, BigDecimal priorQ1,
+               BigDecimal priorQ2, BigDecimal priorH1, BigDecimal priorQ3, BigDecimal priorNine, BigDecimal priorFy) {
+            this(q1, q2, h1, q3, nine, fy, priorQ1, priorQ2, priorH1, priorQ3, priorNine, priorFy, null);
+        }
     }
 
     /** 보고서 공시일 — 그 해 1분기 · 반기 · 3분기 · 사업보고서와 다음 해의 넷. 없으면 {@code null}. */
     record Dates(LocalDate q1, LocalDate h1, LocalDate q3, LocalDate fy,
-                 LocalDate nextQ1, LocalDate nextH1, LocalDate nextQ3, LocalDate nextFy) {
+                 LocalDate nextQ1, LocalDate nextH1, LocalDate nextQ3, LocalDate nextFy, LocalDate twoYearsLaterFy) {
+
+        Dates(LocalDate q1, LocalDate h1, LocalDate q3, LocalDate fy, LocalDate nextQ1, LocalDate nextH1, LocalDate nextQ3,
+              LocalDate nextFy) {
+            this(q1, h1, q3, fy, nextQ1, nextH1, nextQ3, nextFy, null);
+        }
     }
 
     /** 한 해 · 계정들의 판정 → 라벨 → (칸 → 대체일). */
@@ -77,6 +87,10 @@ final class DartFlowBasis {
             }
             if (apart(v.priorFy(), v.fy(), null)) {
                 mark(out, List.of("FY"), c, latest(d.fy(), d.nextFy()));
+            }
+            // 두 해 뒤 사업보고서의 전전기 열 — 기저가 그 뒤 해에 바뀐 FY를 5년 창이 섞지 않게(연결 전환 2년 앞 · 반증 안 렌즈).
+            if (apart(v.twoYearsPriorFy(), v.fy(), null)) {
+                mark(out, List.of("FY"), c, latest(d.fy(), d.twoYearsLaterFy()));
             }
             BigDecimal q4 = v.fy() != null && v.nine() != null ? v.fy().subtract(v.nine()) : null;
             BigDecimal priorQ4 = v.priorFy() != null && v.priorNine() != null ? v.priorFy().subtract(v.priorNine()) : null;

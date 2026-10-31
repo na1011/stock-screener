@@ -144,7 +144,7 @@ public class DartFinancialAdapter implements FinancialDataSource {
             List<com.stockscreener.pipeline.datasource.FlowBasis> bases = new ArrayList<>();
             for (int year = fromFiscalYear; year <= currentYear; year++) {
                 bases.addAll(flowBases(year, rowsByYear.get(year), rowsByYear.getOrDefault(year + 1, Map.of()),
-                        reportsByYear.get(year)));
+                        rowsByYear.getOrDefault(year + 2, Map.of()), reportsByYear.get(year)));
             }
             return FinancialFetch.of(reports).withFilingTrace(FilingTrace.ofReports(seen)).withFlowBases(bases);
         }
@@ -350,6 +350,7 @@ public class DartFinancialAdapter implements FinancialDataSource {
      */
     private static List<com.stockscreener.pipeline.datasource.FlowBasis> flowBases(int year, Map<String, PeriodRows> rows,
                                                                                    Map<String, PeriodRows> next,
+                                                                                   Map<String, PeriodRows> twoLater,
                                                                                    Map<String, RawFinancialReport> reports) {
         if (rows == null || reports == null || reports.isEmpty()) {
             return List.of();
@@ -372,6 +373,7 @@ public class DartFinancialAdapter implements FinancialDataSource {
         PeriodRows nh1 = same.apply(next.get("Q2"));
         PeriodRows nq3 = same.apply(next.get("Q3"));
         PeriodRows nfy = same.apply(next.get("FY"));
+        PeriodRows n2fy = same.apply(twoLater.get("FY"));
         Map<String, DartFlowBasis.Values> values = new LinkedHashMap<>();
         for (Map.Entry<String, Set<String>> e : FLOW_COLUMNS.entrySet()) {
             Set<String> c = e.getValue();
@@ -381,11 +383,12 @@ public class DartFinancialAdapter implements FinancialDataSource {
                     // 1분기 보고서는 3개월이 곧 누계다 — 전기 3개월 칸을 비우고 누계 칸에만 실은 보고서가 있다(같은 양).
                     firstOf(field(nq1, c, "frmtrm_amount"), field(nq1, c, "frmtrm_add_amount")),
                     field(nh1, c, "frmtrm_amount"), field(nh1, c, "frmtrm_add_amount"),
-                    field(nq3, c, "frmtrm_amount"), field(nq3, c, "frmtrm_add_amount"), field(nfy, c, "frmtrm_amount")));
+                    field(nq3, c, "frmtrm_amount"), field(nq3, c, "frmtrm_add_amount"), field(nfy, c, "frmtrm_amount"),
+                    field(n2fy, c, "bfefrmtrm_amount")));
         }
         DartFlowBasis.Dates dates = new DartFlowBasis.Dates(published(reports.get("Q1")), published(reports.get("Q2")),
                 published(reports.get("Q3")), published(reports.get("FY")), filed(nq1, year + 1), filed(nh1, year + 1),
-                filed(nq3, year + 1), filed(nfy, year + 1));
+                filed(nq3, year + 1), filed(nfy, year + 1), filed(n2fy, year + 2));
         return DartFlowBasis.bases(year, reports, FLOW_COLUMNS.keySet(), DartFlowBasis.judge(values, dates));
     }
 
