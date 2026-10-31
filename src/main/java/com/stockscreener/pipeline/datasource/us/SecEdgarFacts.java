@@ -1550,6 +1550,25 @@ final class SecEdgarFacts {
                     byColumn.getOrDefault(SecEdgarColumn.DISCONTINUED_OPERATIONS, Map.of()).isEmpty(),
                     usGate, noNoncontrollingIncomeBy(lastNonzeroNoncontrolling, window),
                     usGate && pairsDiffer.contains(window.end()));
+            if (usGate && last != null && !standingBalance(candidate) && standingBalance(last) && partialBalance(values)) {
+                // 관문 켬([Z]) — 대차대조표는 블록이다. 이 판의 잔액을 받아 이은 결과가 서지 않고(어느 쪽으로든 1.5M 넘게 · AFL 2021 자본만 LDTI 재작성)
+                // 앞 판은 서 있었으면, 이 판은 잔액 칸을
+                // 일부만 실어 앞 판 칸과 섞인 것이다 — 잔액 블록 전체를 앞 판 것으로 잇는다(이 판의 손익은 그대로 받는다). 실측(0콜 · 관문 켬 출력):
+                // 부채 + 자본이 자산을 1.5M 넘게 넘는 715행 중 574가 일부 잔액만 앞 판에서 이어받은 판이었다(ABTC 2023 FY 자본 −0.6M → 473.8M).
+                // 되돌리는 것은 항등식의 구성원뿐이다 — 현금 · 재고 · 유동 · 이익잉여금은 그 공시가 직접 실은 사실이라 그대로 받는다(반증: 74칸 · 빈칸 3).
+                Map<SecEdgarColumn, BigDecimal> block = new EnumMap<>(SecEdgarColumn.class);
+                block.putAll(carried);
+                for (SecEdgarColumn column : BALANCE_IDENTITY) {
+                    block.put(column, baseline.get(column));
+                }
+                carried = block;
+                candidate = toReport(label, window, reporter, currency, carried,
+                        byColumn.getOrDefault(SecEdgarColumn.MINORITY_INTEREST, Map.of()).isEmpty(),
+                        noNoncontrollingIncomeBy(lastNoncontrolling, window),
+                        byColumn.getOrDefault(SecEdgarColumn.DISCONTINUED_OPERATIONS, Map.of()).isEmpty(),
+                        usGate, noNoncontrollingIncomeBy(lastNonzeroNoncontrolling, window),
+                        pairsDiffer.contains(window.end()));
+            }
             // MUST: 「저장될 행이 달라지는가」로 판정한다. 원시 컬럼 맵으로 판정하면 안 된다 —
             // 다리 컬럼(유도 재료)이 달라져도 유도 결과가 같으면 저장은 한 칸도 안 바뀌고,
             // 반대로 reportEvidence()로 좁히면 income_tax_expense·profit_before_tax만 더하는
@@ -1654,6 +1673,26 @@ final class SecEdgarFacts {
         }
         // 경쟁 후보가 하나도 안 덮으면 마지막 수단 태그가 남는다.
         return largest != null ? largest : first;
+    }
+
+    /** 대차대조표 항등식의 구성원 — 잔액 블록 되돌림의 대상. */
+    private static final Set<SecEdgarColumn> BALANCE_IDENTITY = Set.of(SecEdgarColumn.TOTAL_ASSETS, SecEdgarColumn.TOTAL_LIABILITIES,
+            SecEdgarColumn.TOTAL_EQUITY, SecEdgarColumn.TOTAL_EQUITY_CONTROLLING, SecEdgarColumn.TOTAL_EQUITY_INCLUDING_NCI,
+            SecEdgarColumn.MINORITY_INTEREST, SecEdgarColumn.MEZZANINE_EQUITY, SecEdgarColumn.PARTNERS_EQUITY_INCLUDING_NCI,
+            SecEdgarColumn.PARTNERS_EQUITY, SecEdgarColumn.PARTNERS_EQUITY_NONCONTROLLING);
+
+    /** 앞 판이 양쪽 방향으로 서 있는가 — |자산 − 부채 − 자본| ≤ 1.5M. 자산 쪽으로 이미 섞인 앞 판을 복사하지 않는다(HL 2020 Q2 · MDLZ 2016 · NNI 2022). */
+    private static boolean standingBalance(RawFinancialReport r) {
+        return r.totalAssets() != null && r.totalLiabilities() != null && r.totalEquity() != null
+                && r.totalAssets().subtract(r.totalLiabilities()).subtract(r.totalEquity()).abs()
+                .compareTo(BigDecimal.valueOf(1_500_000)) <= 0;
+    }
+
+    /** 이 판의 공시(들)가 자산 · 부채 · 자본 중 일부만 실었는가 — 셋을 다 실은 완결 블록이면 그 공시의 것이라 되돌리지 않는다. */
+    private static boolean partialBalance(Map<SecEdgarColumn, BigDecimal> own) {
+        boolean equity = own.get(SecEdgarColumn.TOTAL_EQUITY) != null || own.get(SecEdgarColumn.TOTAL_EQUITY_CONTROLLING) != null
+                || own.get(SecEdgarColumn.TOTAL_EQUITY_INCLUDING_NCI) != null;
+        return !(own.get(SecEdgarColumn.TOTAL_ASSETS) != null && own.get(SecEdgarColumn.TOTAL_LIABILITIES) != null && equity);
     }
 
     /**
