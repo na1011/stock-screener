@@ -189,9 +189,17 @@ public final class IndicatorContext {
      * 최신 원장 기준이다), 거버넌스는 {@code GovernanceMath}가 자기 축으로 이미 고른다.
      */
     public IndicatorContext visibleAt(LocalDate tradeDate) {
+        List<FinancialFigures> annual = publishedOnOrBefore(annualRevisions, tradeDate);
+        List<FinancialFigures> quarterly = publishedOnOrBefore(quarterlyRevisions, tradeDate);
+        if (gateOn) {
+            // 관문 켬 — 4분기 행에 그 봉이 보는 그 해 FY 행(가장 늦은 판)을 단다: 4분기로 끝나는 TTM 창의 네 분기 합은 그 해 FY다(재고 「A6 남은 것」).
+            quarterly = quarterly.stream().map(q -> q.fiscalPeriod() != FinancialFigures.FiscalPeriod.Q4 ? q
+                    : annual.stream().filter(a -> a.fiscalYear() == q.fiscalYear()).findFirst().map(q::withAnnualOfYear).orElse(q))
+                    .toList();
+        }
         return new IndicatorContext(stockId, industryDivisionKey, priceBars,
-                publishedOnOrBefore(annualRevisions, tradeDate),
-                publishedOnOrBefore(quarterlyRevisions, tradeDate),
+                annual,
+                quarterly,
                 shareAdjustments, unadjustedActions, marketIndex, governanceFacts, dependencies,
                 earningsReleaseDates.stream().filter(d -> !d.isAfter(tradeDate)).toList(), gateOn, spinOffDates);
     }

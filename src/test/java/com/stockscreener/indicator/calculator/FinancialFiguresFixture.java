@@ -18,6 +18,7 @@ import java.time.LocalDate;
 final class FinancialFiguresFixture {
 
     private java.util.Map<String, LocalDate> flowsSupersededOn;
+    private FinancialFigures annualOfYear;
 
     private int fiscalYear;
     private FinancialFigures.FiscalPeriod fiscalPeriod = FinancialFigures.FiscalPeriod.Q4;
@@ -135,6 +136,7 @@ final class FinancialFiguresFixture {
         fixture.discontinuedRule = source.discontinuedRule();
         fixture.common = source.common();
         fixture.flowsSupersededOn = source.flowsSupersededOn();
+        fixture.annualOfYear = source.annualOfYear();
         return fixture;
     }
 
@@ -369,6 +371,6 @@ final class FinancialFiguresFixture {
                 grossProfit, operatingExpenses, costsAndExpenses,
                 incomeTaxExpense, profitBeforeTax, shareBasisMultiple, shareBasisStatus, shareClassState,
                 weightedShares, weightedSharesJudged, discontinuedIncome, discontinuedIncomeControlling, discontinuedRule, common,
-                flowsSupersededOn);
+                flowsSupersededOn, annualOfYear);
     }
 }

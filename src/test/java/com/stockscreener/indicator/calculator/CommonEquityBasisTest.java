@@ -105,6 +105,20 @@ class CommonEquityBasisTest {
     }
 
     @Test
+    @DisplayName("4분기로 끝나는 창의 네 분기 합은 그 해 FY다 — 분기 칸이 비면(기저 대체) FY 값을 쓴다 · FY가 안 달렸으면 그대로 빈다")
+    void fourthQuarterWindowFallsBackToTheFiscalYear() {
+        FinancialFigures fy = FinancialFiguresFixture.annual(LocalDate.of(2025, 12, 31)).revenue(new BigDecimal("1000")).build();
+        java.util.List<FinancialFigures> quarters = new java.util.ArrayList<>(java.util.List.of(
+                FinancialFiguresFixture.quarter(LocalDate.of(2025, 12, 31)).revenue(new BigDecimal("260")).build().withAnnualOfYear(fy),
+                FinancialFiguresFixture.quarter(LocalDate.of(2025, 9, 30)).revenue(new BigDecimal("250")).build(),
+                FinancialFiguresFixture.quarter(LocalDate.of(2025, 6, 30)).revenue(null).build(),
+                FinancialFiguresFixture.quarter(LocalDate.of(2025, 3, 31)).revenue(null).build()));
+        assertThat(FinancialMath.sumTrailingFourQuarters(quarters, FinancialFigures::revenue)).isEqualByComparingTo("1000");
+        quarters.set(0, FinancialFiguresFixture.quarter(LocalDate.of(2025, 12, 31)).revenue(new BigDecimal("260")).build());
+        assertThat(FinancialMath.sumTrailingFourQuarters(quarters, FinancialFigures::revenue)).isNull();
+    }
+
+    @Test
     @DisplayName("못 정함은 미표시다 — 지배 자본으로 메우지 않는다")
     void undecidedIsNotShown() {
         FinancialFigures f = bank().commonEquity(null, null, "open").build();

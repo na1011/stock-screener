@@ -74,6 +74,8 @@ class FinancialFiguresFixtureTest {
                 args.add(type.getEnumConstants()[0]);
             } else if (type == com.stockscreener.indicator.CommonIncomeRead.class) {
                 args.add(new com.stockscreener.indicator.CommonIncomeRead(BigDecimal.valueOf(seq), "T", "decl"));
+            } else if (type == FinancialFigures.class) {
+                args.add(FinancialFiguresFixture.annual(LocalDate.of(2020, 12, 31)).revenue(BigDecimal.valueOf(seq)).build());
             } else if (type == java.util.Map.class) {
                 args.add(java.util.Map.of("revenue", LocalDate.of(2026, 1, 1).plusDays(seq)));
             } else {

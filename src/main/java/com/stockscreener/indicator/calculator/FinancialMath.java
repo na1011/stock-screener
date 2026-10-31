@@ -455,11 +455,28 @@ final class FinancialMath {
         for (int i = offset; i < offset + TTM_QUARTERS; i++) {
             BigDecimal value = field.apply(quarters.get(i));
             if (value == null) {
-                return null;
+                return fiscalYearOf(quarters, field, offset);
             }
             sum = sum.add(value);
         }
         return sum;
+    }
+
+    /**
+     * 창이 한 해의 1~4분기면 그 해 FY 값 — 네 분기 합이 곧 FY다. 분기 칸이 빈 창(관문 켬 · 뒤 보고서가 앞 분기를 다른 기저로 다시 실은 해 ·
+     * ADR-0200)도 FY 행은 같은 기저의 값을 정확히 준다(재고 「A6 남은 것」). 4분기 행에 FY가 안 달렸으면(관문 꺼짐) {@code null}.
+     */
+    private static BigDecimal fiscalYearOf(List<FinancialFigures> quarters, Function<FinancialFigures, BigDecimal> field, int offset) {
+        FinancialFigures q4 = quarters.get(offset);
+        if (q4.fiscalPeriod() != FinancialFigures.FiscalPeriod.Q4 || q4.annualOfYear() == null) {
+            return null;
+        }
+        for (int i = 1; i < TTM_QUARTERS; i++) {
+            if (quarters.get(offset + i).fiscalYear() != q4.fiscalYear()) {
+                return null;
+            }
+        }
+        return field.apply(q4.annualOfYear());
     }
 
     /**
