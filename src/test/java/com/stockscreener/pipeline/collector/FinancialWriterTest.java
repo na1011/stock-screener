@@ -1211,6 +1211,28 @@ class FinancialWriterTest {
     }
 
     @Test
+    @DisplayName("국내 관문 켬 — DART 유도 4분기는 저장된 FY 판의 공시일을 회수에서 지킨다(FY 정정 뒤에도 원 FY 공시일의 4분기가 남는다)")
+    void derivedFourthQuarterKeepsTheStoredAnnualVintages() {
+        FinancialWriter gated = new FinancialWriter(jdbcTemplate, new NoOpIndicatorInvalidationPort(), true);
+        gated.write(stockId, List.of(report(2025, "FY", "2026-03-13", "1000"), derivedQuarterAt("2026-03-13", "250000", true)),
+                WriteMode.FILL_MISSING);
+        gated.write(stockId, List.of(report(2025, "FY", "2026-08-13", "1100"), derivedQuarterAt("2026-08-13", "260000", true)),
+                WriteMode.FILL_MISSING);
+        assertThat(jdbcTemplate.queryForList("""
+                SELECT published_at FROM financial_statement WHERE stock_id = ? AND fiscal_period = 'Q4' ORDER BY published_at
+                """, LocalDate.class, stockId)).containsExactly(LocalDate.of(2026, 3, 13), LocalDate.of(2026, 8, 13));
+
+        jdbcTemplate.update("DELETE FROM financial_statement WHERE stock_id = ?", stockId);
+        writer.write(stockId, List.of(report(2025, "FY", "2026-03-13", "1000"), derivedQuarterAt("2026-03-13", "250000", true)),
+                WriteMode.FILL_MISSING);
+        writer.write(stockId, List.of(report(2025, "FY", "2026-08-13", "1100"), derivedQuarterAt("2026-08-13", "260000", true)),
+                WriteMode.FILL_MISSING);
+        assertThat(jdbcTemplate.queryForList("""
+                SELECT published_at FROM financial_statement WHERE stock_id = ? AND fiscal_period = 'Q4'
+                """, LocalDate.class, stockId)).as("관문 꺼짐은 지금 동작 — 이번 호출의 공시일만").containsExactly(LocalDate.of(2026, 8, 13));
+    }
+
+    @Test
     @DisplayName("유도 행이라도 이 호출이 안 다루는 컬럼은 안 지운다 — 다른 소스가 채운 값이다")
     void neverClearsAColumnThisFetchDoesNotManage() {
         // 전체 재무제표가 재고를 채워 뒀다.

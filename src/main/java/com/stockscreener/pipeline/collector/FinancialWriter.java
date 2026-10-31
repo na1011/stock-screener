@@ -79,9 +79,23 @@ public class FinancialWriter {
     private final IndicatorInvalidationPort invalidationPort;
 
     public FinancialWriter(JdbcTemplate jdbcTemplate, IndicatorInvalidationPort invalidationPort) {
+        this(jdbcTemplate, invalidationPort, false);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public FinancialWriter(JdbcTemplate jdbcTemplate, IndicatorInvalidationPort invalidationPort,
+                           @org.springframework.beans.factory.annotation.Value("${stockscreener.gate.kr}") boolean krGate) {
         this.jdbcTemplate = jdbcTemplate;
         this.invalidationPort = invalidationPort;
+        this.derivedFollowsStoredAnnual = krGate;
     }
+
+    /**
+     * 국내 관문 켬 — 판 이력을 다 안 내는 소스(DART)의 유도 4분기는 <b>저장된 FY 판의 공시일</b>을 회수에서 지킨다(재고 「유도 Q4 가시성」).
+     * DART는 FY의 마지막 판만 주므로 어댑터가 4분기를 그 판 하나로만 낸다 — 회수가 「이번 호출의 공시일」만 남기면 옛 FY 판에 기대던 4분기 판이
+     * 지워지고, 원 FY 공시일 ~ 정정일 사이 TTM이 한 분기 밀린다(010130 2024 · FY 2025-03-20 · 4분기 첫 판 2026-08-13).
+     */
+    private final boolean derivedFollowsStoredAnnual;
 
     /** 같은 회계기간이 다시 들어왔을 때 무엇까지 할지. */
     public enum WriteMode {
@@ -483,9 +497,14 @@ public class FinancialWriter {
             Stream<LocalDate> withheldDates = withheld.stream()
                     .filter(w -> w.fiscalYear() == label.fiscalYear() && w.fiscalPeriod().equals(label.fiscalPeriod()))
                     .map(FinancialFetch.WithheldVintage::publishedAt);
-            List<LocalDate> keep = Stream.concat(Stream.concat(
+            Stream<LocalDate> annualDates = derivedFollowsStoredAnnual && !completeVintageHistory && "Q4".equals(label.fiscalPeriod())
+                    ? jdbcTemplate.queryForList("""
+                            SELECT published_at FROM financial_statement WHERE stock_id = ? AND fiscal_year = ? AND fiscal_period = 'FY'
+                            """, LocalDate.class, stockId, label.fiscalYear()).stream()
+                    : Stream.empty();
+            List<LocalDate> keep = Stream.concat(Stream.concat(Stream.concat(
                             entry.getValue().stream().map(RawFinancialReport::publishedAt), unconfirmed.stream()),
-                            withheldDates)
+                            withheldDates), annualDates)
                     .distinct().toList();
             Object[] args = new Object[keep.size() + 3];
             args[0] = stockId;
