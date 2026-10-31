@@ -84,13 +84,37 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
      * 지배주주 순이익 줄 없이 계속 · 중단 지배 몫만 준 보고서의 지배주주 순이익을 그 합으로 짓는다. 꺼지면 이 축이 없던 때와 같다.
      */
     private final boolean krGate;
+    /**
+     * 저장 이른 판의 인스턴스(국내 관문 켬) — 있으면 그 판의 전체 재무제표를 인스턴스로 다시 지어 함께 낸다({@link DartXbrlStatementRows}).
+     * {@code null}이면 이 축이 없던 때와 같다.
+     */
+    private final DartEarlierInstances earlierInstances;
 
+    public DartFullStatementAdapter(ExternalApiClientFactory clientFactory,
+                                    DataSourceProperties properties,
+                                    RateLimiter rateLimiter,
+                                    DartDailyQuota dailyQuota,
+                                    DartCorpCodeCache corpCodes,
+                                    boolean krGate) {
+        this(clientFactory, properties, rateLimiter, dailyQuota, corpCodes, krGate, (DartEarlierInstances) null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
     public DartFullStatementAdapter(ExternalApiClientFactory clientFactory,
                                     DataSourceProperties properties,
                                     @Qualifier("dartRateLimiter") RateLimiter rateLimiter,
                                     DartDailyQuota dailyQuota,
                                     DartCorpCodeCache corpCodes,
-                                    @org.springframework.beans.factory.annotation.Value("${stockscreener.gate.kr}") boolean krGate) {
+                                    @org.springframework.beans.factory.annotation.Value("${stockscreener.gate.kr}") boolean krGate,
+                                    org.springframework.beans.factory.ObjectProvider<DartEarlierInstances> earlierInstances) {
+        this(clientFactory, properties, rateLimiter, dailyQuota, corpCodes, krGate,
+                earlierInstances == null ? null : earlierInstances.getIfAvailable());
+    }
+
+    DartFullStatementAdapter(ExternalApiClientFactory clientFactory, DataSourceProperties properties, RateLimiter rateLimiter,
+                             DartDailyQuota dailyQuota, DartCorpCodeCache corpCodes, boolean krGate,
+                             DartEarlierInstances earlierInstances) {
+        this.earlierInstances = earlierInstances;
         DataSourceProperties.Source source = properties.getDart();
         this.client = clientFactory.create(source);
         this.rateLimiter = rateLimiter;
@@ -169,7 +193,7 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
         }
 
         // ── 2패스: 종목 단위 판정(순수). 외부 호출 0.
-        LocalDate lastNoncontrolling = lastNoncontrollingIncome(pending);
+        LocalDate lastNoncontrolling = lastNoncontrollingIncome(pending, krGate);
         // MUST: 게이트가 몇 판에서 열렸는지 남긴다. 스윕이 이 축을 못 태우므로(픽스처가
         // 종목당 한 기간뿐이다) **적재 직후 검침이 유일한 확인 수단**이고, 로그가 없으면
         // 「게이트가 돌았는가」를 저장된 값으로만 추정하게 된다 — 그 값은 폴백이 쓰던 것과
@@ -222,6 +246,13 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
                 yearReports.put("Q4", fourth);
             }
         }
+        if (krGate && earlierInstances != null) {
+            // 판마다 그 판의 원장으로 — DART가 다시 안 주는 저장 이른 판의 전체 재무제표를 그 판의 인스턴스로 짓는다. 맨 뒤에 둔다: 쓰기기가
+            // 라벨의 최신 판을 먼저 만나야 이른 판이 「그 공시일의 행 채우기」로 간다(그 라벨의 첫 행으로 들어가지 않게).
+            for (Pending p : pending) {
+                reports.addAll(earlierVintageReports(p, security, lastNoncontrolling));
+            }
+        }
         List<com.stockscreener.pipeline.datasource.FlowBasis> bases = new ArrayList<>();
         if (krGate) {
             for (int year = fromFiscalYear; year <= toFiscalYear; year++) {
@@ -230,6 +261,56 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
             }
         }
         return new FullStatementResult(reports, calls, missing, FilingTrace.ofReports(seen), bases);
+    }
+
+    private static boolean discontinuedId(String id) {
+        return DartFullAccountMapper.ID_DISCONTINUED.contains(id) || DartFullAccountMapper.ID_DISCONTINUED_CONTROLLING.contains(id)
+                || DartFullAccountMapper.ID_DISCONTINUED_NONCONTROLLING.contains(id);
+    }
+
+    /** 그 보고서의 저장 이른 판마다 인스턴스로 지은 보고서(국내 관문 켬). 인스턴스가 그 기간의 표를 못 주면 그 판은 뺀다. */
+    private List<RawFinancialReport> earlierVintageReports(Pending latest, SecurityRef security, LocalDate lastNoncontrolling)
+            throws DataSourceException {
+        String reprtCode = REPORT_CODES.get(latest.period());
+        String latestRcept = latest.list().get(0).path("rcept_no").asString("");
+        List<RawFinancialReport> out = new ArrayList<>();
+        for (DartEarlierInstances.Instance instance : earlierInstances.of(security.stockId(), latest.year(), reprtCode, latestRcept)) {
+            com.stockscreener.pipeline.datasource.kr.xbrl.DartXbrlFactReader.Statements facts;
+            try (java.io.InputStream in = new java.io.ByteArrayInputStream(instance.xbrl())) {
+                facts = com.stockscreener.pipeline.datasource.kr.xbrl.DartXbrlFactReader.readStatements(in,
+                        security.ticker() + " " + instance.rceptNo());
+            } catch (java.io.IOException e) {
+                throw new IllegalStateException("바이트 배열 스트림이 닫히다 실패했다", e);
+            }
+            Map<String, String> labels = instance.labelsKo() == null ? Map.of()
+                    : com.stockscreener.pipeline.datasource.kr.xbrl.DartXbrlLabels.entityLabels(instance.labelsKo(),
+                            security.ticker() + " " + instance.rceptNo());
+            DartXbrlStatementRows.Built built = DartXbrlStatementRows.rows(facts.facts(), latest.year(), latest.period(),
+                    instance.rceptNo(), reprtCode, DartXbrlStatementRows.Face.of(latest.list()), labels);
+            if (built == null) {
+                log.info("이른 판 인스턴스가 그 기간의 표를 안 준다 — 그 판은 짓지 않는다. ticker={} {}/{} 접수번호={}",
+                        security.ticker(), latest.year(), latest.period().label(), instance.rceptNo());
+                continue;
+            }
+            Pending p = new Pending(latest.year(), latest.period(), built.list(), built.consolidated());
+            out.add(instanceReport(built, latest.year(), latest.period(), security, gateOpen(p, lastNoncontrolling)));
+        }
+        return out;
+    }
+
+    /** 인스턴스로 옮긴 행 하나로 보고서를 짓는다 — 응답과 같은 매퍼 · 다른 것은 중단영업 부재의 뜻 하나다. */
+    RawFinancialReport instanceReport(DartXbrlStatementRows.Built built, int year, StatementPeriod period, SecurityRef security,
+                                      boolean gateOpen) {
+        // 부재는 판정하지 않는다 — 인스턴스는 표준계정코드 없는 줄을 못 옮겨 「그 판이 안 실었다」를 모른다(저장값을 지우지 않게).
+        RawFinancialReport report = toReport(built.list(), year, period, security, gateOpen, built.consolidated())
+                .withoutAbsenceJudgement();
+        if (built.unknownIncome().stream().anyMatch(DartFullStatementAdapter::discontinuedId)) {
+            // 인스턴스에 중단영업 사실이 있는데 행으로 못 옮겼다(누계로만 · 본문 줄 없음 · 값 갈림) — 3개월 값은 0이 아니라 모른다(매퍼의 「줄이
+            // 없으면 0」은 응답에 줄이 없을 때의 뜻이다).
+            // 비워 두면 쓰기기가 저장값을 안 지운다.
+            report = report.withoutDiscontinued();
+        }
+        return report;
     }
 
     /**
@@ -246,6 +327,11 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
      * 그것이 「비지배를 낸 적 있다」의 증거다.
      */
     static LocalDate lastNoncontrollingIncome(List<Pending> pending) {
+        return lastNoncontrollingIncome(pending, false);
+    }
+
+    /** @param anyLine 국내 관문 켬 — 비지배 귀속 줄이면 무엇이든 증거로 센다({@link DartFullAccountMapper#hasAnyNoncontrollingIncome}) */
+    static LocalDate lastNoncontrollingIncome(List<Pending> pending, boolean anyLine) {
         LocalDate last = null;
         for (Pending p : pending) {
             if (!p.consolidated()) {
@@ -254,7 +340,8 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
             List<JsonNode> income = DartFullAccountMapper.sections(p.list(),
                     DartFullAccountMapper.SJ_INCOME,
                     DartFullAccountMapper.SJ_COMPREHENSIVE_INCOME);
-            if (!DartFullAccountMapper.hasNoncontrollingIncome(income)) {
+            if (!(anyLine ? DartFullAccountMapper.hasAnyNoncontrollingIncome(income)
+                    : DartFullAccountMapper.hasNoncontrollingIncome(income))) {
                 continue;
             }
             LocalDate end = DartReportPeriods.periodRange(p.year(), p.period().label())[1];
@@ -352,7 +439,7 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
      * 삼성전자만 둘 다 갖고 나머지 셋은 {@code CIS}뿐이었다. 둘 다 있을 때 매출·영업이익은
      * {@code IS}에 있으므로 순서가 뜻을 정한다.
      */
-    private RawFinancialReport toReport(JsonNode list, int year, StatementPeriod period,
+    RawFinancialReport toReport(JsonNode list, int year, StatementPeriod period,
                                         SecurityRef security, boolean gateOpen,
                                         boolean consolidated) {
         List<JsonNode> balance = DartFullAccountMapper.sections(
@@ -375,7 +462,8 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
                     list, security.ticker(), year, label);
         }
 
-        BigDecimal controllingIncome = DartFullAccountMapper.controllingIncome(income, gateOpen);
+        // 국내 관문 켬: 게이트(연결 총액 = 지배)는 마지막 갈래다 — 원장이 지배 몫을 다른 줄로 확인해 주면 그것이 먼저다.
+        BigDecimal controllingIncome = DartFullAccountMapper.controllingIncome(income, !krGate && gateOpen);
         if (krGate && controllingIncome == null) {
             // 국내 관문 켬(F2b): 지배주주 순이익 줄 없이 계속 · 중단 지배 몫만 준 보고서(솔브레인홀딩스 FY2025 계속 42.1B + 중단 445.2B).
             controllingIncome = DartFullAccountMapper.controllingIncomeFromParts(income);
@@ -384,6 +472,9 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
             // 국내 관문 켬: 지배 · 비지배 몫을 표준계정코드 없이 실은 연결 보고서 — 항등식(지배 + 비지배 = 당기순이익)이 확인할 때만.
             controllingIncome = DartFullAccountMapper.controllingIncomeFromNonstandardRows(
                     income, DartFullAccountMapper.consolidatedIncome(income), "thstrm_amount");
+        }
+        if (krGate && controllingIncome == null && gateOpen) {
+            controllingIncome = DartFullAccountMapper.consolidatedIncome(income);
         }
 
         RawFinancialReport report = new RawFinancialReport(

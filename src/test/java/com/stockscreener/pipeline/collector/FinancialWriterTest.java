@@ -572,6 +572,26 @@ class FinancialWriterTest {
             assertThat(outcome.changed()).isZero();
             assertThat(vintageRow("2026-03-15").get("current_assets")).isNull();
         }
+
+        @Test
+        @DisplayName("국내 관문 켬 — 같은 공시일의 이른 판 행은 채운다(그 판의 XBRL 인스턴스로 지은 보고서) · 정정 판은 그대로다")
+        void gatedFillsTheSamePublicationVintageRow() {
+            writer.write(stockId, List.of(withoutBalanceDetail(2025, "FY", "2026-03-15", "1000")));
+            writer.write(stockId, List.of(report(2025, "FY", "2026-04-20", "950")));
+            FinancialWriter gated = new FinancialWriter(jdbcTemplate, invalidations, true);
+
+            FinancialWriter.Outcome outcome = gated.writeDetailed(stockId,
+                    List.of(report(2025, "FY", "2026-03-15", "1000")),
+                    WriteMode.FILL_WITHOUT_REVISION);
+
+            assertThat(outcome.filled()).isEqualTo(1);
+            assertThat(vintageRow("2026-03-15").get("current_assets")).isNotNull();
+            assertThat(vintageRow("2026-03-15").get("is_latest")).isEqualTo(false);
+            assertThat(rowCount()).as("판을 더하지 않는다").isEqualTo(2);
+            assertThat(gated.writeDetailed(stockId, List.of(report(2025, "FY", "2026-02-01", "1000")),
+                    WriteMode.FILL_WITHOUT_REVISION).inserted()).as("그 공시일의 행이 없으면 넣지 않는다").isZero();
+            assertThat(rowCount()).isEqualTo(2);
+        }
     }
 
     @Nested

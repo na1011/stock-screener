@@ -57,8 +57,8 @@ class KrEarlierVintagesTest {
         filing("20260324000835", LocalDate.of(2026, 3, 24), SAME);
         filing("20260619000667", LocalDate.of(2026, 6, 19), SAME);
 
-        assertThat(earlier.insert(stockId)).isEqualTo(2);
-        assertThat(earlier.insert(stockId)).as("멱등").isZero();
+        assertThat(earlier.insert(stockId).inserted()).isEqualTo(2);
+        assertThat(earlier.insert(stockId).inserted()).as("멱등").isZero();
 
         assertThat(vintages("FY")).containsExactly("2026-03-13 0 false 5000", "2026-06-19 1 true 5000");
         assertThat(vintages("Q4")).as("같은 보고서의 유도 Q4도 함께").containsExactly("2026-03-13 0 false 1250",
@@ -72,10 +72,10 @@ class KrEarlierVintagesTest {
         annual(LocalDate.of(2026, 6, 19));
         filing("20260313001191", LocalDate.of(2026, 3, 13), SAME);
         filing("20260619000667", LocalDate.of(2026, 6, 19), SAME);
-        assertThat(gated.insert(stockId)).isEqualTo(2);
+        assertThat(gated.insert(stockId).inserted()).isEqualTo(2);
 
         jdbc.update("UPDATE financial_statement SET discontinued_income = 7, discontinued_rule = 1 WHERE stock_id = ? AND is_latest", stockId);
-        assertThat(gated.insert(stockId)).as("넣을 것은 없다").isZero();
+        assertThat(gated.insert(stockId).inserted()).as("넣을 것은 없다").isZero();
         assertThat(jdbc.queryForList("""
                 SELECT discontinued_income FROM financial_statement WHERE stock_id = ? AND published_at = DATE '2026-03-13'
                 """, java.math.BigDecimal.class, stockId)).as("원천 값으로 다시 맞췄다").allSatisfy(v -> assertThat(v).isEqualByComparingTo("7"));
@@ -100,8 +100,8 @@ class KrEarlierVintagesTest {
         // 소스 판은 지은 판보다 먼저 만들어졌다 — 복사본 원천 붙이기(같은 라벨의 더 늦은 판보다 뒤에 만들어진 행)가 지은 판을 안 잡아야 한다.
         jdbc.update("UPDATE financial_statement SET created_at = now() - interval '1 day' WHERE stock_id = ?", stockId);
 
-        assertThat(gated.insert(stockId)).as("넣는 것은 이른 판 넣기만 센다").isZero();
-        assertThat(gated.insert(stockId)).isZero();
+        assertThat(gated.insert(stockId).inserted()).as("넣는 것은 이른 판 넣기만 센다").isZero();
+        assertThat(gated.insert(stockId).inserted()).isZero();
         assertThat(gated.restoreFourthQuarters(stockId)).as("멱등").isZero();
 
         assertThat(vintages("Q4")).containsExactly("2026-03-13 0 false 2000", "2026-06-19 1 true 2100");
@@ -115,6 +115,33 @@ class KrEarlierVintagesTest {
 
         jdbc.update("DELETE FROM financial_statement WHERE stock_id = ? AND fiscal_period = 'FY' AND NOT is_latest", stockId);
         assertThat(vintages("Q4")).as("원천 FY 판이 회수되면 함께 간다").containsExactly("2026-06-19 1 true 2100");
+    }
+
+    @Test
+    @DisplayName("국내 관문 켬 — FY 판 날짜의 소스 4분기 이른 판은 빈 유량 칸만 같은 항등식으로 채우고 그 공시일부터 지운다")
+    void gatedFillsTheEmptyFlowsOfASourceFourthQuarterVintage() {
+        List<String> invalidations = new java.util.ArrayList<>();
+        KrEarlierVintages gated = new KrEarlierVintages(jdbc, new FinancialWriter(jdbc,
+                (stock, from, reason) -> invalidations.add(from.toString())), true);
+        jdbc.update("""
+                INSERT INTO financial_statement (stock_id, fiscal_year, fiscal_period, period_start, period_end, published_at,
+                    revision_no, is_latest, report_code, currency_code, net_income, net_income_controlling)
+                VALUES (?, 2025, 'Q1', DATE '2025-01-01', DATE '2025-03-31', DATE '2025-05-15', 0, true, '11013', 'KRW', 1000, 900),
+                       (?, 2025, 'Q2', DATE '2025-04-01', DATE '2025-06-30', DATE '2025-08-14', 0, true, '11012', 'KRW', 1000, 900),
+                       (?, 2025, 'Q3', DATE '2025-07-01', DATE '2025-09-30', DATE '2025-11-14', 0, true, '11014', 'KRW', 1000, 900),
+                       (?, 2025, 'FY', DATE '2025-01-01', DATE '2025-12-31', DATE '2026-03-13', 0, false, '11011', 'KRW', 5000, 4500),
+                       (?, 2025, 'FY', DATE '2025-01-01', DATE '2025-12-31', DATE '2026-06-19', 1, true, '11011', 'KRW', 5200, 4700),
+                       (?, 2025, 'Q4', DATE '2025-10-01', DATE '2025-12-31', DATE '2026-03-13', 0, false, '11011', 'KRW', 2000, null),
+                       (?, 2025, 'Q4', DATE '2025-10-01', DATE '2025-12-31', DATE '2026-06-19', 1, true, '11011', 'KRW', 2200, 2000)
+                """, stockId, stockId, stockId, stockId, stockId, stockId, stockId);
+
+        assertThat(gated.restoreFourthQuarters(stockId)).isOne();
+        assertThat(jdbc.queryForList("""
+                SELECT net_income || '/' || net_income_controlling FROM financial_statement
+                WHERE stock_id = ? AND fiscal_period = 'Q4' ORDER BY published_at
+                """, String.class, stockId)).as("값이 있는 칸은 그대로 · 빈 칸만").containsExactly("2000.00/1800.00", "2200.00/2000.00");
+        assertThat(invalidations).containsExactly("2026-03-13");
+        assertThat(gated.restoreFourthQuarters(stockId)).as("멱등").isZero();
     }
 
     @Test
@@ -144,7 +171,7 @@ class KrEarlierVintagesTest {
         filing("20260313001191", LocalDate.of(2026, 3, 13), CHANGED);
         filing("20260619000667", LocalDate.of(2026, 6, 19), SAME);
 
-        assertThat(earlier.insert(stockId)).isZero();
+        assertThat(earlier.insert(stockId).inserted()).isZero();
         assertThat(vintages("FY")).containsExactly("2026-06-19 0 true 5000");
     }
 
@@ -158,7 +185,7 @@ class KrEarlierVintagesTest {
                 """, stockId);
         filing("20260619000667", LocalDate.of(2026, 6, 19), SAME);
 
-        assertThat(earlier.insert(stockId)).isZero();
+        assertThat(earlier.insert(stockId).inserted()).isZero();
     }
 
     private void annual(LocalDate publishedAt) {

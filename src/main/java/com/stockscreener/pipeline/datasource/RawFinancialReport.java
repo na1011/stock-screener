@@ -295,6 +295,40 @@ public record RawFinancialReport(
                 profitBeforeTax, derived, absent, consolidated, controlling, DISCONTINUED_RULE_VERSION, sharesSuperseded);
     }
 
+    /**
+     * 중단영업 판정을 뗀다 — 「모른다」(금액 · 규칙 판 없음 · 부재 판정도 뺀다). 쓰기기는 빈 값으로 저장값을 안 지운다. 국내 이른 판을
+     * 인스턴스로 지을 때 중단영업 줄이 누계로만 태깅된 경우가 쓴다(그 3개월 값은 0이 아니다).
+     */
+    public RawFinancialReport withoutDiscontinued() {
+        Set<String> absent = new java.util.LinkedHashSet<>(assertedAbsent);
+        absent.remove(DISCONTINUED_INCOME);
+        absent.remove(DISCONTINUED_INCOME_CONTROLLING);
+        return new RawFinancialReport(fiscalYear, fiscalPeriod, periodStart, periodEnd, publishedAt, reportCode,
+                currencyCode, revenue, operatingIncome, netIncome, totalAssets, totalEquity,
+                totalEquityControlling, totalLiabilities, currentAssets, currentLiabilities,
+                retainedEarnings, operatingCashFlow, sharesOutstanding, eps, bps, costOfSales,
+                cashAndEquivalents, capex, inventories, netIncomeControlling, interestAndDividendIncome,
+                noninterestIncome, interestExpense, noninterestExpense, benefitsLossesAndExpenses,
+                grossProfit, operatingExpenses, costsAndExpenses, incomeTaxExpense,
+                profitBeforeTax, derived, Set.copyOf(absent), null, null, null, sharesSuperseded);
+    }
+
+    /**
+     * 부재 판정을 뗀다 — 값은 그대로 · {@code assertedAbsent}만 비운다. 국내 이른 판을 인스턴스로 지을 때 쓴다: 인스턴스는 표준계정코드 없는 줄을
+     * 못 옮기므로 「그 판이 그 칸을 안 실었다」를 판정할 수 없다(쓰기기는 판정된 부재로만 저장값을 지운다).
+     */
+    public RawFinancialReport withoutAbsenceJudgement() {
+        return new RawFinancialReport(fiscalYear, fiscalPeriod, periodStart, periodEnd, publishedAt, reportCode,
+                currencyCode, revenue, operatingIncome, netIncome, totalAssets, totalEquity,
+                totalEquityControlling, totalLiabilities, currentAssets, currentLiabilities,
+                retainedEarnings, operatingCashFlow, sharesOutstanding, eps, bps, costOfSales,
+                cashAndEquivalents, capex, inventories, netIncomeControlling, interestAndDividendIncome,
+                noninterestIncome, interestExpense, noninterestExpense, benefitsLossesAndExpenses,
+                grossProfit, operatingExpenses, costsAndExpenses, incomeTaxExpense,
+                profitBeforeTax, derived, Set.of(), discontinuedIncome, discontinuedIncomeControlling, discontinuedRule,
+                sharesSuperseded);
+    }
+
     /** 같은 행에 「이 주식수가 대신한 옛 추출 값」을 단다 — 관문 켬 미국 어댑터가 판을 다 지은 뒤 싣는다. */
     public RawFinancialReport withSharesSuperseded(Set<BigDecimal> superseded) {
         return new RawFinancialReport(fiscalYear, fiscalPeriod, periodStart, periodEnd, publishedAt, reportCode,

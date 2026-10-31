@@ -95,6 +95,9 @@ public class KrXbrlCollectJob {
         AtomicInteger registers = new AtomicInteger();
         AtomicInteger unbound = new AtomicInteger();
         AtomicInteger earlier = new AtomicInteger();
+        AtomicInteger restored = new AtomicInteger();
+        AtomicInteger labels = new AtomicInteger();
+        AtomicInteger resynced = new AtomicInteger();
         try {
             for (KrXbrlStore.Target target : targets) {
                 SecurityRef security = new SecurityRef(target.stockId(), target.market(), target.ticker());
@@ -105,9 +108,13 @@ public class KrXbrlCollectJob {
                     noFile.addAndGet(c.noFile());
                     registers.addAndGet(c.registers());
                     unbound.addAndGet(c.unbound());
-                    int inserted = earlierVintages.insert(target.stockId());
-                    earlier.addAndGet(inserted);
-                    return c.fetched() + c.reread() + c.noFile() + c.registers() + inserted;
+                    labels.addAndGet(c.labels());
+                    KrEarlierVintages.Outcome vintages = earlierVintages.insert(target.stockId());
+                    earlier.addAndGet(vintages.inserted());
+                    restored.addAndGet(vintages.restored());
+                    resynced.addAndGet(vintages.resynced());
+                    return c.fetched() + c.reread() + c.noFile() + c.registers() + c.labels() + vintages.inserted() + vintages.restored()
+                            + vintages.resynced();
                 });
             }
         } catch (DataSourceException e) {
@@ -117,8 +124,9 @@ public class KrXbrlCollectJob {
             execution.failUnexpectedly(e);
             throw e;
         }
-        String note = "받음=%d 캐시재판독=%d 원본없음=%d 명부=%d 짝없는판=%d 이른판=%d 남은상한=%s 미해결=%d".formatted(fetched.get(),
-                reread.get(), noFile.get(), registers.get(), unbound.get(), earlier.get(),
+        String note = "받음=%d 캐시재판독=%d 원본없음=%d 명부=%d 짝없는판=%d 이름표=%d 이른판=%d 4분기복원=%d 복사본맞춤=%d 남은상한=%s 미해결=%d"
+                .formatted(fetched.get(), reread.get(), noFile.get(), registers.get(), unbound.get(), labels.get(), earlier.get(),
+                        restored.get(), resynced.get(),
                 budget == Integer.MAX_VALUE ? "없음" : String.valueOf(remaining.get()), store.unresolved());
         log.info("국내 보통주 몫 재료 받기를 마쳤다. {}", note);
         return execution.finish(note);

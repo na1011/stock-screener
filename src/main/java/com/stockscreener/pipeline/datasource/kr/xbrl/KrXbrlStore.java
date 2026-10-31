@@ -48,16 +48,22 @@ public class KrXbrlStore {
                 rs.getString(3), (Integer) rs.getObject(4)), args);
     }
 
-    /** 재무 행의 판(Q4 빼고 — Q4는 유도 행이라 판이 없다). */
-    public record RowVintage(int fiscalYear, String fiscalPeriod, LocalDate published) {
+    /** 재무 행의 판(Q4 빼고 — Q4는 유도 행이라 판이 없다) · 그 라벨의 최신 판인가. */
+    public record RowVintage(int fiscalYear, String fiscalPeriod, LocalDate published, boolean latest) {
+
+        public RowVintage(int fiscalYear, String fiscalPeriod, LocalDate published) {
+            this(fiscalYear, fiscalPeriod, published, false);
+        }
     }
 
     public List<RowVintage> rowVintages(long stockId) {
         return jdbc.query("""
-                SELECT DISTINCT fiscal_year, fiscal_period, published_at FROM financial_statement
+                SELECT fiscal_year, fiscal_period, published_at, bool_or(is_latest) FROM financial_statement
                  WHERE stock_id = ? AND fiscal_period <> 'Q4'
+                 GROUP BY 1, 2, 3
                  ORDER BY 1, 2, 3
-                """, (rs, n) -> new RowVintage(rs.getInt(1), rs.getString(2), rs.getObject(3, LocalDate.class)), stockId);
+                """, (rs, n) -> new RowVintage(rs.getInt(1), rs.getString(2), rs.getObject(3, LocalDate.class), rs.getBoolean(4)),
+                stockId);
     }
 
     /** 목록의 판 하나와 그 재료 상태. */
@@ -116,6 +122,32 @@ public class KrXbrlStore {
     }
 
     /** 명부를 받은 사업연도. */
+    /** 저장 이른 판의 짝 — 접수번호 · 회사 코드 · 그 접수의 판독 상태({@code OK}가 아니면 그 판은 인스턴스로 못 짓는다). */
+    public record StoredVintage(String corpCode, String rceptNo, String status) {
+    }
+
+    /**
+     * 그 (사업연도, 보고서 코드)의 저장 <b>이른</b> 판(최신 아님 · 그 라벨 저장 최신보다 이른 공시일 · {@code latestRceptNo}의 접수일도 아님 ·
+     * 국내 관문 컬럼 {@code copied_from} · {@code derived_from}이 빈 소스 판) 각각에 짝인 접수 — 같은 날 여럿이면 가장 늦은 접수번호 하나(어댑터가
+     * 공시일을 접수번호로 읽고 DART가 그날 마지막 판을 준 것과 같다 · 그 접수가 판독 전이면 더 이른 같은 날 접수로 물러나지 않는다).
+     * 국내 관문 켬에서만 부른다(두 컬럼은 관문 시험 마이그레이션 V70_10 · V70_11).
+     */
+    public List<StoredVintage> storedEarlierVintages(long stockId, int year, String reprtCode, String latestRceptNo) {
+        return jdbc.query("""
+                SELECT DISTINCT ON (f.published_at) b.corp_code, b.rcept_no, b.xbrl_status
+                  FROM financial_statement f
+                  JOIN kr_report_xbrl b ON b.stock_id = f.stock_id AND b.bsns_year = f.fiscal_year AND b.reprt_code = f.report_code
+                       AND left(b.rcept_no, 8) = to_char(f.published_at, 'YYYYMMDD')
+                 WHERE f.stock_id = ? AND f.fiscal_year = ? AND f.report_code = ? AND f.fiscal_period <> 'Q4'
+                   AND NOT f.is_latest AND f.copied_from IS NULL AND f.derived_from IS NULL
+                   AND f.published_at < (SELECT max(l.published_at) FROM financial_statement l WHERE l.stock_id = f.stock_id
+                                           AND l.fiscal_year = f.fiscal_year AND l.fiscal_period = f.fiscal_period)
+                   AND to_char(f.published_at, 'YYYYMMDD') <> left(?, 8)
+                 ORDER BY f.published_at, b.rcept_no DESC
+                """, (rs, i) -> new StoredVintage(rs.getString(1), rs.getString(2), rs.getString(3)), stockId, year, reprtCode,
+                latestRceptNo);
+    }
+
     public List<Integer> registerYears(long stockId) {
         return jdbc.queryForList("SELECT bsns_year FROM kr_share_register WHERE stock_id = ? ORDER BY 1", Integer.class, stockId);
     }

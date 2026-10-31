@@ -2,6 +2,7 @@ package com.stockscreener.pipeline.datasource.kr.xbrl;
 
 import com.stockscreener.pipeline.datasource.DataSourceException;
 import com.stockscreener.pipeline.datasource.kr.DartCorpCodeCache;
+import com.stockscreener.pipeline.datasource.kr.DartEarlierInstances;
 import com.stockscreener.pipeline.datasource.kr.DartReportKey;
 import com.stockscreener.pipeline.datasource.kr.DartXbrlClient;
 import com.stockscreener.pipeline.datasource.kr.xbrl.KrXbrlStore.Filing;
@@ -43,7 +44,9 @@ import java.util.zip.GZIPOutputStream;
  * 한도 소진({@code RATE_LIMITED})과 인증 실패는 그 자리에서 던진다.
  */
 @Component
-public class KrXbrlCollector {
+public class KrXbrlCollector implements DartEarlierInstances {
+
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(KrXbrlCollector.class);
 
     /** 국내 재무 행의 첫 사업연도(재무 적재 창 — 2015~). 목록은 그 해 1월 1일부터 묻는다. */
     static final LocalDate LIST_FROM = LocalDate.of(2015, 1, 1);
@@ -66,8 +69,12 @@ public class KrXbrlCollector {
         return client.getIfAvailable() != null && corpCodes.getIfAvailable() != null;
     }
 
-    /** 한 종목의 결과 — 받은 판 · 캐시에서 다시 읽은 판 · 원본 없음 · 받은 명부 · 이번에 실패한 판. */
-    public record Collected(int fetched, int reread, int noFile, int registers, int failed, int unbound) {
+    /** 한 종목의 결과 — 받은 판 · 캐시에서 다시 읽은 판 · 원본 없음 · 받은 명부 · 이번에 실패한 판 · 이름표만 다시 받은 판. */
+    public record Collected(int fetched, int reread, int noFile, int registers, int failed, int unbound, int labels) {
+
+        public Collected(int fetched, int reread, int noFile, int registers, int failed, int unbound) {
+            this(fetched, reread, noFile, registers, failed, unbound, 0);
+        }
     }
 
     /**
@@ -122,14 +129,17 @@ public class KrXbrlCollector {
                         continue;
                     }
                     fetchBudget.decrementAndGet();
-                    Optional<byte[]> got = dart.instance(filing.rceptNo());
+                    Optional<DartXbrlClient.Original> got = dart.original(filing.rceptNo());
                     if (got.isEmpty()) {
                         store.recordNoFile(target.stockId(), filing.rceptNo());
                         noFile++;
                         continue;
                     }
-                    instance = got.get();
+                    instance = got.get().instance();
                     writeCache(cached, instance);
+                    if (got.get().labelsKo() != null) {
+                        writeCache(labelPath(corpCode, filing.rceptNo()), got.get().labelsKo());
+                    }
                     fetched++;
                 }
             } catch (DataSourceException e) {
@@ -158,6 +168,28 @@ public class KrXbrlCollector {
                 throw new IllegalStateException("바이트 배열 스트림이 닫히다 실패했다", e);
             }
         }
+        // 비최신 판의 한국어 이름표 — 이른 판을 그 판의 인스턴스로 지을 때 표준계정코드 없는 줄의 계정명이다(ADR-0201). 인스턴스만 캐시하던 때
+        // 받은 판은 이름표가 없어 한 번 더 받는다(같은 1콜 · 새로 받기 상한 안). 값을 안 바꾸는 재료다.
+        int labels = 0;
+        for (RowVintage row : rows) {
+            Filing filing = row.latest() ? null : bound(row, filings);
+            if (filing == null || !"OK".equals(filing.status()) || Files.exists(labelPath(corpCode, filing.rceptNo()))
+                    || !Files.exists(cachePath(corpCode, filing.rceptNo())) || fetchBudget.get() <= 0) {
+                continue;
+            }
+            fetchBudget.decrementAndGet();
+            Optional<DartXbrlClient.Original> got = dart.original(filing.rceptNo());
+            if (got.isPresent() && got.get().labelsKo() != null) {
+                try {
+                    writeCache(labelPath(corpCode, filing.rceptNo()), got.get().labelsKo());
+                    labels++;
+                } catch (IOException e) {
+                    throw new DataSourceException(DataSourceException.Kind.TRANSIENT, "dart", "이름표 캐시를 못 썼다: " + filing.rceptNo(), e);
+                }
+            } else {
+                log.warn("원본 ZIP에 한국어 이름표가 없다. stockId={} 접수번호={}", target.stockId(), filing.rceptNo());
+            }
+        }
         int registers = 0;
         Set<Integer> wanted = new TreeSet<>();
         for (RowVintage row : rows) {
@@ -176,7 +208,7 @@ public class KrXbrlCollector {
             throw new DataSourceException(DataSourceException.Kind.TRANSIENT, "dart",
                     "판 %d개의 재료를 못 받았다(첫 실패: %s) — 표에 남겼고 다음 실행이 다시 받는다".formatted(failed, firstFailure));
         }
-        return new Collected(fetched, reread, noFile, registers, failed, unbound);
+        return new Collected(fetched, reread, noFile, registers, failed, unbound, labels);
     }
 
     /** 재무 행 판 하나의 짝 — 같은 (사업연도, 보고서 코드) · 같은 날 판 중 가장 늦은 접수번호. 없으면 {@code null}. */
@@ -212,6 +244,35 @@ public class KrXbrlCollector {
             return true;
         }
         return !"NO_FILE".equals(f.status()) && (f.readerVersion() == null || f.readerVersion() != DartXbrlFactReader.READER_VERSION);
+    }
+
+    /** {@link DartEarlierInstances} — 저장 이른 판의 인스턴스를 디스크 캐시에서(0콜). */
+    @Override
+    public List<DartEarlierInstances.Instance> of(long stockId, int year, String reprtCode, String latestRceptNo)
+            throws DataSourceException {
+        List<DartEarlierInstances.Instance> out = new ArrayList<>();
+        for (KrXbrlStore.StoredVintage v : store.storedEarlierVintages(stockId, year, reprtCode, latestRceptNo)) {
+            Path cached = cachePath(v.corpCode(), v.rceptNo());
+            if (!"OK".equals(v.status()) || !Files.exists(cached)) {
+                // 그 판의 원장을 아직 못 읽었다 — 그 판은 이번에 안 짓는다(받기 · 판독은 kr-xbrl-collect의 일). 조용히 넘기지 않는다.
+                log.warn("저장 이른 판의 인스턴스가 없어 그 판을 인스턴스로 못 짓는다. stockId={} {}/{} 접수번호={} 상태={} 캐시={}",
+                        stockId, year, reprtCode, v.rceptNo(), v.status(), Files.exists(cached));
+                continue;
+            }
+            try {
+                Path labelCache = labelPath(v.corpCode(), v.rceptNo());
+                out.add(new DartEarlierInstances.Instance(v.rceptNo(), readCache(cached),
+                        Files.exists(labelCache) ? readCache(labelCache) : null));
+            } catch (IOException e) {
+                throw new DataSourceException(DataSourceException.Kind.TRANSIENT, "dart", "인스턴스 캐시를 못 읽었다: " + cached, e);
+            }
+        }
+        return out;
+    }
+
+    /** 한국어 이름표 링크베이스 캐시 — 인스턴스 옆. */
+    Path labelPath(String corpCode, String rceptNo) {
+        return cacheDir.resolve(corpCode).resolve(rceptNo + ".lab-ko.xml.gz");
     }
 
     Path cachePath(String corpCode, String rceptNo) {

@@ -551,6 +551,29 @@ final class DartFullAccountMapper {
      * <b>손익 비지배 행이 이 응답에 있는가.</b> 값이 아니라 <b>행의 존재</b>를 묻는다 —
      * 비지배가 정확히 0인 회사도 행은 내고, 그것이 「비지배를 낸 적 있다」의 증거다.
      */
+    /**
+     * <b>이 보고서가 비지배를 냈는가</b>(국내 관문 켬의 「비지배를 낸 적 있다」 증거). 당기순이익 비지배 줄은 원래대로 존재만으로(0이어도 그 줄을
+     * 내는 것이 비지배가 있다는 표시다), 그 밖의 표준 비지배 귀속 줄(계속 · 중단영업 몫 · 총포괄이익 귀속)은 값이 0이 아닐 때. 당기순이익 귀속 줄만
+     * 보면 비지배를 계속 몫으로만 싣는 회사(솔브레인홀딩스 2025 3분기 비지배 계속 1.87B)에서 게이트가 열려 연결 총액이 지배주주 순이익이 된다 ·
+     * 존재만 보면 비지배가 없는데 총포괄 비지배 줄을 0으로 싣는 회사(031330 · 지배 자본 = 총자본)에서 게이트가 닫힌다. 표준계정코드 없는 줄의 이름은
+     * 증거로 안 쓴다 — 089970 2025 3분기는 「비지배지분」 이름 줄에 당기순이익과 같은 값을 실었고(지배 자본 = 총자본) 그 한 줄이 앞 기간 전부의
+     * 게이트를 닫았다(녹화본 스윕 30칸).
+     */
+    static boolean hasAnyNoncontrollingIncome(List<JsonNode> income) {
+        if (hasNoncontrollingIncome(income)) {
+            return true;
+        }
+        for (JsonNode row : income) {
+            String id = row.path("account_id").asString("");
+            boolean line = id.contains("NoncontrollingInterests");
+            BigDecimal value = line ? DartAccountMapper.parseAmount(row.path("thstrm_amount").asString("")) : null;
+            if (value != null && value.signum() != 0) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     static boolean hasNoncontrollingIncome(List<JsonNode> income) {
         for (JsonNode row : income) {
             if (ID_NET_INCOME_NONCONTROLLING.contains(row.path("account_id").asString(""))) {

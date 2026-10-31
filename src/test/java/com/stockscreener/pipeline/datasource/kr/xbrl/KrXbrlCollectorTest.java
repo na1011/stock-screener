@@ -95,8 +95,8 @@ class KrXbrlCollectorTest {
     @Test
     @DisplayName("재무 판마다 같은 날 접수번호를 짝지어 받는다 — 원본 없음은 NO_FILE · 명부는 행의 해와 앞 해 · Q4는 판이 없다")
     void bindsFetchesAndRecords() throws Exception {
-        when(client.instance(HALF)).thenReturn(Optional.of(INSTANCE.getBytes(StandardCharsets.UTF_8)));
-        when(client.instance(ANNUAL)).thenReturn(Optional.empty());
+        when(client.original(HALF)).thenReturn(Optional.of(new DartXbrlClient.Original(INSTANCE.getBytes(StandardCharsets.UTF_8), null)));
+        when(client.original(ANNUAL)).thenReturn(Optional.empty());
 
         KrXbrlCollector.Collected c = collector.collect(target, TODAY, new AtomicInteger(10));
 
@@ -113,29 +113,48 @@ class KrXbrlCollectorTest {
     @Test
     @DisplayName("이미 받은 판은 다시 안 받는다 · 캐시에 원본이 있으면 외부 0콜로 다시 판독한다")
     void reusesStoredAndCachedMaterial() throws Exception {
-        when(client.instance(HALF)).thenReturn(Optional.of(INSTANCE.getBytes(StandardCharsets.UTF_8)));
-        when(client.instance(ANNUAL)).thenReturn(Optional.empty());
+        when(client.original(HALF)).thenReturn(Optional.of(new DartXbrlClient.Original(INSTANCE.getBytes(StandardCharsets.UTF_8), null)));
+        when(client.original(ANNUAL)).thenReturn(Optional.empty());
         collector.collect(target, TODAY, new AtomicInteger(10));
 
         KrXbrlCollector.Collected again = collector.collect(target, TODAY, new AtomicInteger(10));
         assertThat(again.fetched()).isZero();
-        verify(client, times(1)).instance(HALF);
+        verify(client, times(1)).original(HALF);
         verify(client, times(1)).periodicFilings(any(), any(), any());
 
         // 판독기 판이 바뀐 꼴 — 재료 행을 옛 판으로 돌리면 캐시에서 다시 읽는다(외부 호출 없이).
         jdbc.update("UPDATE kr_report_xbrl SET reader_version = 0 WHERE rcept_no = ?", HALF);
         KrXbrlCollector.Collected reread = collector.collect(target, TODAY, new AtomicInteger(0));
         assertThat(reread.reread()).isEqualTo(1);
-        verify(client, times(1)).instance(HALF);
+        verify(client, times(1)).original(HALF);
         assertThat(jdbc.queryForObject("SELECT reader_version FROM kr_report_xbrl WHERE rcept_no = ?", Integer.class, HALF))
                 .isEqualTo(DartXbrlFactReader.READER_VERSION);
     }
 
     @Test
+    @DisplayName("이름표 — 받을 때 인스턴스와 함께 캐시 · 인스턴스만 캐시된 비최신 판은 이름표만 한 번 더 받는다(최신 판은 안 받는다)")
+    void cachesLabelsAndBackfillsThemForEarlierVintages() throws Exception {
+        when(client.original(HALF)).thenReturn(Optional.of(new DartXbrlClient.Original(INSTANCE.getBytes(StandardCharsets.UTF_8), null)));
+        when(client.original(ANNUAL)).thenReturn(Optional.empty());
+        collector.collect(target, TODAY, new AtomicInteger(10));
+        assertThat(Files.exists(cache.resolve("00000001").resolve(HALF + ".lab-ko.xml.gz"))).isFalse();
+
+        // 반기 판이 정정으로 밀려 비최신이 됐다 — 이름표가 없으니 한 번 더 받는다.
+        jdbc.update("UPDATE financial_statement SET is_latest = false WHERE stock_id = ? AND fiscal_period = 'Q2'", target.stockId());
+        when(client.original(HALF)).thenReturn(Optional.of(new DartXbrlClient.Original(INSTANCE.getBytes(StandardCharsets.UTF_8),
+                "<labels/>".getBytes(StandardCharsets.UTF_8))));
+        KrXbrlCollector.Collected c = collector.collect(target, TODAY, new AtomicInteger(10));
+
+        assertThat(c.labels()).isOne();
+        assertThat(Files.exists(cache.resolve("00000001").resolve(HALF + ".lab-ko.xml.gz"))).isTrue();
+        assertThat(collector.collect(target, TODAY, new AtomicInteger(10)).labels()).as("멱등").isZero();
+    }
+
+    @Test
     @DisplayName("판 하나의 받기 실패는 FAILED로 남고 종목은 실패로 올린다 · 상한이 0이면 새로 안 받는다")
     void recordsFailuresAndRespectsTheBudget() throws Exception {
-        when(client.instance(HALF)).thenThrow(new DataSourceException(DataSourceException.Kind.TRANSIENT, "dart", "끊김"));
-        when(client.instance(ANNUAL)).thenReturn(Optional.empty());
+        when(client.original(HALF)).thenThrow(new DataSourceException(DataSourceException.Kind.TRANSIENT, "dart", "끊김"));
+        when(client.original(ANNUAL)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> collector.collect(target, TODAY, new AtomicInteger(10)))
                 .isInstanceOf(DataSourceException.class).hasMessageContaining("판 1개");
@@ -143,7 +162,8 @@ class KrXbrlCollectorTest {
         assertThat(store.unresolved()).isGreaterThanOrEqualTo(1);
 
         // 앞 스텁이 던지므로 when(...)으로 다시 부르면 그 호출이 던진다 — doReturn으로 바꾼다.
-        org.mockito.Mockito.doReturn(Optional.of(INSTANCE.getBytes(StandardCharsets.UTF_8))).when(client).instance(HALF);
+        org.mockito.Mockito.doReturn(Optional.of(new DartXbrlClient.Original(INSTANCE.getBytes(StandardCharsets.UTF_8), null)))
+                .when(client).original(HALF);
         KrXbrlCollector.Collected none = collector.collect(target, TODAY, new AtomicInteger(0));
         assertThat(none.fetched()).isZero();
         assertThat(status(HALF)).isEqualTo("FAILED");

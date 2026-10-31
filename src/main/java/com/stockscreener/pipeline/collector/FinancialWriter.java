@@ -77,10 +77,40 @@ public class FinancialWriter {
 
     private final JdbcTemplate jdbcTemplate;
     private final IndicatorInvalidationPort invalidationPort;
+    /**
+     * 국내 관문 설정({@code stockscreener.gate.kr}) — 켜졌으면 {@link WriteMode#FILL_WITHOUT_REVISION}도 같은 공시일의 이른 판을 채운다
+     * (전체 재무제표 어댑터가 저장 이른 판을 그 판의 XBRL 인스턴스로 지어 함께 낸다 · {@code DartXbrlStatementRows}). 꺼지면 이 축이 없던 때와 같다.
+     */
+    private final boolean krGate;
+    /** 미국 관문 설정 — 켜졌으면 미국 종목의 채움도 무효화한다({@link #fillMissing}의 「채우기와 무효화」). */
+    private final boolean usGate;
 
     public FinancialWriter(JdbcTemplate jdbcTemplate, IndicatorInvalidationPort invalidationPort) {
+        this(jdbcTemplate, invalidationPort, false, false);
+    }
+
+    public FinancialWriter(JdbcTemplate jdbcTemplate, IndicatorInvalidationPort invalidationPort, boolean krGate) {
+        this(jdbcTemplate, invalidationPort, krGate, false);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public FinancialWriter(JdbcTemplate jdbcTemplate, IndicatorInvalidationPort invalidationPort,
+                           @org.springframework.beans.factory.annotation.Value("${stockscreener.gate.kr}") boolean krGate,
+                           @org.springframework.beans.factory.annotation.Value("${stockscreener.gate.us}") boolean usGate) {
         this.jdbcTemplate = jdbcTemplate;
         this.invalidationPort = invalidationPort;
+        this.krGate = krGate;
+        this.usGate = usGate;
+    }
+
+    /** 그 종목 시장의 관문이 켜졌는가. */
+    private boolean gatedMarket(long stockId) {
+        if (!krGate && !usGate) {
+            return false;
+        }
+        List<String> market = jdbcTemplate.queryForList("SELECT market_code FROM stock WHERE id = ?", String.class, stockId);
+        boolean us = !market.isEmpty() && "US".equals(market.get(0));
+        return !market.isEmpty() && (us ? usGate : krGate);
     }
 
     /** 같은 회계기간이 다시 들어왔을 때 무엇까지 할지. */
@@ -326,6 +356,7 @@ public class FinancialWriter {
                                  boolean completeVintageHistory, boolean insertEarlierVintages,
                                  VintageGuard guard) {
         Tally tally = new Tally();
+        tally.fillInvalidates = gatedMarket(stockId);
         if (mode != WriteMode.APPEND_ONLY) {
             if (guard.uncertain()) {
                 log.warn("판 이력의 빈칸을 몰라 이 종목의 판 회수를 멈춘다. stockId={}", stockId);
@@ -645,14 +676,20 @@ public class FinancialWriter {
             // **851행·248종목**(교정 139칸 · 채움 3,292칸)이고, 교정 139칸 중 41칸이 50% 넘게
             // 어긋나며 최대는 UHAL 매출 **173배**다.
             //
-            // MUST: FILL_MISSING에서만 연다. FILL_WITHOUT_REVISION을 쓰는 것은
-            // FullStatementCollector 하나이고 그 어댑터는 **DART 전용**인데(KOSPI·KOSDAQ),
-            // DART는 (corp_code, 연도, 보고서코드)마다 판을 하나만 낸다 — 미국의
-            // 「companyfacts가 판 집합을 전부 준다」를 그쪽에 이식하는 것이 된다.
-            // 실측으로 그 한정 때문에 잃는 표적은 **0행**이다(16,342행 전부 미국·refill 경로).
+            // MUST: FILL_MISSING에서만 연다 — 국내 관문 켬의 FILL_WITHOUT_REVISION은 예외다. FILL_WITHOUT_REVISION을 쓰는 것은
+            // FullStatementCollector 하나이고 그 어댑터는 **DART 전용**인데(KOSPI·KOSDAQ), DART 재무 API는
+            // (corp_code, 연도, 보고서코드)마다 판을 하나만 낸다 — 그 API의 이른 판은 오지 않는다. 국내 관문 켬은 그 어댑터가
+            // 저장 이른 판을 **그 판 자신의 XBRL 인스턴스**로 지어 함께 낸다(판마다 원장이 하나씩 있다 · 녹화본 9,110 보고서에서
+            // 인스턴스가 낸 값이 전부 응답과 같다 · DartXbrlStatementRows) — 같은 공시일의 행을 고치므로 섞이지 않는다.
             // APPEND_ONLY는 일일 갱신이라 판 이력을 다시 쓰면 안 된다.
-            Existing vintage = mode == WriteMode.FILL_MISSING
+            boolean instanceVintage = krGate && mode == WriteMode.FILL_WITHOUT_REVISION;
+            Existing vintage = mode == WriteMode.FILL_MISSING || instanceVintage
                     ? findVintage(stockId, report, managed) : null;
+            if (vintage != null && instanceVintage && derivedCopy(vintage.id())) {
+                // 복사본 · 유도 판은 원천이 정한다(KrEarlierVintages.resync · restoreFourthQuarters) — 여기서 채우면 다음 맞춤이 되돌려 왕복한다.
+                tally.untouched++;
+                return;
+            }
             if (vintage != null) {
                 fillMissing(stockId, vintage, report, managed, tally);
                 return;
@@ -741,7 +778,9 @@ public class FinancialWriter {
     /**
      * 같은 공시본의 <b>NULL 컬럼만</b> 채운다.
      *
-     * <p><b>NULL을 채울 때는 무효화하지 않고, 값을 덮을 때는 무효화한다.</b> 둘은 다른 일이다.
+     * <p><b>NULL을 채울 때는 무효화하지 않고, 값을 덮을 때는 무효화한다.</b> 둘은 다른 일이다. <b>단 그 종목 시장의 관문이 켜졌으면 채움도
+     * 그 판의 공시일부터 무효화한다</b> — 관문 켬의 읽는 쪽은 빈 칸을 다른 기저로 폴백해(지배 NI → 연결 순이익 · 지배 자본 → 총자본 · 4분기 칸 →
+     * 그 해 FY) 아래 첫 논거의 전제(전부 null 전파형)가 안 선다(반증 두 렌즈 · 2026-11-01).
      *
      * <ul>
      *   <li><b>채우기는 「행 없음 → 행 생김」이다.</b> 금액을 소비하는 지표는 전부 null
@@ -891,6 +930,12 @@ public class FinancialWriter {
 
         if (!toFill.isEmpty()) {
             tally.filled++;
+            if (tally.fillInvalidates && toCorrect.isEmpty() && toClear.isEmpty()) {
+                // 관문 켬: 「채우기 전에는 지울 낡은 값이 없다」가 안 선다 — 읽는 쪽이 빈 칸을 다른 기저로 폴백한다(지배 NI → 연결 순이익 ·
+                // 지배 자본 → 총자본 · 4분기 칸 → 그 해 FY · FinancialMath). 그 판의 공시일부터 지운다(그 앞 봉은 이 판을 못 본다 · 창이 좁다).
+                invalidationPort.invalidate(stockId, report.publishedAt(),
+                        IndicatorInvalidationPort.InvalidationReason.FINANCIAL_REVISED);
+            }
         }
         if (!toCorrect.isEmpty() || !toClear.isEmpty()) {
             // 무엇이 무엇으로 바뀌었는지를 반드시 남긴다. 이 경로의 위험은 갱신 자체가 아니라
@@ -978,6 +1023,17 @@ public class FinancialWriter {
                 },
                 stockId, report.fiscalYear(), report.fiscalPeriod(), report.publishedAt());
         return found.isEmpty() ? null : found.get(0);
+    }
+
+    /** 국내 관문 컬럼({@code copied_from} · {@code derived_from} — V70_10 · V70_11)이 찬 행인가. 국내 관문 켬에서만 부른다. */
+    private boolean derivedCopy(long id) {
+        return Boolean.TRUE.equals(jdbcTemplate.queryForObject(
+                "SELECT copied_from IS NOT NULL OR derived_from IS NOT NULL FROM financial_statement WHERE id = ?", Boolean.class, id));
+    }
+
+    /** 그 날부터 그 종목 지표를 지운다 — 판을 고친 다른 갈래(국내 4분기 복원)가 쓰기기와 같은 무효화 규칙을 쓰게. */
+    public void invalidateFrom(long stockId, LocalDate from) {
+        invalidationPort.invalidate(stockId, from, IndicatorInvalidationPort.InvalidationReason.FINANCIAL_REVISED);
     }
 
     private static final String Q_FIND_VINTAGE = """
@@ -1222,6 +1278,8 @@ public class FinancialWriter {
         private int sharesCorrected;
         private int sharesHandRepairKept;
         private LocalDate earliestInsertedPublication;
+        /** 관문이 켜진 시장의 종목 — 채움도 무효화한다. */
+        private boolean fillInvalidates;
 
         long changed() {
             return (long) inserted + revised + filled + corrected + insertedEarlier;

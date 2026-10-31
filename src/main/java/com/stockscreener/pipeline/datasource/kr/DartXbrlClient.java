@@ -124,6 +124,18 @@ public class DartXbrlClient {
      * {@code reprt_code}는 원장이 판을 고르는 데 안 쓴다(같은 ZIP이 온다 · {@code dart-xbrl.md}) — 그래도 필수 인자라 사업보고서 코드를 준다.
      */
     public Optional<byte[]> instance(String rceptNo) throws DataSourceException {
+        return original(rceptNo).map(Original::instance);
+    }
+
+    /** 판 하나의 원본 ZIP에서 꺼낸 것 — 인스턴스와 한국어 이름표 링크베이스({@code _lab-ko.xml} · 없으면 {@code null}). */
+    public record Original(byte[] instance, byte[] labelsKo) {
+    }
+
+    /**
+     * 판 하나의 원본 — {@link #instance}와 같은 1콜이되 한국어 이름표도 꺼낸다(표준계정코드 없는 줄의 계정명 · 2026-11-01 탐침: ZIP에
+     * {@code .xbrl} · {@code .xsd} · {@code _def} · {@code _cal} · {@code _pre} · {@code _lab-ko} · {@code _lab-en}).
+     */
+    public Optional<Original> original(String rceptNo) throws DataSourceException {
         requireKey();
         String context = "fnlttXbrl.xml rcept_no=" + rceptNo;
         DartResponse.acquire(rateLimiter, dailyQuota, XBRL_PATH, context);
@@ -149,7 +161,7 @@ public class DartXbrlClient {
             }
             throw e;
         }
-        return Optional.of(instanceEntry(body, context));
+        return Optional.of(new Original(instanceEntry(body, context), entry(body, DartXbrlClient::koreanLabels, context)));
     }
 
     /** 사업연도 하나의 주식총수 명부(사업보고서 11011) 줄들. {@code 013}이면 빈 목록이다(그 해 보고서가 없다). */
@@ -184,6 +196,36 @@ public class DartXbrlClient {
         } catch (RuntimeException e) {
             throw new DataSourceException(DataSourceException.Kind.TRANSIENT, DartResponse.SOURCE_NAME, "호출에 실패했다. " + context, e);
         }
+    }
+
+    /**
+     * 한국어 이름표 링크베이스인가 — 두 형식이다(2026-11-01 탐침): 새 판 {@code entity<회사>_<날짜>_lab-ko.xml} · 옛 판
+     * {@code labels\lab_<회사>-ko_<날짜>.xml}.
+     */
+    static boolean koreanLabels(String entryName) {
+        String base = entryName.substring(Math.max(entryName.lastIndexOf('/'), entryName.lastIndexOf('\\')) + 1).toLowerCase();
+        return base.endsWith(".xml") && base.contains("lab") && (base.contains("-ko") || base.contains("_ko"));
+    }
+
+    /** ZIP에서 이름이 {@code wanted}에 맞는 항목 하나. 없으면 {@code null} · 둘 이상이면 본문 이상이다. */
+    static byte[] entry(byte[] zip, java.util.function.Predicate<String> wanted, String context) throws DataSourceException {
+        byte[] found = null;
+        try (ZipInputStream in = new ZipInputStream(new ByteArrayInputStream(zip))) {
+            ZipEntry entry;
+            while ((entry = in.getNextEntry()) != null) {
+                if (entry.isDirectory() || !wanted.test(entry.getName())) {
+                    continue;
+                }
+                if (found != null) {
+                    throw new DataSourceException(DataSourceException.Kind.MALFORMED, DartResponse.SOURCE_NAME,
+                            "ZIP에 같은 종류 항목이 둘 이상이다(" + entry.getName() + "). " + context);
+                }
+                found = in.readAllBytes();
+            }
+        } catch (IOException e) {
+            throw new DataSourceException(DataSourceException.Kind.TRANSIENT, DartResponse.SOURCE_NAME, "ZIP을 못 풀었다. " + context, e);
+        }
+        return found;
     }
 
     /** ZIP에서 인스턴스 하나({@code .xbrl})를 꺼낸다. 없거나 둘 이상이면 본문 이상이다. */

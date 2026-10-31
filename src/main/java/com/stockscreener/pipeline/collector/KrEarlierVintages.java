@@ -86,16 +86,16 @@ public class KrEarlierVintages {
     private record Candidate(long rowId, int fiscalYear, String fiscalPeriod, LocalDate earliest) {
     }
 
-    /** 그 종목의 라벨마다 이른 판을 넣는다. 넣은 판 수를 낸다. 호출부의 트랜잭션 안에서 돈다(종목 하나 = 한 트랜잭션). */
-    public int insert(long stockId) {
+    /** 한 종목의 결과 — 넣은 이른 판 · (국내 관문 켬) 다시 짓거나 지운 4분기 판 · 원천으로 다시 맞춘 복사본. */
+    public record Outcome(int inserted, int restored, int resynced) {
+    }
+
+    /** 그 종목의 라벨마다 이른 판을 넣는다. 호출부의 트랜잭션 안에서 돈다(종목 하나 = 한 트랜잭션). */
+    public Outcome insert(long stockId) {
         List<Candidate> candidates = jdbc.query(CANDIDATES, (rs, i) -> new Candidate(rs.getLong("id"), rs.getInt("fiscal_year"),
                 rs.getString("fiscal_period"), rs.getObject("earliest", LocalDate.class)), stockId, stockId, stockId);
         if (candidates.isEmpty()) {
-            if (krGate) {
-                restoreFourthQuarters(stockId);
-                resync(stockId);
-            }
-            return 0;
+            return krGate ? new Outcome(0, restoreFourthQuarters(stockId), resync(stockId)) : new Outcome(0, 0, 0);
         }
         String columns = copiedColumns();
         int inserted = 0;
@@ -110,11 +110,7 @@ public class KrEarlierVintages {
                     Date.valueOf(c.earliest()), stockId, c.fiscalYear(), c.fiscalPeriod(), c.rowId());
             writer.renumberLabel(stockId, c.fiscalYear(), c.fiscalPeriod());
         }
-        if (krGate) {
-            restoreFourthQuarters(stockId);
-            resync(stockId);
-        }
-        return inserted;
+        return krGate ? new Outcome(inserted, restoreFourthQuarters(stockId), resync(stockId)) : new Outcome(inserted, 0, 0);
     }
 
     /** 4분기 유량 칸 — FY − 그날 보이던 1~3분기로 짓는다(어댑터의 4분기 유도와 같은 칸). 나머지 유량은 국내 4분기 행이 안 싣는다. */
@@ -168,27 +164,67 @@ public class KrEarlierVintages {
                 QUARTER.formatted("Q1", "q1"), QUARTER.formatted("Q2", "q2"), QUARTER.formatted("Q3", "q3"));
         String fromDesired = names.stream().map(n -> "d." + n).collect(Collectors.joining(", "));
         String current = names.stream().map(n -> "c." + n).collect(Collectors.joining(", "));
-        List<Integer> touched = new ArrayList<>(jdbc.queryForList("""
+        org.springframework.jdbc.core.RowMapper<Object[]> yearAndDay = (rs, i) -> new Object[]{rs.getInt(1),
+                rs.getObject(2, LocalDate.class)};
+        List<Object[]> renumber = new ArrayList<>(jdbc.query("""
                 DELETE FROM financial_statement c WHERE c.stock_id = ? AND c.derived_from IS NOT NULL
                    AND c.derived_from NOT IN (SELECT d.fy_id FROM (%s) d)
-                RETURNING c.fiscal_year
-                """.formatted(desired), Integer.class, stockId, stockId));
-        int updated = jdbc.update("""
+                RETURNING c.fiscal_year, c.published_at
+                """.formatted(desired), yearAndDay, stockId, stockId));
+        List<Object[]> changed = new ArrayList<>(renumber);
+        changed.addAll(jdbc.query("""
                 UPDATE financial_statement c SET (%1$s) = (%2$s)
                   FROM (%3$s) d
                  WHERE c.derived_from = d.fy_id AND ROW(%4$s) IS DISTINCT FROM ROW(%2$s)
-                """.formatted(columns, fromDesired, desired, current), stockId);
-        touched.addAll(jdbc.queryForList("""
+                RETURNING c.fiscal_year, c.published_at
+                """.formatted(columns, fromDesired, desired, current), yearAndDay, stockId));
+        List<Object[]> inserted = jdbc.query("""
                 INSERT INTO financial_statement (%1$s, published_at, revision_no, is_latest, derived_from)
                 SELECT %2$s, d.fy_published, 10000 + row_number() OVER (), false, d.fy_id
                   FROM (%3$s) d
                  WHERE NOT EXISTS (SELECT 1 FROM financial_statement c WHERE c.derived_from = d.fy_id)
-                RETURNING fiscal_year
-                """.formatted(columns, fromDesired, desired), Integer.class, stockId));
-        for (Integer year : new java.util.TreeSet<>(touched)) {
+                RETURNING fiscal_year, published_at
+                """.formatted(columns, fromDesired, desired), yearAndDay, stockId);
+        renumber.addAll(inserted);
+        changed.addAll(inserted);
+        changed.addAll(fillSourceFourthQuarters(stockId, names, yearAndDay));
+        for (Integer year : new java.util.TreeSet<>(renumber.stream().map(r -> (Integer) r[0]).toList())) {
             writer.renumberLabel(stockId, year, "Q4");
         }
-        return touched.size() + updated;
+        invalidateFromEarliest(stockId, changed);
+        return changed.size();
+    }
+
+    /**
+     * 그 FY 판의 공시일에 앉은 소스 4분기 이른 판(최신 아님 · 복사본 · 유도 판 아님)의 빈 유량 칸을 같은 항등식으로 채운다 — FY 이른 판이 그 판의
+     * 인스턴스로 채워지면(ADR-0201) 그 날 4분기만 빈 채 남지 않게. 값이 있는 칸은 안 바꾼다(그 판을 지은 어댑터의 값이다).
+     */
+    private List<Object[]> fillSourceFourthQuarters(long stockId, List<String> names,
+                                                    org.springframework.jdbc.core.RowMapper<Object[]> yearAndDay) {
+        List<String> flows = FOURTH_QUARTER_FLOWS.stream().filter(names::contains).toList();
+        String set = flows.stream().map(n -> "%1$s = coalesce(c.%1$s, fy.%1$s - (q1.%1$s + q2.%1$s + q3.%1$s))".formatted(n))
+                .collect(Collectors.joining(", "));
+        String anyFillable = flows.stream().map(n -> "(c.%1$s IS NULL AND fy.%1$s - (q1.%1$s + q2.%1$s + q3.%1$s) IS NOT NULL)".formatted(n))
+                .collect(Collectors.joining(" OR "));
+        return jdbc.query("""
+                UPDATE financial_statement c SET %1$s
+                  FROM financial_statement fy
+                  JOIN %2$s ON true
+                  JOIN %3$s ON true
+                  JOIN %4$s ON true
+                 WHERE c.stock_id = ? AND c.fiscal_period = 'Q4' AND NOT c.is_latest AND c.copied_from IS NULL AND c.derived_from IS NULL
+                   AND fy.stock_id = c.stock_id AND fy.fiscal_year = c.fiscal_year AND fy.fiscal_period = 'FY'
+                   AND fy.published_at = c.published_at
+                   AND q1.currency_code = fy.currency_code AND q2.currency_code = fy.currency_code AND q3.currency_code = fy.currency_code
+                   AND (%5$s)
+                RETURNING c.fiscal_year, c.published_at
+                """.formatted(set, QUARTER.formatted("Q1", "q1"), QUARTER.formatted("Q2", "q2"), QUARTER.formatted("Q3", "q3"),
+                anyFillable), yearAndDay, stockId);
+    }
+
+    /** 판을 고친 가장 이른 공시일부터 지운다 — 그 판이 보이던 봉의 값이 바뀐다(쓰기기와 같은 무효화). */
+    private void invalidateFromEarliest(long stockId, List<Object[]> changed) {
+        changed.stream().map(r -> (LocalDate) r[1]).min(LocalDate::compareTo).ifPresent(day -> writer.invalidateFrom(stockId, day));
     }
 
     /** 그 FY 판의 공시일에 보이던 그 해 분기 판 하나(공시일 · 번호가 가장 늦은 것). */
@@ -215,11 +251,15 @@ public class KrEarlierVintages {
         String target = String.join(", ", names);
         String source = names.stream().map(n -> "s." + n).collect(Collectors.joining(", "));
         String current = names.stream().map(n -> "c." + n).collect(Collectors.joining(", "));
-        return jdbc.update("""
+        List<Object[]> changed = jdbc.query("""
                 UPDATE financial_statement c SET (%1$s) = (%2$s)
                   FROM financial_statement s
                  WHERE s.id = c.copied_from AND c.stock_id = ? AND ROW(%3$s) IS DISTINCT FROM ROW(%2$s)
-                """.formatted(target, source, current), stockId);
+                RETURNING c.fiscal_year, c.published_at
+                """.formatted(target, source, current), (rs, i) -> new Object[]{rs.getInt(1), rs.getObject(2, LocalDate.class)},
+                stockId);
+        invalidateFromEarliest(stockId, changed);
+        return changed.size();
     }
 
     /** 판을 복사할 열 — 식별 · 생성 시각 · 판 표지(공시일 · 번호 · 최신)를 뺀 전부. 열이 늘어도 같이 따라간다. */

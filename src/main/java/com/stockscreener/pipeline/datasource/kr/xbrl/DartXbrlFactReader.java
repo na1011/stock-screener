@@ -111,11 +111,38 @@ public final class DartXbrlFactReader {
     private record Context(LocalDate start, LocalDate end, Basis basis, List<Member> members) {
     }
 
-    private record Raw(Source source, String concept, String contextRef, String text) {
+    private record Raw(Source source, String concept, String contextRef, String unitRef, String text) {
+    }
+
+    /**
+     * 재무제표 사실 하나 — 표준 이름공간({@code ifrs-full} · DART 표준)의 수 사실 전부와 그 통화({@code iso4217} 단위가 아니면 {@code null}).
+     * 그 판의 전체 재무제표를 인스턴스로 다시 짓는 재료다({@code DartXbrlStatementRows} · 국내 관문 켬).
+     */
+    public record StatementFact(Fact fact, String currency) {
+    }
+
+    /** 재무제표 판독 결과 — {@link Result}와 같되 사실마다 통화를 단다. */
+    public record Statements(List<StatementFact> facts, int unreadableValues) {
     }
 
     public static Result read(InputStream xml, String context) throws DataSourceException {
+        Parsed parsed = parse(xml, context, DartXbrlFactReader::material);
+        return new Result(parsed.facts().stream().map(StatementFact::fact).toList(), parsed.unreadable());
+    }
+
+    /** 수 사실 전부(회사 확장 개념 포함 — 그 줄은 이름표로만 옮긴다). 남기는 재료 집합과 무관해 판독기 판을 안 탄다. */
+    public static Statements readStatements(InputStream xml, String context) throws DataSourceException {
+        Parsed parsed = parse(xml, context, (source, local) -> true);
+        return new Statements(parsed.facts(), parsed.unreadable());
+    }
+
+    private record Parsed(List<StatementFact> facts, int unreadable) {
+    }
+
+    private static Parsed parse(InputStream xml, String context, java.util.function.BiPredicate<Source, String> keep)
+            throws DataSourceException {
         Map<String, Context> contexts = new HashMap<>();
+        Map<String, String> currencies = new HashMap<>();
         List<Raw> raws = new ArrayList<>();
         try {
             XMLStreamReader r = factory().createXMLStreamReader(xml);
@@ -130,8 +157,16 @@ public final class DartXbrlFactReader {
                         contexts.put(r.getAttributeValue(null, "id"), readContext(r, context));
                         continue;
                     }
+                    if (XBRLI.equals(ns) && "unit".equals(local)) {
+                        String id = r.getAttributeValue(null, "id");
+                        String currency = readCurrency(r);
+                        if (currency != null) {
+                            currencies.put(id, currency);
+                        }
+                        continue;
+                    }
                     Source source = Source.of(ns);
-                    if (!material(source, local)) {
+                    if (!keep.test(source, local)) {
                         continue;
                     }
                     String contextRef = r.getAttributeValue(null, "contextRef");
@@ -139,9 +174,10 @@ public final class DartXbrlFactReader {
                         continue;
                     }
                     boolean nil = "true".equals(r.getAttributeValue(XSI, "nil"));
+                    String unitRef = r.getAttributeValue(null, "unitRef");
                     String text = nil ? null : r.getElementText();
                     if (text != null && !text.isBlank()) {
-                        raws.add(new Raw(source, local, contextRef, text.trim()));
+                        raws.add(new Raw(source, local, contextRef, unitRef, text.trim()));
                     }
                 }
             } finally {
@@ -150,7 +186,7 @@ public final class DartXbrlFactReader {
         } catch (XMLStreamException e) {
             throw new DataSourceException(DataSourceException.Kind.MALFORMED, SOURCE, "인스턴스를 읽지 못했다. " + context, e);
         }
-        List<Fact> facts = new ArrayList<>();
+        List<StatementFact> facts = new ArrayList<>();
         int unreadable = 0;
         for (Raw raw : raws) {
             Context c = contexts.get(raw.contextRef());
@@ -166,9 +202,35 @@ public final class DartXbrlFactReader {
                 unreadable++;
                 continue;
             }
-            facts.add(new Fact(raw.source(), raw.concept(), c.start(), c.end(), c.basis(), c.members(), value));
+            facts.add(new StatementFact(new Fact(raw.source(), raw.concept(), c.start(), c.end(), c.basis(), c.members(), value),
+                    raw.unitRef() == null ? null : currencies.get(raw.unitRef())));
         }
-        return new Result(List.copyOf(facts), unreadable);
+        return new Parsed(List.copyOf(facts), unreadable);
+    }
+
+    /** 단위가 {@code iso4217} 측정 하나(나눗셈 없음)면 그 통화 코드, 아니면 {@code null}(주식 수 · 주당 금액 · 비율). */
+    private static String readCurrency(XMLStreamReader r) throws XMLStreamException {
+        List<String> measures = new ArrayList<>();
+        boolean divide = false;
+        int depth = 1;
+        while (depth > 0 && r.hasNext()) {
+            int event = r.next();
+            if (event == XMLStreamConstants.START_ELEMENT) {
+                depth++;
+                if ("divide".equals(r.getLocalName())) {
+                    divide = true;
+                } else if ("measure".equals(r.getLocalName())) {
+                    measures.add(r.getElementText().trim());
+                    depth--;
+                }
+            } else if (event == XMLStreamConstants.END_ELEMENT) {
+                depth--;
+            }
+        }
+        if (divide || measures.size() != 1 || !measures.get(0).startsWith("iso4217:")) {
+            return null;
+        }
+        return measures.get(0).substring("iso4217:".length());
     }
 
     static boolean material(Source source, String local) {
