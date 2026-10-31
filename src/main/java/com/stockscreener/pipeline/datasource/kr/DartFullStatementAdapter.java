@@ -528,8 +528,10 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
         if (reference == null) {
             return List.of();
         }
-        // 연결 · 별도 기저는 가리지 않는다(주요계정 어댑터와 같다) — 뒤 보고서가 다른 기저로 실은 것도 「다시 실었다」다.
-        java.util.function.Function<Pending, Pending> same = p -> p;
+        // 연결 · 별도 기저는 가리지 않는다(주요계정 어댑터와 같다) — 뒤 보고서가 다른 기저로 실은 것도 「다시 실었다」다. 통화는 같아야 한다
+        // (통화가 갈린 해는 ADR-0110이 다룬다 — 원화 · 달러를 견주면 모든 칸이 대체로 걸린다 · 01032486).
+        String currency = currencyOf(reference.list());
+        java.util.function.Function<Pending, Pending> same = p -> p != null && currency != null && currency.equals(currencyOf(p.list())) ? p : null;
         Pending q1 = same.apply(pending.get(StatementPeriod.Q1));
         Pending h1 = same.apply(pending.get(StatementPeriod.Q2));
         Pending q3 = same.apply(pending.get(StatementPeriod.Q3));
@@ -555,9 +557,13 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
         }
         for (Map.Entry<String, java.util.Set<String>> e : ANNUAL_ONLY.entrySet()) {
             boolean cash = !"income_tax_expense".equals(e.getKey()) && !"profit_before_tax".equals(e.getKey());
+            // capex · 법인세는 부호 표기가 보고서마다 갈린다(같은 금액이 다음 보고서에서 음수 — 법인세 90/191 · capex 15/29 · 반증 안 렌즈) —
+            // 소비자도 절댓값 · 부호 정규화로 읽으므로(FreeCashFlow · effectiveTaxRateOf) 크기로 견준다.
+            boolean magnitude = "capex".equals(e.getKey()) || "income_tax_expense".equals(e.getKey());
             values.put(e.getKey(), new DartFlowBasis.Values(null, null, null, null, null,
-                    annualAmount(fy, e.getValue(), "thstrm_amount", cash), null, null, null, null, null,
-                    annualAmount(nfy, e.getValue(), "frmtrm_amount", cash), annualAmount(n2fy, e.getValue(), "bfefrmtrm_amount", cash)));
+                    abs(annualAmount(fy, e.getValue(), "thstrm_amount", cash), magnitude), null, null, null, null, null,
+                    abs(annualAmount(nfy, e.getValue(), "frmtrm_amount", cash), magnitude),
+                    abs(annualAmount(n2fy, e.getValue(), "bfefrmtrm_amount", cash), magnitude)));
         }
         DartFlowBasis.Dates dates = new DartFlowBasis.Dates(published(reports.get("Q1")), published(reports.get("Q2")),
                 published(reports.get("Q3")), published(reports.get("FY")), filed(nq1, year + 1), filed(nh1, year + 1),
@@ -600,6 +606,26 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
 
     private static BigDecimal firstOf(BigDecimal a, BigDecimal b) {
         return a != null ? a : b;
+    }
+
+    /** 응답 행의 통화가 하나면 그 통화 · 아니면 {@code null}. */
+    private static String currencyOf(JsonNode list) {
+        String found = null;
+        for (JsonNode row : list) {
+            String c = row.path("currency").asString("");
+            if (c.isEmpty()) {
+                continue;
+            }
+            if (found != null && !found.equals(c)) {
+                return null;
+            }
+            found = c;
+        }
+        return found;
+    }
+
+    private static BigDecimal abs(BigDecimal v, boolean magnitude) {
+        return v == null || !magnitude ? v : v.abs();
     }
 
     private static BigDecimal annualAmount(Pending p, java.util.Set<String> ids, String field, boolean cashFlow) {

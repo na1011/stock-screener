@@ -111,11 +111,22 @@ class CommonEquityBasisTest {
         java.util.List<FinancialFigures> quarters = new java.util.ArrayList<>(java.util.List.of(
                 FinancialFiguresFixture.quarter(LocalDate.of(2025, 12, 31)).revenue(new BigDecimal("260")).build().withAnnualOfYear(fy),
                 FinancialFiguresFixture.quarter(LocalDate.of(2025, 9, 30)).revenue(new BigDecimal("250")).build(),
-                FinancialFiguresFixture.quarter(LocalDate.of(2025, 6, 30)).revenue(null).build(),
-                FinancialFiguresFixture.quarter(LocalDate.of(2025, 3, 31)).revenue(null).build()));
+                FinancialFiguresFixture.quarter(LocalDate.of(2025, 6, 30)).revenue(null)
+                        .flowsSupersededOn(java.util.Map.of("revenue", LocalDate.of(2025, 11, 14))).build(),
+                FinancialFiguresFixture.quarter(LocalDate.of(2025, 3, 31)).periodStart(LocalDate.of(2025, 1, 1)).revenue(null)
+                        .flowsSupersededOn(java.util.Map.of("revenue", LocalDate.of(2025, 11, 14))).build()));
         assertThat(FinancialMath.sumTrailingFourQuarters(quarters, FinancialFigures::revenue)).isEqualByComparingTo("1000");
         quarters.set(0, FinancialFiguresFixture.quarter(LocalDate.of(2025, 12, 31)).revenue(new BigDecimal("260")).build());
-        assertThat(FinancialMath.sumTrailingFourQuarters(quarters, FinancialFigures::revenue)).isNull();
+        assertThat(FinancialMath.sumTrailingFourQuarters(quarters, FinancialFigures::revenue)).as("FY가 안 달렸다").isNull();
+
+        java.util.List<FinancialFigures> plainGap = java.util.List.of(
+                FinancialFiguresFixture.quarter(LocalDate.of(2025, 12, 31)).revenue(new BigDecimal("260")).build().withAnnualOfYear(fy),
+                FinancialFiguresFixture.quarter(LocalDate.of(2025, 9, 30)).revenue(new BigDecimal("250")).build(),
+                FinancialFiguresFixture.quarter(LocalDate.of(2025, 6, 30)).revenue(null).build(),
+                FinancialFiguresFixture.quarter(LocalDate.of(2025, 3, 31)).periodStart(LocalDate.of(2025, 1, 1))
+                        .revenue(new BigDecimal("240")).build());
+        assertThat(FinancialMath.sumTrailingFourQuarters(plainGap, FinancialFigures::revenue))
+                .as("기저 대체가 아닌 빈칸은 FY로 메우지 않는다").isNull();
     }
 
     @Test

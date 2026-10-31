@@ -116,6 +116,18 @@ public class KrEarlierVintages {
 
     /** 국내 관문 켬 — 그 종목의 복사본을 원천 값으로 다시 맞춘다. 고친 행 수. */
     int resync(long stockId) {
+        // 원천이 안 붙은 복사본(관문 마이그레이션 V70_10 뒤 꺼진 잡이 넣은 것)에 같은 술어로 먼저 원천을 붙인다 — 멱등.
+        jdbc.update("""
+                UPDATE financial_statement r
+                   SET copied_from = (SELECT s.id FROM financial_statement s
+                                       WHERE s.stock_id = r.stock_id AND s.fiscal_year = r.fiscal_year AND s.fiscal_period = r.fiscal_period
+                                         AND s.published_at > r.published_at AND s.created_at < r.created_at
+                                       ORDER BY s.published_at LIMIT 1)
+                 WHERE r.stock_id = ? AND r.copied_from IS NULL
+                   AND EXISTS (SELECT 1 FROM financial_statement s
+                                WHERE s.stock_id = r.stock_id AND s.fiscal_year = r.fiscal_year AND s.fiscal_period = r.fiscal_period
+                                  AND s.published_at > r.published_at AND s.created_at < r.created_at)
+                """, stockId);
         List<String> names = java.util.Arrays.asList(copiedColumns().split(", "));
         String target = String.join(", ", names);
         String source = names.stream().map(n -> "s." + n).collect(Collectors.joining(", "));

@@ -468,15 +468,20 @@ final class FinancialMath {
      */
     private static BigDecimal fiscalYearOf(List<FinancialFigures> quarters, Function<FinancialFigures, BigDecimal> field, int offset) {
         FinancialFigures q4 = quarters.get(offset);
-        if (q4.fiscalPeriod() != FinancialFigures.FiscalPeriod.Q4 || q4.annualOfYear() == null) {
+        FinancialFigures annual = q4.annualOfYear();
+        FinancialFigures q1 = quarters.get(offset + TTM_QUARTERS - 1);
+        // 짝은 기간으로 맺는다 — FY가 1분기 시작 ~ 4분기 끝을 덮을 때만(라벨만 같은 다른 기간을 잇지 않는다).
+        if (q4.fiscalPeriod() != FinancialFigures.FiscalPeriod.Q4 || annual == null
+                || !java.util.Objects.equals(annual.periodStart(), q1.periodStart())
+                || !java.util.Objects.equals(annual.periodEnd(), q4.periodEnd())) {
             return null;
         }
-        for (int i = 1; i < TTM_QUARTERS; i++) {
-            if (quarters.get(offset + i).fiscalYear() != q4.fiscalYear()) {
-                return null;
-            }
+        // 기저 대체(ADR-0200)가 비운 창만 — 어댑터가 일부러 비운 분기 칸을 FY로 메우지 않는다(반증 밖 렌즈: 미국 HSY 2023 등).
+        boolean superseded = false;
+        for (int i = 0; i < TTM_QUARTERS; i++) {
+            superseded |= !quarters.get(offset + i).flowsSupersededOn().isEmpty();
         }
-        return field.apply(q4.annualOfYear());
+        return superseded ? field.apply(annual) : null;
     }
 
     /**

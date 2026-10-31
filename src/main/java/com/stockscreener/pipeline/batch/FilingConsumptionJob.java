@@ -85,12 +85,12 @@ public class FilingConsumptionJob {
                                 BatchExecutions batchExecutions,
                                 @org.springframework.beans.factory.annotation.Value("${stockscreener.gate.kr}") boolean krGate) {
         this(store, financialRefill, fullStatementRefill, secConsumption.getIfAvailable(), batchExecutions);
-        this.priorYear = krGate ? 1 : 0;
+        this.priorYear = krGate ? 2 : 0;
     }
 
     /**
-     * 국내 관문 켬이면 창을 한 해 더 당긴다(재고 A6 · ADR-0200) — 손익 칸 기저 판정의 「다음 해 보고서의 전기 열」 단계는 그 해 보고서와
-     * 앞 해 보고서를 한 호출에 함께 받아야 앞 해의 대체를 다시 짓는다. 0이면 그 해 1분기 공시 소비가 앞 해를 안 받아 다음 넓은 정기 FR까지
+     * 국내 관문 켬이면 창을 두 해 더 당긴다(재고 A6 · ADR-0200) — 손익 칸 기저 판정의 「다음 해 보고서의 전기 열 · 두 해 뒤 사업보고서의
+     * 전전기 열」 단계는 그 보고서와 앞 두 해 보고서를 한 호출에 함께 받아야 앞 해들의 대체를 다시 짓는다. 0이면 그 해 1분기 공시 소비가 앞 해를 안 받아 다음 넓은 정기 FR까지
      * 대체가 안 붙는다.
      */
     private int priorYear;

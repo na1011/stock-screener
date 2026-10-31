@@ -352,6 +352,12 @@ final class FinancialFiguresFixture {
         return this;
     }
 
+    /** 기간 시작을 바꾼다(분기 기본값은 기말 − 3개월). */
+    FinancialFiguresFixture periodStart(LocalDate start) {
+        this.periodStart = start;
+        return this;
+    }
+
     /** 국내 관문 켬 행(재고 A6) — 손익 칸의 기저 대체일. */
     FinancialFiguresFixture flowsSupersededOn(java.util.Map<String, LocalDate> superseded) {
         this.flowsSupersededOn = superseded;
