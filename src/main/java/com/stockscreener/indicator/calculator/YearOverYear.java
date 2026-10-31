@@ -34,6 +34,14 @@ public final class YearOverYear {
     }
 
     /**
+     * 최신 두 회계연도가 실제로 이웃한 해인가. 아니면 「전년 대비」라는 이름이 거짓이 된다 — 사이가 빈 종목(연간 실적이 한 해 이상 빠짐)은 몇 년 치
+     * 변화를 1년 치로 낸다(DSGX FY2026 대 FY2022 매출 71.65% · 실제 전년 대비 11.98% · ORKA 영업이익 −1,572.8%는 FY2025 대 FY2023 · 반증 2026-10-31).
+     */
+    static boolean consecutive(List<FinancialFigures> annual) {
+        return annual.size() >= 2 && annual.get(0).fiscalYear() - annual.get(1).fiscalYear() == 1;
+    }
+
+    /**
      * 두 값 사이의 증감률(%). 어느 쪽이든 비었거나 직전이 0이면 null이다.
      *
      * <p>실적 표가 이것을 쓴다 — 지표 계산기와 <b>같은 식이어야</b> 한 화면의 두 증감률이

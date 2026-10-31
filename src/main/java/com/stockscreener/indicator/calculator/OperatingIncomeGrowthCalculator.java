@@ -60,6 +60,10 @@ public class OperatingIncomeGrowthCalculator implements IndicatorCalculator {
 
     /** 그 봉 시점에 공시돼 있던 재무로 낸 값. 없으면 {@code null}이다(ADR-0128). */
     private static BigDecimal valueOf(IndicatorContext context) {
+        // 관문 켬: 최신 두 FY가 이웃한 해일 때만 — 재고자산 갭(InventoryGrowthGapCalculator)과 같은 술어다.
+        if (context.gateOn() && !YearOverYear.consecutive(context.annualFigures())) {
+            return null;
+        }
         return YearOverYear.growth(context.annualFigures(), FinancialMath::operatingIncomeOf);
     }
 }
