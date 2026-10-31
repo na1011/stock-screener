@@ -127,6 +127,18 @@ class MembershipGapFillerTest {
     }
 
     @Test
+    @DisplayName("IMPORTANT — 업종(결산월 · SIC)을 재무 적재보다 먼저 받는다 — 재무 어댑터가 그 둘을 팩트 해석의 증인으로 묻는다(IssuerProfile)")
+    void companyProfileRunsBeforeTheFinancialLoad() {
+        given(gap("035420", MembershipGap.Axis.FINANCIAL));
+
+        filler.fillAndAlert(AS_OF, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+
+        InOrder order = inOrder(companyProfileJob, initialLoadJob);
+        order.verify(companyProfileJob).run(any(), any(), any(), any());
+        order.verify(initialLoadJob).run(any(), any(), any());
+    }
+
+    @Test
     @DisplayName("업종은 티커를 주지 않고 결손이 0이어도 부른다 — 티커를 주면 업종 유무를 아예 안 본다")
     void callsCompanyProfileWithoutTickersEvenWhenNothingIsMissing() {
         given();

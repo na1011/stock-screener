@@ -206,12 +206,12 @@ public class MembershipGapFiller {
     }
 
     private void fill(LocalDate asOf, BatchExecutionRecorder.TriggeredBy triggeredBy) {
-        if (!blockedByAnotherBatch()) {
-            loadMissingRawData(stockRegistrar.membershipGaps(), asOf);
-        }
-
-        // MUST: 티커를 주지 않고, 결손이 0이어도 매주 부른다. 그리고 위가 상한을 넘겨
-        // 아무것도 안 적재한 주에도 부른다 — 그래서 이 호출이 위 메서드 밖에 있다.
+        // MUST: 업종(결산월 · SIC)을 재무 적재보다 먼저 받는다 — 재무 어댑터가 그 둘을 팩트 해석의 증인으로 묻는다(IssuerProfile ·
+        // 연차 보고서 전 회계연도 창 ADR-0198 · 관문 켬 업종 총매출 후보). 뒤에 받으면 새 편입의 첫 FR이 증인 없이 돌아 다음 FR까지
+        // 그 해석이 빠진다. 후보 인입(CandidateIntake)도 같은 순서다.
+        //
+        // MUST: 티커를 주지 않고, 결손이 0이어도 매주 부른다. 그리고 아래가 상한을 넘겨
+        // 아무것도 안 적재한 주에도 부른다 — 그래서 이 호출이 적재 메서드 밖에 있다.
         //
         // ① 티커를 주면 CompanyProfileJob이 업종 유무를 아예 안 본다 — 선택 로직 사본이 생긴다.
         //    인자 없는 기본 대상이 곧 업종 결손 집합이다.
@@ -224,6 +224,10 @@ public class MembershipGapFiller {
         //
         // 대가는 원리적으로 안 채워지는 면제 종목에 대한 주당 몇 콜뿐이다(종목당 1콜).
         companyProfileJob.run(asOf, triggeredBy, List.of(), null);
+
+        if (!blockedByAnotherBatch()) {
+            loadMissingRawData(stockRegistrar.membershipGaps(), asOf);
+        }
     }
 
     /**
