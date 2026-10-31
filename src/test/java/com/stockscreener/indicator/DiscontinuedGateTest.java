@@ -87,6 +87,25 @@ class DiscontinuedGateTest {
                 .as("관문 꺼짐은 저장 공시일 그대로").hasSize(1);
     }
 
+    @Test
+    @DisplayName("국내 관문 켬 — 거버넌스 사실도 공시 목록의 접수일부터 보인다(배당성향 분자 · 분모의 공개일을 맞춘다) · 관문 꺼짐은 그대로")
+    void domesticGovernanceIsTheReceiptDate() {
+        long kr = insertStock("KOSPI", "999983", "국내 거버넌스 접수일");
+        jdbcTemplate.update("""
+                INSERT INTO governance_fact (stock_id, fiscal_year, metric_key, value, published_at, receipt_no)
+                VALUES (?, 2025, 'DPS_COMMON', 500, '2026-03-13', '20260313900124')
+                """, kr);
+        jdbcTemplate.update("""
+                INSERT INTO kr_report_xbrl (rcept_no, stock_id, corp_code, detail_type, report_name, rcept_date, bsns_year, reprt_code)
+                VALUES ('20260313900124', ?, '00000002', 'A001', '사업보고서 (2025.12)', '2026-03-16', 2025, '11011')
+                """, kr);
+        assertThat(reader(false, true).readGovernanceFacts(kr, LocalDate.of(2026, 3, 14), 3, FinancialVisibility.KNOWN_ON))
+                .as("토요일 봉은 아직 공개 전").isEmpty();
+        assertThat(reader(false, true).readGovernanceFacts(kr, LocalDate.of(2026, 3, 16), 3, FinancialVisibility.KNOWN_ON)).hasSize(1);
+        assertThat(reader(false, false).readGovernanceFacts(kr, LocalDate.of(2026, 3, 14), 3, FinancialVisibility.KNOWN_ON))
+                .as("관문 꺼짐").hasSize(1);
+    }
+
     private IndicatorDataReader reader(boolean usGate, boolean krGate) {
         return new IndicatorDataReader(jdbcTemplate, corporateActions, shareClasses, usGate, krGate);
     }

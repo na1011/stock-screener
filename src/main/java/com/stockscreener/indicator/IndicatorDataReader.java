@@ -707,12 +707,21 @@ public class IndicatorDataReader {
         }
         String publishedFilter = visibility == FinancialVisibility.KNOWN_ON
                 ? "AND published_at <= ?" : "";
+        // 국내 관문 켬 — 공시일은 공시 목록의 접수일이다(재무와 같은 규칙 · KR_PUBLISHED). 접수번호 앞 8자리는 제출일이라 영업시간 밖 · 휴일
+        // 제출이 1~4일 이르다(거버넌스 133사실 · 11접수 · 반증 밖 렌즈) — 배당성향 분자(거버넌스)와 분모(재무)의 공개일이 갈리지 않게 한다.
+        // 미국 접수 번호는 그 목록에 없어 저장 공시일 그대로다.
+        String from = krGate ? """
+                (SELECT g.fiscal_year, g.receipt_no, g.metric_key, g.value, g.stock_id,
+                        coalesce((SELECT max(k.rcept_date) FROM kr_report_xbrl k
+                                   WHERE k.rcept_no = g.receipt_no AND k.stock_id = g.stock_id AND k.rcept_date > g.published_at),
+                                 g.published_at) AS published_at
+                   FROM governance_fact g) governance_fact""" : "governance_fact";
         String sql = """
                 SELECT fiscal_year, receipt_no, metric_key, value, published_at
-                  FROM governance_fact
+                  FROM %s
                  WHERE stock_id = ? %s
                  ORDER BY fiscal_year DESC, published_at DESC, receipt_no DESC
-                """.formatted(publishedFilter);
+                """.formatted(from, publishedFilter);
 
         Object[] args = visibility == FinancialVisibility.KNOWN_ON
                 ? new Object[]{stockId, asOf} : new Object[]{stockId};
