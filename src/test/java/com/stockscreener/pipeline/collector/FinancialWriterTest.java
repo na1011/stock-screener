@@ -982,6 +982,46 @@ class FinancialWriterTest {
     }
 
     /**
+     * 관문 켬 미국의 4분기 합친 행(소스 판 + 잔차 · {@code derived=false})은 잔차가 못 만든 칸을 {@link RawFinancialReport#RESIDUAL_FLOWS}의 이름으로
+     * 「없다」 판정한다. 그 이름이 Writer의 컬럼명과 하나라도 어긋나면 그 칸은 조용히 안 지워진다 — 전부 잰다.
+     */
+    @Test
+    @DisplayName("잔차 유량 컬럼 이름은 전부 Writer 컬럼과 맞고, 판정이 있으면 소스 행에서도 지워진다")
+    void everyResidualFlowNameClearsOnASourceRow() {
+        writer.write(stockId, List.of(withFlows(2025, "2026-03-15", "7"), withFlows(2024, "2025-03-15", "5")),
+                FinancialWriter.WriteMode.FILL_MISSING);
+        writer.write(stockId, List.of(withFlows(2025, "2026-03-15", null), withFlows(2024, "2025-03-15", "5")),
+                FinancialWriter.WriteMode.FILL_MISSING);
+
+        for (String column : RawFinancialReport.RESIDUAL_FLOWS.keySet()) {
+            assertThat(jdbcTemplate.queryForObject(
+                    "SELECT " + column + " FROM financial_statement WHERE stock_id = ? AND is_latest "
+                            + "AND fiscal_year = 2025 AND fiscal_period = 'FY'",
+                    BigDecimal.class, stockId)).as(column).isNull();
+        }
+    }
+
+    /** 잔차 유량 열셋에 {@code flow}를 실은 소스 행 — {@code null}이면 전부 비우고 「없다」로 판정한다. */
+    private static RawFinancialReport withFlows(int fiscalYear, String publishedAt, String flow) {
+        BigDecimal v = flow == null ? null : new BigDecimal(flow);
+        return new RawFinancialReport(
+                fiscalYear, "FY",
+                LocalDate.of(fiscalYear, 1, 1), LocalDate.of(fiscalYear, 12, 31),
+                LocalDate.parse(publishedAt),
+                "11011", "KRW",
+                v, v, v,
+                new BigDecimal("20000"), new BigDecimal("12000"), null, new BigDecimal("8000"),
+                null, null, null,
+                null, new BigDecimal("100"),
+                null, null,
+                v,
+                null, null, null,
+                v,
+                v, v, v, v, v, v, v, v, null, null,
+                false, flow == null ? RawFinancialReport.RESIDUAL_FLOWS.keySet() : java.util.Set.of());
+    }
+
+    /**
      * 관할 가드가 <b>처방보다 먼저</b> 선다는 것. {@code managed}에 없는 컬럼은 판정이 있어도
      * 안 지운다 — 그 컬럼을 채운 것이 <b>다른 소스</b>일 수 있고, 지우면 수요일이 채우고
      * 목요일이 지우는 왕복이 된다({@code managedColumns}의 594칸 실측).

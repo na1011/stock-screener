@@ -332,6 +332,27 @@ public record RawFinancialReport(
     public static final String NET_INCOME_CONTROLLING = "net_income_controlling";
 
     /**
+     * <b>4분기 잔차(FY − 분기 셋)가 짓는 유량 컬럼</b> — DB 컬럼명과 그 값. 관문 켬 미국 어댑터가 소스 4분기 판과 합친 행({@code derived=false})에서 잔차가
+     * 못 만든 칸을 {@link #assertedAbsent}로 싣는다 — 안 실으면 그 행이 소스 행이라 {@code FinancialWriter}가 옛 잔차 값을 안 지운다(ESI 2017 · OPCH 2018
+     * Q4 원가 · 반증 2026-10-31). 이름은 {@code FinancialWriter}의 {@code Amount}와 <b>문자열로 만난다</b> — {@code FinancialWriterTest}가 전부 지워지는지 잰다.
+     */
+    public static final java.util.Map<String, java.util.function.Function<RawFinancialReport, BigDecimal>> RESIDUAL_FLOWS =
+            java.util.Collections.unmodifiableMap(new java.util.LinkedHashMap<>(java.util.Map.ofEntries(
+                    java.util.Map.entry("revenue", RawFinancialReport::revenue),
+                    java.util.Map.entry("operating_income", RawFinancialReport::operatingIncome),
+                    java.util.Map.entry(NET_INCOME, RawFinancialReport::netIncome),
+                    java.util.Map.entry(NET_INCOME_CONTROLLING, RawFinancialReport::netIncomeControlling),
+                    java.util.Map.entry("cost_of_sales", RawFinancialReport::costOfSales),
+                    java.util.Map.entry("gross_profit", RawFinancialReport::grossProfit),
+                    java.util.Map.entry("operating_expenses", RawFinancialReport::operatingExpenses),
+                    java.util.Map.entry("costs_and_expenses", RawFinancialReport::costsAndExpenses),
+                    java.util.Map.entry("interest_and_dividend_income", RawFinancialReport::interestAndDividendIncome),
+                    java.util.Map.entry("noninterest_income", RawFinancialReport::noninterestIncome),
+                    java.util.Map.entry("interest_expense", RawFinancialReport::interestExpense),
+                    java.util.Map.entry("noninterest_expense", RawFinancialReport::noninterestExpense),
+                    java.util.Map.entry("benefits_losses_and_expenses", RawFinancialReport::benefitsLossesAndExpenses))));
+
+    /**
      * <b>지배주주 자본을 안 받는 옛 형태 — 시험 픽스처 전용이다.</b>
      *
      * <p><b>MUST NOT: 적재 어댑터에서 쓰지 않는다.</b> 이 생성자가 그 자리에 {@code null}을

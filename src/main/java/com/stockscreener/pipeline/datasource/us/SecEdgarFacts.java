@@ -275,8 +275,9 @@ final class SecEdgarFacts {
             facts = frame.facts();
         }
         Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn = collect(facts, usGate, issuer.sic());
-        // K8 — 걸러진 (공시 · 기말)은 4분기 유도의 재작성 가드가 「그 공시가 분기를 냈다」로 다시 읽는다(deriveFourthQuarters).
-        Set<String> quarterContextDropped = usGate ? dropAnnualQuarterContextCarryingTheYear(byColumn) : Set.of();
+        if (usGate) {
+            dropAnnualQuarterContextCarryingTheYear(byColumn);
+        }
         // 옛 추출 값(sharesSuperseded)은 판정 전 사실로 센다 — 옛 규칙이 실제로 고른 것은 단위가 틀린 그 표지다.
         Map<String, Map<Slot, Fact>> sharesAsFiled = new LinkedHashMap<>(byColumn.get(SecEdgarColumn.SHARES_OUTSTANDING));
         if (usGate) {
@@ -308,7 +309,7 @@ final class SecEdgarFacts {
                     byColumn, anchors, tags, withheld, usGate));
         }
         List<RawFinancialReport> fourthQuarters =
-                deriveFourthQuarters(reports, windows, fromFiscalYear, byColumn, usGate, quarterContextDropped);
+                deriveFourthQuarters(reports, windows, fromFiscalYear, byColumn, usGate);
         // MUST: 같은 (회계연도, 기간, 공시일)이면 **병합본이 소스 판을 대체한다.**
         // mergeQ4가 소스 값을 그대로 얹으므로 병합본은 소스 판의 상위집합이고, 둘을 함께 두면
         // 저장이 같은 키에 두 번 써서 **무효화만 남는다.**
@@ -1034,12 +1035,10 @@ final class SecEdgarFacts {
      * 같은 공시 · 같은 컬럼의 표준 팩트끼리의 산수라 원장이 준 값을 고르는 일반 조합이다(2026-10-25 사용자 기준).
      *
      * <p><b>왜 컬럼 단위인가</b>(반증 2026-10-31): 행 단위로 그 공시의 4분기 문맥을 통째로 버리면 연간 전용 컬럼(세금 · 세전 · 지분법) 한 줄로 걸린 공시가
-     * 맞는 3개월 값까지 잃고(LBTYB 2020 Q4 매출 3,311.7 → 세대 혼합 3,101.3 · LH · DXCM EPS) 그 공시의 분기 보고서가 사라져 4분기 재작성 가드가 풀린다
-     * (LHX 2020 Q4 원가 4,681 > 매출 4,660). 연간 전용 · 주당 컬럼은 증거로 안 쓴다 — Q4 행이 안 싣거나 분기와 연간이 같을 수 있다.
-     *
-     * @return 4분기 문맥 값을 하나라도 바로잡은 (공시 · 기말) — 4분기 유도의 재작성 가드가 「그 공시가 분기를 냈다」로 다시 읽는다
+     * 맞는 3개월 값까지 잃는다(LBTYB 2020 Q4 매출 3,311.7 → 세대 혼합 3,101.3 · LH · DXCM EPS). 연간 전용 · 주당 컬럼은 증거로 안 쓴다 — Q4 행이 안
+     * 싣거나 분기와 연간이 같을 수 있다.
      */
-    private static Set<String> dropAnnualQuarterContextCarryingTheYear(Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn) {
+    private static void dropAnnualQuarterContextCarryingTheYear(Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn) {
         BigDecimal same = new BigDecimal("0.001");
         BigDecimal floor = new BigDecimal("0.01");
         Map<SecEdgarColumn, List<Fact>> columns = new LinkedHashMap<>();
@@ -1101,7 +1100,6 @@ final class SecEdgarFacts {
                 }
             }
         });
-        Set<String> touched = new HashSet<>();
         drop.forEach((col, facts) -> {
             Map<String, Fact> moving = promote.getOrDefault(col, new LinkedHashMap<>());
             for (Map<Slot, Fact> slots : byColumn.get(col).values()) {
@@ -1111,7 +1109,6 @@ final class SecEdgarFacts {
                         return false;
                     }
                     Fact q = en.getValue();
-                    touched.add(q.accn() + "|" + q.end());
                     Fact fy = moving.remove(q.accn() + "|" + q.end());
                     if (fy != null) {
                         moved.add(fy);
@@ -1122,7 +1119,6 @@ final class SecEdgarFacts {
                 moved.forEach(fy -> slots.put(new Slot(fy.accn(), fy.start(), fy.end()), fy));
             }
         });
-        return Set.copyOf(touched);
     }
 
     /**
@@ -1760,6 +1756,123 @@ final class SecEdgarFacts {
     }
 
     /**
+     * 관문 켬(P2 v2 · K4) — 기간마다 고정한 태그가 <b>이 판에 없는</b> 매출 · 원가 · 총이익 칸을 이 판이 다른 후보 태그로 냈으면, 그 값으로 <b>이 공시 안의
+     * 「매출 − 원가 = 총이익」이 닫힐 때만</b> 그 판의 값을 쓴다. 못 닫거나 판정할 재료가 없으면 지금처럼 앞 판 값을 이어받는다.
+     *
+     * <p>뿌리: 태그를 기간 단위로 고정하면(값이 아니라 태그가 바뀐 것을 정정으로 읽지 않으려고) 뒤 공시가 다른 태그로 재작성한 값이 안 들어오고, 이어받기가
+     * 앞 판의 옛 값을 그 판에 앉힌다(CHRD FY2017 순액 1,248.4 대 ASC 606 총액 재작성 1,293.7 · EQT 분리 재작성 · OPCH 역합병 재작성). 공시마다 태그를
+     * 다시 고르면 다른 개념을 정정으로 읽으므로(뒤 공시가 되돌림 175 — 탐색 {@code P2-NOTES.md} 「P2b」) 판별자를 같은 공시 항등식으로 둔다 — 그 판별로
+     * 매출 · 원가 사건 396건이 갈리고 새 값 지지 112(확인) 대 6(되돌림) · 옛 값 지지 26(되돌림) 대 5(확인)였다(P2 v1 반증 판정 4).
+     */
+    private static void ownGrossMarginLine(Anchor anchor, Window window, Map<SecEdgarColumn, String> tags,
+                                           Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn,
+                                           Map<SecEdgarColumn, BigDecimal> values) {
+        List<SecEdgarColumn> line = List.of(SecEdgarColumn.REVENUE, SecEdgarColumn.COST_OF_SALES, SecEdgarColumn.GROSS_PROFIT);
+        Map<SecEdgarColumn, BigDecimal> own = new EnumMap<>(SecEdgarColumn.class);
+        Set<SecEdgarColumn> substituted = java.util.EnumSet.noneOf(SecEdgarColumn.class);
+        for (SecEdgarColumn column : line) {
+            BigDecimal fixed = ownValue(anchor, column, window, tags.get(column), byColumn);
+            if (fixed != null) {
+                own.put(column, fixed);
+                continue;
+            }
+            BigDecimal other = ownValueAnyTag(anchor, column, window, byColumn);
+            if (other != null) {
+                own.put(column, other);
+                substituted.add(column);
+            }
+        }
+        if (substituted.isEmpty() || own.size() < line.size()) {
+            return;
+        }
+        BigDecimal revenue = own.get(SecEdgarColumn.REVENUE);
+        BigDecimal gap = revenue.subtract(own.get(SecEdgarColumn.COST_OF_SALES)).subtract(own.get(SecEdgarColumn.GROSS_PROFIT)).abs();
+        if (revenue.signum() == 0 || gap.compareTo(revenue.abs().multiply(new BigDecimal("0.01"))) > 0) {
+            return;
+        }
+        for (SecEdgarColumn column : line) {
+            if (substituted.contains(column)
+                    && roundedFrom(own.get(column), earlierFixedValue(anchor, column, window, tags.get(column), byColumn))) {
+                // 같은 사실을 더 거칠게 반올림해 실었을 뿐이다 — 앞 판의 정밀한 값을 잇는다. 받으면 뒤 공시가 고정 태그로 정밀한 값을 다시 실을 때마다
+                // 판이 오가며 교정 · 무효화가 돈다(반증 2026-10-31: BIO · CSW · FLS · GNTX · CVNA 10칸).
+                continue;
+            }
+            values.put(column, own.get(column));
+        }
+    }
+
+    /** 고정 태그로 이 창에 이 공시보다 먼저 제출된 값 중 가장 늦은 것 — 이어받기가 앉힐 값이다. 없으면 null. */
+    private static BigDecimal earlierFixedValue(Anchor anchor, SecEdgarColumn column, Window window, String tag,
+                                                Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn) {
+        Map<Slot, Fact> slots = tag == null ? null : byColumn.get(column).get(tag);
+        if (slots == null) {
+            return null;
+        }
+        Fact latest = null;
+        for (Fact fact : slots.values()) {
+            if (fact.end().equals(window.end()) && startMatches(window, fact.start(), fact.end())
+                    && fact.filed().isBefore(anchor.filed())
+                    && (latest == null || fact.filed().isAfter(latest.filed()))) {
+                latest = fact;
+            }
+        }
+        return latest == null ? null : latest.value();
+    }
+
+    /**
+     * {@code rounded}가 {@code precise}를 자기 자릿수(끝의 0)로 반올림한 값인가 — 같은 사실의 거친 표기. 자릿수는 <b>백만에서 자른다</b> — XBRL의 거친
+     * 보고 단위가 백만이라, 끝의 0으로만 읽으면 2,000M이 2,040M의 「십억 자리 반올림」이 되어 진짜 재작성을 같은 사실로 읽는다.
+     */
+    private static boolean roundedFrom(BigDecimal rounded, BigDecimal precise) {
+        if (precise == null || rounded.compareTo(precise) == 0) {
+            return false;
+        }
+        int scale = Math.max(rounded.stripTrailingZeros().scale(), -6);
+        return scale < 0 && precise.setScale(scale, java.math.RoundingMode.HALF_UP).compareTo(rounded) == 0;
+    }
+
+    /** 이 판이 그 태그로 이 창에 낸 값(유량). 없으면 null. */
+    private static BigDecimal ownValue(Anchor anchor, SecEdgarColumn column, Window window, String tag,
+                                       Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn) {
+        if (tag == null) {
+            return null;
+        }
+        Map<Slot, Fact> slots = byColumn.get(column).get(tag);
+        if (slots == null) {
+            return null;
+        }
+        Fact exact = slots.get(new Slot(anchor.accn(), window.start(), window.end()));
+        Fact fact = exact != null ? exact : nearStart(slots, anchor, window);
+        return fact == null ? null : fact.value();
+    }
+
+    /**
+     * 이 판이 그 컬럼의 어느 후보 태그로든 이 창에 낸 값 — 매출은 경쟁 후보 중 가장 큰 값, 경쟁 후보가 없으면 후보 순서의 첫 값(마지막 수단).
+     * {@link #coveringTag}와 같은 뜻이다 — 첫 값과 가장 큰 값을 따로 들어야 마지막 수단 태그가 그보다 작은 경쟁 값을 이기지 않는다.
+     */
+    private static BigDecimal ownValueAnyTag(Anchor anchor, SecEdgarColumn column, Window window,
+                                             Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn) {
+        BigDecimal first = null;
+        BigDecimal largest = null;
+        for (Map.Entry<String, Map<Slot, Fact>> tag : byColumn.get(column).entrySet()) {
+            BigDecimal v = ownValue(anchor, column, window, tag.getKey(), byColumn);
+            if (v == null) {
+                continue;
+            }
+            if (!column.picksLargest()) {
+                return v;
+            }
+            if (first == null) {
+                first = v;
+            }
+            if (column.competesForLargest(tag.getKey()) && (largest == null || v.compareTo(largest) > 0)) {
+                largest = v;
+            }
+        }
+        return largest != null ? largest : first;
+    }
+
+    /**
      * <b>시작일이 창과 맞는가 — 52/53주 회계력의 며칠 어긋남을 받는다.</b>
      * {@link #nearStart}와 같은 술어여야 한다(태그 선택과 값 조회가 갈리면 태그는 골라지는데
      * 값이 null인 자리가 생긴다).
@@ -1861,6 +1974,9 @@ final class SecEdgarFacts {
                 fact = factFor(anchor, column, window, tags, byColumn, ownCover);
             }
             values.put(column, fact == null ? null : fact.value());
+        }
+        if (ownCover) {
+            ownGrossMarginLine(anchor, window, tags, byColumn, values);
         }
         if (ownCover && values.get(SecEdgarColumn.NET_INCOME) == null
                 && values.get(SecEdgarColumn.NET_INCOME_TOTAL) == null
@@ -2702,8 +2818,7 @@ final class SecEdgarFacts {
      */
     private static List<RawFinancialReport> deriveFourthQuarters(
             List<RawFinancialReport> existing, Map<Label, Window> windows, int fromFiscalYear,
-            Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn, boolean usGate,
-            Set<String> quarterContextDropped) {
+            Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn, boolean usGate) {
         Map<Label, RawFinancialReport> latest = new LinkedHashMap<>();
         Map<Label, List<RawFinancialReport>> byLabel = new LinkedHashMap<>();
         for (RawFinancialReport report : existing) {
@@ -2716,11 +2831,6 @@ final class SecEdgarFacts {
         Map<String, Set<Integer>> quarterYears = new HashMap<>();
         for (RawFinancialReport report : existing) {
             if (!"FY".equals(report.fiscalPeriod())) {
-                quarterYears.computeIfAbsent(report.reportCode(), key -> new HashSet<>())
-                        .add(report.fiscalYear());
-            } else if (quarterContextDropped.contains(accnOf(report.reportCode()) + "|" + report.periodEnd())) {
-                // K8이 그 공시의 4분기 문맥 값을 안 읽었을 뿐 공시는 그 해 분기를 냈다 — 빼면 재작성 가드가 풀려 그 공시가 재작성한 옛 FY에서 옛
-                // 분기를 뺀다(LHX 2020 Q4 원가 4,681 > 매출 4,660 · 반증 2026-10-31).
                 quarterYears.computeIfAbsent(report.reportCode(), key -> new HashSet<>())
                         .add(report.fiscalYear());
             }
@@ -2828,7 +2938,7 @@ final class SecEdgarFacts {
                 f1 = v1;
                 f2 = v2;
                 f3 = v3;
-                if (lastUsed != null && restated(lastUsed, vintage)
+                if (!usGate && lastUsed != null && restated(lastUsed, vintage)
                         && representedOtherYears(quarterYears, vintage, label.fiscalYear())) {
                     // **이 공시는 분기 계열을 다시 냈는데 이 해의 분기는 안 냈다.**
                     //
@@ -2845,17 +2955,24 @@ final class SecEdgarFacts {
                     //
                     // 분기를 하나도 안 낸 공시는 이 판정에 안 걸린다 — 재제출했다는 증거가
                     // 없으므로 보수적으로 쓴다(10-K/A가 연간만 정정하는 경우가 그렇다).
+                    //
+                    // 관문 켬은 이 판 단위 가드 대신 컬럼 단위 세대 맞춤({@link #sameGenerationAnnual})을 쓴다.
                     continue;
                 }
+                RawFinancialReport annual = usGate ? sameGenerationAnnual(vintage, byLabel, label, quarterLabels, byColumn) : vintage;
+                RawFinancialReport sourceQ4 = vintageOf(byLabel, q4, vintage.publishedAt());
                 RawFinancialReport q4Report = mergeQ4(
-                        vintageOf(byLabel, q4, vintage.publishedAt()),
-                        buildQ4(label.fiscalYear(), vintageStart, vintage, v1, v2, v3, byColumn, usGate));
+                        sourceQ4,
+                        buildQ4(label.fiscalYear(), vintageStart, annual, v1, v2, v3, byColumn, usGate), usGate);
                 // MUST: 값이 같은 4분기 판을 세대마다 다시 내지 않는다. FY 판이 늘면 잔차가
                 // 같아도 Q4 판이 그만큼 늘고, 저장은 그것을 **정정으로 읽어 지표를 지운다** —
                 // 쓰기는 0인데 무효화만 남는다. 실측: 접기를 고쳐 FY 판이 늘자 이 자리에서
                 // **값이 같은 Q4 판 349개**가 덤으로 났다.
                 // 남기는 것은 **가장 이른 판**이다 — 그 값은 그때 이미 알 수 있었다(ADR-0128).
-                if (lastQ4 == null || storedDiffers(lastQ4, q4Report)) {
+                // 관문 켬: 그 공시일에 소스 4분기 판이 있으면 값이 같아도 낸다 — 병합본이 그 판을 대체하므로(build의 replaced), 접으면 소스가 실은 몇
+                // 컬럼만 든 판이 그날의 최신 판으로 남아 나머지 칸이 빈다(F 2016 Q4 2018-04-26 원가 · 순이익).
+                boolean sourceThatDay = usGate && sourceQ4 != null && sourceQ4.publishedAt().equals(vintage.publishedAt());
+                if (lastQ4 == null || storedDiffers(lastQ4, q4Report) || sourceThatDay) {
                     derived.add(q4Report);
                     lastQ4 = q4Report;
                 }
@@ -2870,7 +2987,7 @@ final class SecEdgarFacts {
                 // CYTK 2017이 그 자리였다.
                 derived.add(mergeQ4(
                         vintageOf(byLabel, q4, fallback.publishedAt()),
-                        buildQ4(label.fiscalYear(), fallbackStart, fallback, f1, f2, f3, byColumn, usGate)));
+                        buildQ4(label.fiscalYear(), fallbackStart, fallback, f1, f2, f3, byColumn, usGate), usGate));
             }
         }
         return derived;
@@ -2897,11 +3014,11 @@ final class SecEdgarFacts {
      * (매출원가 146 · 이자비용 106 · 총비용 59 · 매출 42).
      */
     private static RawFinancialReport mergeQ4(RawFinancialReport source,
-                                              RawFinancialReport residual) {
+                                              RawFinancialReport residual, boolean usGate) {
         if (source == null) {
             return residual;
         }
-        RawFinancialReport merged = mergeQ4Amounts(source, residual);
+        RawFinancialReport merged = mergeQ4Amounts(source, residual, usGate);
         if (source.discontinuedRule() == null && residual.discontinuedRule() == null) {
             return merged;
         }
@@ -2913,7 +3030,8 @@ final class SecEdgarFacts {
                         from.discontinuedIncomeControlling()));
     }
 
-    private static RawFinancialReport mergeQ4Amounts(RawFinancialReport source, RawFinancialReport residual) {
+    private static RawFinancialReport mergeQ4Amounts(RawFinancialReport source, RawFinancialReport residual,
+                                                     boolean usGate) {
         return new RawFinancialReport(
                 residual.fiscalYear(), residual.fiscalPeriod(),
                 residual.periodStart(), residual.periodEnd(), residual.publishedAt(),
@@ -2966,7 +3084,7 @@ final class SecEdgarFacts {
                 false,
                 // 합친 값이 null인데 **두 판 중 하나라도 「없다」고 판정했으면** 그것은 판정이다.
                 // 둘 다 그냥 안 실었을 뿐이면 빈 집합이 되어 지금까지와 똑같이 동작한다.
-                mergedAbsence(source, residual));
+                mergedAbsence(source, residual, usGate));
     }
 
     private static BigDecimal pick(BigDecimal source, BigDecimal residual) {
@@ -2981,18 +3099,24 @@ final class SecEdgarFacts {
      * 병합본에는 값이 있고, 그때 부재를 이으면 <b>저장이 멀쩡한 값을 지운다.</b>
      */
     private static java.util.Set<String> mergedAbsence(RawFinancialReport source,
-                                                       RawFinancialReport residual) {
+                                                       RawFinancialReport residual, boolean usGate) {
         java.util.Set<String> merged = new java.util.LinkedHashSet<>(source.assertedAbsent());
         merged.addAll(residual.assertedAbsent());
-        if (merged.isEmpty()) {
-            return java.util.Set.of();
-        }
         java.util.Set<String> kept = new java.util.LinkedHashSet<>();
         if (merged.contains(RawFinancialReport.NET_INCOME)
                 && pick(source.netIncome(), residual.netIncome()) == null) {
             kept.add(RawFinancialReport.NET_INCOME);
         }
-        return kept;
+        if (usGate) {
+            // 관문 켬: 소스가 안 낸 칸은 잔차의 칸이다 — 잔차가 못 만들었으면(세대가 갈림 · 재료 없음) 유도 행과 같이 「없다」로 싣는다. 합친 행은
+            // derived=false라 이것이 없으면 Writer가 옛 잔차 값을 지키고(ESI 2017 · OPCH 2018 Q4 원가), 세대 맞춤이 비운 칸이 DB에 안 닿는다.
+            RawFinancialReport.RESIDUAL_FLOWS.forEach((column, value) -> {
+                if (value.apply(source) == null && value.apply(residual) == null) {
+                    kept.add(column);
+                }
+            });
+        }
+        return kept.isEmpty() ? java.util.Set.of() : kept;
     }
 
     /**
@@ -3417,6 +3541,151 @@ final class SecEdgarFacts {
     private static String accnOf(String reportCode) {
         int colon = reportCode.indexOf(':');
         return colon < 0 ? reportCode : reportCode.substring(colon + 1);
+    }
+
+    /**
+     * 관문 켬 — <b>4분기 잔차를 컬럼마다 같은 세대의 FY와 분기로 짓는다.</b> 컬럼마다 FY와 분기 셋 네 값을 보고, <b>그 컬럼의 마지막 재작성({@link #rewritten}
+     * · 원 공시는 재작성이 아니다) 뒤에 재작성되지 않은 값이 모두 원장에 다시 실렸으면</b> 같은 세대다 — 그 FY로 뺀다. 아니면 그 컬럼의 4분기를 비운다
+     * (소스가 낸 값은 그대로 이긴다).
+     * <ul>
+     *   <li>원 공시: 재작성이 없다 → 그 FY로 뺀다.</li>
+     *   <li>분기도 다시 나온 재작성(다음 해 10-Q의 비교분기 · 같은 10-K의 분기 표): 네 값이 다 재작성됐다 → 새 FY로 뺀다.</li>
+     *   <li>한 분기만 고쳤고 나머지가 뒤 공시에 같은 값으로 다시 실렸다(JPM 2019 1분기 이자비용) → 그 FY로 뺀다.</li>
+     *   <li>FY만 다시 쓰였다(계속영업 재작성 · 다른 태그 재작성 · 연간만 고친 10-K/A) → 비운다. 그 차이가 어느 분기의 것인지 원장이 말하지 않는다.
+     *       옛 FY로 빼서 옛 4분기를 잇지 않는다 — 같은 공시가 그 4분기를 새 기준으로 몇 컬럼 실었으면(소스가 이긴다) 한 행에 두 기준이 앉는다
+     *       (DLTR 2024 Q4: 소스 매출 4,961 · 옛 기준 원가 5,861).</li>
+     *   <li>일부 분기만 다시 쓰이고 나머지는 다시 안 실렸다 → 비운다.</li>
+     * </ul>
+     *
+     * <p><b>왜</b>: 새 FY에서 옛 분기를 빼면 재작성 폭 전체가 4분기 한 칸에 실려 그럴듯한 값이 된다(반증 2026-10-31: ALV 2016 Q4 원가 2,069.6 → 346.6 ·
+     * BF 2017 Q4 매출 887 → 24 · JCI 2017 Q4 매출 8,136 → 799 · INGR 2017 Q4 원가 > 매출). 판 단위 가드(「그 공시가 다른 해 분기를 냈다」)는 분기를 안 낸
+     * 재작성 공시를 통과시키고 판 안에서 컬럼마다 다른 어긋남을 못 본다(DLTR 2024 — 매출만 다시 냈다). 「앞 4분기 값을 잇는다」로는 안 된다 — 앞 판이
+     * 이미 섞였으면 그 쓰레기를 잇는다(BAX 2023 원가: 1분기 · 3분기만 다시 쓰인 판의 3,461 > 매출 2,729). 「다시 실렸다」는 저장된 판이 아니라 원 팩트로
+     * 본다 — 값이 안 바뀐 비교열은 판을 새로 안 내므로 판만 보면 확인이 안 보인다.
+     *
+     * <p>사정거리: 뺄셈에 들어가는 유량만 — 잔액 · 주식수는 FY를 그대로 쓴다.
+     */
+    private static RawFinancialReport sameGenerationAnnual(RawFinancialReport fy, Map<Label, List<RawFinancialReport>> byLabel,
+                                                           Label annualLabel, List<Label> quarterLabels,
+                                                           Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn) {
+        LocalDate at = fy.publishedAt();
+        java.util.function.BiFunction<java.util.function.Function<RawFinancialReport, BigDecimal>, List<SecEdgarColumn>, BigDecimal> flow =
+                (get, columns) -> {
+                    List<Run> annual = runs(byLabel.getOrDefault(annualLabel, List.of()), get, at, columns, byColumn);
+                    if (annual.isEmpty()) {
+                        return get.apply(fy);
+                    }
+                    List<Run> quarters = new ArrayList<>();
+                    for (Label quarter : quarterLabels) {
+                        List<Run> q = runs(byLabel.getOrDefault(quarter, List.of()), get, at, columns, byColumn);
+                        if (q.isEmpty()) {
+                            return get.apply(fy);
+                        }
+                        Run current = q.getLast();
+                        // 그 해가 처음 보고된 뒤에야 처음 실린 분기 값(다음 해 비교열)은 원 공시가 아니다 — 재작성 기준일 수 있다(J 2018 원가).
+                        boolean original = current.original() && !current.start().isAfter(annual.getFirst().start());
+                        quarters.add(new Run(current.start(), current.value(), current.presented(), original));
+                    }
+                    List<Run> members = new ArrayList<>(quarters);
+                    members.add(annual.getLast());
+                    LocalDate lastRewrite = null;
+                    for (Run m : members) {
+                        if (!m.original() && (lastRewrite == null || m.start().isAfter(lastRewrite))) {
+                            lastRewrite = m.start();
+                        }
+                    }
+                    for (Run m : members) {
+                        if (lastRewrite != null && m.original() && m.presented().isBefore(lastRewrite)) {
+                            return null;
+                        }
+                    }
+                    return annual.getLast().value();
+                };
+        List<SecEdgarColumn> net = List.of(SecEdgarColumn.NET_INCOME, SecEdgarColumn.NET_INCOME_TOTAL, SecEdgarColumn.NET_INCOME_CONTROLLING);
+        return new RawFinancialReport(fy.fiscalYear(), fy.fiscalPeriod(), fy.periodStart(), fy.periodEnd(),
+                fy.publishedAt(), fy.reportCode(), fy.currencyCode(),
+                flow.apply(RawFinancialReport::revenue, List.of(SecEdgarColumn.REVENUE)),
+                flow.apply(RawFinancialReport::operatingIncome, List.of(SecEdgarColumn.OPERATING_INCOME)),
+                flow.apply(RawFinancialReport::netIncome, net), fy.totalAssets(), fy.totalEquity(),
+                fy.totalEquityControlling(), fy.totalLiabilities(), fy.currentAssets(), fy.currentLiabilities(),
+                fy.retainedEarnings(), fy.operatingCashFlow(), fy.sharesOutstanding(), fy.eps(), fy.bps(),
+                flow.apply(RawFinancialReport::costOfSales, List.of(SecEdgarColumn.COST_OF_SALES)),
+                fy.cashAndEquivalents(), fy.capex(), fy.inventories(),
+                flow.apply(RawFinancialReport::netIncomeControlling, net),
+                flow.apply(RawFinancialReport::interestAndDividendIncome, List.of(SecEdgarColumn.INTEREST_AND_DIVIDEND_INCOME)),
+                flow.apply(RawFinancialReport::noninterestIncome, List.of(SecEdgarColumn.NONINTEREST_INCOME)),
+                flow.apply(RawFinancialReport::interestExpense, List.of(SecEdgarColumn.INTEREST_EXPENSE)),
+                flow.apply(RawFinancialReport::noninterestExpense, List.of(SecEdgarColumn.NONINTEREST_EXPENSE)),
+                flow.apply(RawFinancialReport::benefitsLossesAndExpenses, List.of(SecEdgarColumn.BENEFITS_LOSSES_AND_EXPENSES)),
+                flow.apply(RawFinancialReport::grossProfit, List.of(SecEdgarColumn.GROSS_PROFIT)),
+                flow.apply(RawFinancialReport::operatingExpenses, List.of(SecEdgarColumn.OPERATING_EXPENSES)),
+                flow.apply(RawFinancialReport::costsAndExpenses, List.of(SecEdgarColumn.COSTS_AND_EXPENSES)),
+                fy.incomeTaxExpense(), fy.profitBeforeTax(),
+                fy.derived(), fy.assertedAbsent(), fy.discontinuedIncome(), fy.discontinuedIncomeControlling(),
+                fy.discontinuedRule(), fy.sharesSuperseded());
+    }
+
+    /**
+     * 한 라벨 · 한 컬럼에서 값이 {@link #rewritten 다시 쓰이지 않고} 이어진 구간. {@code value}는 구간의 마지막 값, {@code presented}는 그 값을 실은
+     * 마지막 공시일(저장된 판 · 원 팩트 중 늦은 쪽), {@code original}은 그 라벨의 첫 구간인가.
+     */
+    private record Run(LocalDate start, BigDecimal value, LocalDate presented, boolean original) {
+    }
+
+    /**
+     * {@code at} 이하 판으로 그 컬럼의 구간들을 짓는다. 값이 없는 판은 건너뛴다. 「다시 실렸다」({@code presented})는 <b>원 팩트로만</b> 본다 — 판의 값은
+     * 이어받기로 앉은 것일 수 있다(XPO 2020 1분기: 2022 10-K가 다른 태그로 2,459를 다시 냈는데 판에는 옛 3,864가 이어받아 앉았다). 그 구간 값을 실은
+     * 팩트가 하나도 없으면(유도 값) 구간이 시작된 날이다.
+     */
+    private static List<Run> runs(List<RawFinancialReport> vintages,
+                                  java.util.function.Function<RawFinancialReport, BigDecimal> get, LocalDate at,
+                                  List<SecEdgarColumn> columns,
+                                  Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn) {
+        List<Run> runs = new ArrayList<>();
+        List<BigDecimal> runStarts = new ArrayList<>();
+        Window window = null;
+        for (RawFinancialReport v : vintages) {
+            BigDecimal x = get.apply(v);
+            if (v.publishedAt().isAfter(at) || x == null) {
+                continue;
+            }
+            window = new Window(v.periodStart(), v.periodEnd());
+            if (runs.isEmpty() || rewritten(runStarts.getLast(), x)) {
+                runs.add(new Run(v.publishedAt(), x, v.publishedAt(), runs.isEmpty()));
+                runStarts.add(x);
+            } else {
+                Run last = runs.getLast();
+                runs.set(runs.size() - 1, new Run(last.start(), x, last.presented(), last.original()));
+            }
+        }
+        for (int r = 0; r < runs.size(); r++) {
+            Run run = runs.get(r);
+            LocalDate presented = run.presented();
+            for (SecEdgarColumn column : columns) {
+                for (Map<Slot, Fact> slots : byColumn.getOrDefault(column, Map.of()).values()) {
+                    for (Fact fact : slots.values()) {
+                        if (fact.value() != null && fact.end().equals(window.end())
+                                && startMatches(window, fact.start(), fact.end())
+                                && !fact.filed().isAfter(at) && fact.filed().isAfter(presented)
+                                && !rewritten(runStarts.get(r), fact.value())) {
+                            presented = fact.filed();
+                        }
+                    }
+                }
+            }
+            runs.set(r, new Run(run.start(), run.value(), presented, run.original()));
+        }
+        return runs;
+    }
+
+    /**
+     * 기준이 바뀐 재작성인가 — 1%(같은 공시 항등식 · P1과 같은 허용치)를 넘게 달라졌다. 그 안의 변화(반올림 표기 · 소폭 정정)는 같은 세대로 본다 — 안 그러면
+     * 백만 단위로 다시 실은 비교분기 하나가 구간을 갈라 멀쩡한 4분기를 비운다(ADBE 2019 · ABBV 2017 2분기 원가 1,528 → 1,529). 한쪽이 다른 쪽을 자기
+     * 자릿수로 반올림한 값이면 1%를 넘어도 같은 사실이다(NOW 2020 이자비용 8,570,000 → 9,000,000).
+     */
+    private static boolean rewritten(BigDecimal before, BigDecimal now) {
+        return now.subtract(before).abs().compareTo(before.abs().max(now.abs()).multiply(new BigDecimal("0.01"))) > 0
+                && !roundedFrom(now, before) && !roundedFrom(before, now);
     }
 
     /** 두 판의 <b>유량</b>이 하나라도 다른가. 잔액은 보지 않는다 — 뺄셈에 안 들어간다. */
