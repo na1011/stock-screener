@@ -308,6 +308,9 @@ final class SecEdgarFacts {
             reporting.putAll(anchorsOf(withForms(byColumn, true)));
         }
         NavigableMap<LocalDate, Window> fiscalYears = annualWindows(structure, anchors);
+        if (usGate) {
+            interimFormYears(structure, anchors, fiscalYears, issuer.fiscalYearEndMonth());
+        }
         if (fiscalYears.isEmpty()) {
             fiscalYears = interimSeed(structure, anchors, issuer.fiscalYearEndMonth());
         }
@@ -998,6 +1001,50 @@ final class SecEdgarFacts {
         }
         seed.put(close, new Window(start, close));
         return seed;
+    }
+
+    /**
+     * 관문 켬 — <b>연간 실적을 중간보고 양식(6-K)으로만 낸 해의 회계연도 창.</b> 6-K가 자기 기간으로 실은 12개월 창은, 이미 있는 회계연도 창과 하나도
+     * 안 겹치고 그 끝이 제출인 정보가 선언한 결산월과 맞을 때만 회계연도로 더한다. 실제로 막는 것은 겹침이다 — 캐시에서 6-K 자기 기간 12개월 창
+     * 18개 중 DSGX를 뺀 17(TSEM 13 · SSRM 2 · AER 1 · BNT 1)이 20-F · 40-F 연차 창과 기간까지 같다(반증 2026-10-31). 결산월은 연차 창이 없는 해에
+     * 결산월이 아닌 달에 끝나는 롤링 12개월 창을 막는 방어다(캐시 실례 0 · {@link #interimSeed}와 같은 원장 값 · ADR-0198).
+     *
+     * <p>뿌리: 40-F가 연간 기간을 XBRL로 안 싣고 연간 실적은 6-K 보도자료에만 있는 발행사는 회계연도 창이 없어, 그 해 FY와 분기 라벨이 통째로 빈다
+     * (DSGX — 1월 결산 · 2024 · 2025 FY가 6-K 2024-03-07 · 2025-03-06에만 · 40-F 2024-04-22 · 2025-04-22는 연간 기간 0).
+     */
+    private static void interimFormYears(Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn,
+                                         Map<String, Anchor> anchors, NavigableMap<LocalDate, Window> fiscalYears,
+                                         Integer fiscalYearEndMonth) {
+        if (fiscalYearEndMonth == null) {
+            return;
+        }
+        Map<LocalDate, Window> found = new TreeMap<>();
+        for (Map.Entry<SecEdgarColumn, Map<String, Map<Slot, Fact>>> entry : byColumn.entrySet()) {
+            if (entry.getKey().instant()) {
+                continue;
+            }
+            for (Fact fact : allFacts(entry.getValue())) {
+                Anchor anchor = anchors.get(fact.accn());
+                if (fact.start() == null || anchor == null || !fact.end().equals(anchor.end())
+                        || !INTERIM_FORMS.contains(anchor.form()) || !anchor.form().startsWith("6-K")) {
+                    continue;
+                }
+                long days = ChronoUnit.DAYS.between(fact.start(), fact.end());
+                if (days >= ANNUAL_MIN && days <= ANNUAL_MAX && endsInMonth(fact.end(), fiscalYearEndMonth)) {
+                    found.putIfAbsent(fact.end(), new Window(fact.start(), fact.end()));
+                }
+            }
+        }
+        found.forEach((end, window) -> {
+            if (fiscalYears.values().stream().noneMatch(year -> overlap(year, window))) {
+                fiscalYears.put(end, window);
+            }
+        });
+    }
+
+    /** 두 창이 하루라도 함께 덮는가 — 한쪽 끝날이 다른 쪽 시작날과 같은 것(52/53주 표기)은 겹침이 아니다. */
+    private static boolean overlap(Window a, Window b) {
+        return a.start().isBefore(b.end()) && b.start().isBefore(a.end());
     }
 
     /** {@code close} 앞뒤 7일 안에 결산월의 날이 있는가 — 52/53주 결산은 결산월 말 · 다음 달 초 며칠에 끝나고({@code fiscalYearEnd} 1003 ·
