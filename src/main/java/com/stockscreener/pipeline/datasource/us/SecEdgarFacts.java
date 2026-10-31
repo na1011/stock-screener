@@ -259,6 +259,16 @@ final class SecEdgarFacts {
      */
     static Result build(JsonNode facts, int fromFiscalYear, boolean usGate, CoverUnitJudge.Result coverUnit)
             throws DataSourceException {
+        return build(facts, fromFiscalYear, usGate, coverUnit, null);
+    }
+
+    /**
+     * @param fiscalYearEndMonth 제출인 정보가 선언한 결산월({@code submissions.fiscalYearEnd} → {@code stock.accounting_month}). 연차 보고서를
+     *                           아직 안 낸 등록인의 회계연도 창({@link #interimSeed})을 확인하는 데만 쓴다 — 없으면 그 창을 안 세운다
+     */
+    static Result build(JsonNode facts, int fromFiscalYear, boolean usGate, CoverUnitJudge.Result coverUnit,
+                        Integer fiscalYearEndMonth)
+            throws DataSourceException {
         // 관문 켬: 공시마다 택소노미·표시 통화를 하나로 정하고 IFRS 개념을 같은 뜻의 us-gaap 열쇠에 싣는다(ADR-0182).
         TaxonomyFrame.Result frame = usGate ? TaxonomyFrame.of(facts) : null;
         if (frame != null) {
@@ -275,6 +285,9 @@ final class SecEdgarFacts {
         Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> structure = withoutGated(byColumn);
         Map<String, Anchor> anchors = anchorsOf(structure);
         NavigableMap<LocalDate, Window> fiscalYears = annualWindows(structure, anchors);
+        if (fiscalYears.isEmpty()) {
+            fiscalYears = interimSeed(structure, anchors, fiscalYearEndMonth);
+        }
         Map<Label, Window> windows = new TreeMap<>();
         Map<Label, Anchor> labelAnchors = new LinkedHashMap<>();
         int dropped = labelPeriods(structure, anchors, fiscalYears, windows, labelAnchors,
@@ -877,6 +890,77 @@ final class SecEdgarFacts {
             }
         }
         return byEnd;
+    }
+
+    /**
+     * 연차 보고서를 아직 안 낸 등록인의 회계연도 창 — <b>가장 늦은</b> 중간보고서의 누계 기간 시작이 회계연도 시작이고, 그 창의 끝이
+     * 제출인 정보가 선언한 결산월과 맞을 때만 세운다.
+     *
+     * <p>10-Q의 누계(Q1 3개월 · 반기 6개월 · 3분기 9개월)는 회계연도 첫날부터 센다. 이 창이 없으면 첫 10-K 전의 등록인(신규 상장 · 지주회사
+     * 재편 승계 발행인)은 라벨을 하나도 못 만들어 보고서가 0건이고, 주식수가 없어 순위에 못 든다(2026-10-31: XOM 승계 등록인 CIK 2115436의
+     * 2026 2분기 10-Q 하나 — 팩트 31을 버리고 보고서 0 · 시총 10위권이 편입 밖).
+     *
+     * <p>증인이 둘인 이유: 첫해 10-Q의 「누계」는 회계연도가 아니라 법인 설립일부터일 수 있다 — 재편 껍데기(ETN 2012-05-10 · LIN · MDT)와
+     * 스팩(설립일부터 89일)이 그 꼴이고, 그 해의 10-Q가 모두 같은 설립일을 말해 서로 대 봐도 못 거른다. 선언 결산월은 원장이 따로 준 값이다.
+     * 실측(2026-10-31 · 팩트 캐시 1,217종목을 첫 연차 공시 전으로 잘라 뒤 원장 라벨과 대조): 2012 뒤 등록인 393 중 라벨이 틀리는 종목이 가장
+     * 이른 앵커 19 · 가장 늦은 앵커 8 · 가장 늦은 앵커 + 결산월 1(PL — 합병 때 결산월이 바뀜)이다.
+     *
+     * <p>연차 창이 하나라도 있으면 안 부른다 — 이 창은 투영({@link #projectYear})의 근거 하나일 뿐이고, 첫 10-K가 들어오면 그 12개월 팩트가
+     * 대신한다. 창의 끝은 시작 + 1년 − 1일이다 — 라벨은 끝의 연도와 창 안의 위치로만 정하므로 52/53주 결산의 며칠 차이가 Q1~Q3 라벨을 안
+     * 바꾼다.
+     */
+    private static NavigableMap<LocalDate, Window> interimSeed(
+            Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn,
+            Map<String, Anchor> anchors, Integer fiscalYearEndMonth) {
+        NavigableMap<LocalDate, Window> seed = new TreeMap<>();
+        if (fiscalYearEndMonth == null) {
+            return seed;
+        }
+        Anchor last = anchors.values().stream()
+                .filter(a -> INTERIM_FORMS.contains(a.form()))
+                .max(Comparator.comparing(Anchor::end).thenComparing(Anchor::filed).thenComparing(Anchor::accn))
+                .orElse(null);
+        if (last == null) {
+            return seed;
+        }
+        LocalDate start = null;
+        for (Map.Entry<SecEdgarColumn, Map<String, Map<Slot, Fact>>> entry : byColumn.entrySet()) {
+            if (entry.getKey().instant()) {
+                continue;
+            }
+            for (Fact fact : allFacts(entry.getValue())) {
+                if (fact.start() == null || !fact.accn().equals(last.accn()) || !fact.end().equals(last.end())) {
+                    continue;
+                }
+                long days = ChronoUnit.DAYS.between(fact.start(), fact.end());
+                // 누계는 한 분기 이상 · 12개월 미만이다 — 10-Q의 「Twelve Months Ended」는 회계연도가 아니다.
+                if (days >= QUARTER_MIN && days < ANNUAL_MIN && (start == null || fact.start().isBefore(start))) {
+                    start = fact.start();
+                }
+            }
+        }
+        if (start == null) {
+            return seed;
+        }
+        LocalDate close = start.plusYears(1).minusDays(1);
+        if (!endsInMonth(close, fiscalYearEndMonth)) {
+            log.info("중간보고서 누계로 세운 회계연도 끝 {}가 선언 결산월 {}와 안 맞아 창을 안 세운다(공시 {})", close, fiscalYearEndMonth,
+                    last.accn());
+            return seed;
+        }
+        seed.put(close, new Window(start, close));
+        return seed;
+    }
+
+    /** {@code close} 앞뒤 7일 안에 결산월의 날이 있는가 — 52/53주 결산은 결산월 말 · 다음 달 초 며칠에 끝나고({@code fiscalYearEnd} 1003 ·
+     * 0128), 결산월은 그 {@code MMDD}의 앞 두 자리다. */
+    private static boolean endsInMonth(LocalDate close, int month) {
+        for (int shift = -7; shift <= 7; shift++) {
+            if (close.plusDays(shift).getMonthValue() == month) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** 분기로 볼 길이인가. 두 구간이고 <b>그 사이는 일부러 비어 있다</b>({@link #QUARTER_MAX}). */
