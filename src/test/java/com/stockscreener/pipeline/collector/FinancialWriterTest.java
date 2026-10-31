@@ -301,6 +301,19 @@ class FinancialWriterTest {
         }
 
         @Test
+        @DisplayName("동일값 정정은 판만 쌓고 지표를 안 지운다 · 값이 다른 정정은 지운다(재고 「국내 동일값 정정 행」)")
+        void sameValueRevisionStacksWithoutInvalidating() {
+            fillOnlyWriter.write(stockId, List.of(report(2025, "FY", "2026-03-15", "1000")), WriteMode.FILL_MISSING);
+            fillOnlyWriter.write(stockId, List.of(report(2025, "FY", "2026-04-20", "1000")), WriteMode.FILL_MISSING);
+            assertThat(rowCount()).isEqualTo(2);
+            assertThat(invalidations.calls).isEmpty();
+
+            fillOnlyWriter.write(stockId, List.of(report(2025, "FY", "2026-05-20", "950")), WriteMode.FILL_MISSING);
+            assertThat(rowCount()).isEqualTo(3);
+            assertThat(invalidations.calls).hasSize(1);
+        }
+
+        @Test
         @DisplayName("저장된 주식수가 대신한 값 밖이면(손 수리 · ADR-0126) 집합이 있어도 지킨다(TEM 2024 Q3)")
         void keepsHandRepairedSharesOutsideTheSupersededSet() {
             writer.write(stockId, List.of(withShares(2024, "Q3", "2024-11-04", "1000", "104164000")));

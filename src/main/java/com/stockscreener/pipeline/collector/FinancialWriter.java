@@ -702,8 +702,16 @@ public class FinancialWriter {
         // 낡은 값이 남는데, 그것은 그럴듯해 보여서 아무도 눈치채지 못한다.
         // 기준일이 공시일이 아니라 회계기간 시작일인 이유: 틀린 수치가 영향을 준 구간은
         // 정정이 공시된 날이 아니라 그 수치가 쓰이기 시작한 날부터다.
-        invalidationPort.invalidate(stockId, report.periodStart(),
-                IndicatorInvalidationPort.InvalidationReason.FINANCIAL_REVISED);
+        //
+        // 다만 관리하는 칸이 전부 직전 판과 같으면(동일값 정정 · 재고 「국내 동일값 정정 행」) 지표가 바뀔 수 없다 — 판은 사실로 쌓되
+        // 무효화는 안 한다. 무효화는 그 종목 지표를 기간 시작부터 지우고 다음 화해까지 그 창을 비운다(값은 같은 값으로 다시 선다).
+        if (!sameAmounts(existing, report, managed)) {
+            invalidationPort.invalidate(stockId, report.periodStart(),
+                    IndicatorInvalidationPort.InvalidationReason.FINANCIAL_REVISED);
+        } else {
+            log.info("정정공시인데 관리 칸이 전부 직전 판과 같다 — 판만 쌓고 지표는 안 지운다. stockId={} {}/{}",
+                    stockId, report.fiscalYear(), report.fiscalPeriod());
+        }
 
         insert(stockId, report, existing.revisionNo() + 1, true);
         tally.revised++;
@@ -1155,6 +1163,18 @@ public class FinancialWriter {
         BigDecimal of(RawFinancialReport report) {
             return accessor.apply(report);
         }
+    }
+
+    /** 관리하는 칸이 전부 직전 판과 같은가 — 빈 칸도 같아야 같다(새 판이 칸을 비우면 값이 바뀐 것이다). */
+    private boolean sameAmounts(Existing existing, RawFinancialReport report, Set<Amount> managed) {
+        for (Amount amount : columnsFor(managed)) {
+            BigDecimal stored = existing.amounts().get(amount);
+            BigDecimal incoming = amount.accessor.apply(report);
+            if (stored == null ? incoming != null : incoming == null || stored.compareTo(incoming) != 0) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private record Existing(long id, LocalDate publishedAt, int revisionNo,
