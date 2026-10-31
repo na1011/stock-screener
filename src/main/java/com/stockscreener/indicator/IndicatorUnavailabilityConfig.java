@@ -378,8 +378,9 @@ public class IndicatorUnavailabilityConfig {
      * <p><b>원소는 체계 접두가 붙은 키다</b>(ADR-0092). SIC 쪽은 Division H 전체이며
      * <b>{@code 66}은 SIC에 존재하지 않는다</b>(실측 6,266종목). 미국 은행·REIT가 유동/비유동을
      * 안 가른다는 것은 실측이 답했다({@code AssetsCurrent} 커버리지 15/19).
-     * <b>{@code AltmanZCalculator}와 이번에는 SIC 쪽이 같다</b> — KR에서 둘을 가른 근거였던
-     * "값이 실제로 나온 종목" 데이터가 미국에는 아직 없기 때문이고, 생기면 그때 갈린다.
+     * <b>{@code AltmanZCalculator}와 SIC 쪽도 갈린다</b>(2026-10-31) — 그쪽은 값이 실제로 난 종목으로 {@code 65}·{@code 67}을
+     * 걷었고(사업회사), 이쪽은 「재료가 오지 않는 업종」이라 남긴다 — REIT·부동산 보유 임대는 유동/비유동을 안 가른다. 값이 난
+     * 종목에는 사유가 안 붙으므로 둘이 부딪히지 않는다(KR의 64와 같은 꼴).
      */
     private static final Set<String> FINANCIAL_DIVISIONS = Set.of(
             "KSIC:64", "KSIC:65", "KSIC:66",

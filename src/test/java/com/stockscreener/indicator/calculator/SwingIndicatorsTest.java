@@ -578,11 +578,14 @@ class SwingIndicatorsTest {
         @Test
         @DisplayName("업종 정의역이 원본과 같다 — 판정을 복사하지 않고 원본의 것을 부른다")
         void sharesTheDomainWithTheOriginal() {
-            for (String division : List.of("KSIC:65", "KSIC:66", "SIC:60", "SIC:63", "SIC:67")) {
+            for (String division : List.of("KSIC:65", "KSIC:66", "SIC:60", "SIC:63", "SIC:64")) {
                 assertThat(calculator.calculate(zppContext(division)))
                         .as("%s는 Altman 계열의 정의역 밖이다", division)
                         .isEmpty();
             }
+            // 값이 나는 쪽이 사업회사인 중분류는 걷었다(2026-10-31 · 부동산 서비스 · 로열티·특허 · ADR-0092).
+            assertThat(calculator.calculate(zppContext("SIC:65"))).hasSize(1);
+            assertThat(calculator.calculate(zppContext("SIC:67"))).hasSize(1);
             // 접두가 없으면 어느 체계인지 알 수 없어 제외하지 않는다(ADR-0092).
             assertThat(calculator.calculate(zppContext("65"))).hasSize(1);
             // 지주회사 버킷과 업종 미상은 남긴다(ADR-0044).
