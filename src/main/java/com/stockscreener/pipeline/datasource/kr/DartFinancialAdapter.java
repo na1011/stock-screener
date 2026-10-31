@@ -360,8 +360,9 @@ public class DartFinancialAdapter implements FinancialDataSource {
             return List.of();
         }
         String currency = singleCurrency(reference.rows());
-        // 같은 연결 기저(CFS/OFS) · 같은 통화의 보고서끼리만 잰다 — 기저 전환은 다른 축이다.
-        java.util.function.Function<PeriodRows, PeriodRows> same = r -> r != null && reference.fsDiv().equals(r.fsDiv())
+        // 같은 통화의 보고서끼리 잰다(통화가 갈린 해는 ADR-0110이 다룬다). 연결 · 별도 기저는 가리지 않는다 — 뒤 보고서가 다른 기저로 실은
+        // 것도 「다시 실었다」이고(연결 전환 · 해를 건너는 꼴 · 재고 「연결 전환 종목」 행), 그 기간 저장 값은 그날부터 그 보고서와 한 창에 못 선다.
+        java.util.function.Function<PeriodRows, PeriodRows> same = r -> r != null
                 && currency != null && currency.equals(singleCurrency(r.rows())) ? r : null;
         PeriodRows q1 = same.apply(rows.get("Q1"));
         PeriodRows h1 = same.apply(rows.get("Q2"));

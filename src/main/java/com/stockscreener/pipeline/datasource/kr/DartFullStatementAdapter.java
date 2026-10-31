@@ -503,8 +503,8 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
     private static final java.util.Set<String> ZERO_WHEN_ABSENT = java.util.Set.of("discontinued_income", "discontinued_income_controlling");
 
     /**
-     * 국내 관문 켬(재고 A6): 그 해 손익의 기저 판정 — 주요계정 어댑터와 같은 규칙({@link DartFlowBasis}). 같은 연결 기저(CFS/OFS)의
-     * 보고서끼리만 잰다.
+     * 국내 관문 켬(재고 A6): 그 해 손익의 기저 판정 — 주요계정 어댑터와 같은 규칙({@link DartFlowBasis}). 연결 · 별도 기저가 갈린 보고서끼리도
+     * 잰다 — 다른 기저로 다시 실은 것도 같은 원칙이다(연결 전환).
      */
     static List<com.stockscreener.pipeline.datasource.FlowBasis> flowBases(int year, Map<StatementPeriod, Pending> pending,
                                                                            Map<StatementPeriod, Pending> next,
@@ -517,7 +517,8 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
         if (reference == null) {
             return List.of();
         }
-        java.util.function.Function<Pending, Pending> same = p -> p != null && p.consolidated() == reference.consolidated() ? p : null;
+        // 연결 · 별도 기저는 가리지 않는다(주요계정 어댑터와 같다) — 뒤 보고서가 다른 기저로 실은 것도 「다시 실었다」다.
+        java.util.function.Function<Pending, Pending> same = p -> p;
         Pending q1 = same.apply(pending.get(StatementPeriod.Q1));
         Pending h1 = same.apply(pending.get(StatementPeriod.Q2));
         Pending q3 = same.apply(pending.get(StatementPeriod.Q3));
