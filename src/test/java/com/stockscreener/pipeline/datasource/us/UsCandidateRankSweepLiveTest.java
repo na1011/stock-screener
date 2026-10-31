@@ -65,6 +65,8 @@ import java.util.TreeSet;
  * <p><b>대조군</b>: 재료 없는 켬 판독기의 주식수가 꺼짐 판독기와 같다(0콜). 다르면 켬 판독기 자체의 차이라 스윕 수를 읽기 전에 본다.
  *
  * <pre>
+ * 작은 DB(관문 표를 넣은 {@code stock_screener_gate_…})에서 판정을 재려면 {@code CLASS_SWEEP_DB=<그 DB>}를 주고
+ * {@code ops/write-session.sh exec <id> --db <그 DB> -- …}로 감싼다(쓰기 가드 · 연결 이름은 PGAPPNAME).
  * ( set -a; . ./.env; set +a; CLASS_SWEEP_DIR=… [CLASS_SWEEP_POP=all|candidates|members|none|티커파일]
  *   [CLASS_SWEEP_CF_DIR=…(티커.json) CLASS_SWEEP_INST_DIR=…(CIK_접수번호.xml) — 저장 재료로 0콜 재생] [CLASS_SWEEP_AS_OF=…]
  *   ./gradlew liveTest --tests "*UsCandidateRankSweepLiveTest*" -PskipFrontend )
@@ -84,8 +86,16 @@ class UsCandidateRankSweepLiveTest {
         Path dir = Path.of(System.getenv("CLASS_SWEEP_DIR"));
         LocalDate asOf = LocalDate.parse(env("CLASS_SWEEP_AS_OF", LocalDate.now().toString()));
         Path out = Path.of(env("CLASS_SWEEP_OUT", "build/candidate-rank-sweep.tsv"));
-        DriverManagerDataSource ds = new DriverManagerDataSource("jdbc:postgresql://localhost:5432/"
-                + env("CLASS_SWEEP_DB", "stock_screener") + "?options=-c%20default_transaction_read_only%3Don",
+        String db = env("CLASS_SWEEP_DB", "stock_screener");
+        // 운영 DB는 읽기 전용으로만 연다. 작은 DB(stock_screener_gate_ · 관문 표를 넣은 드라이런 재료)는 유도가 판정을 쓴다 — 읽기 전용이면
+        // financial_common_income 쓰기가 거절돼 모든 줄이 유도 실패로 끝난다(2026-10-31). 작은 DB도 쓰기 가드가 켜져 있으므로
+        // ops/write-session.sh exec <id> --db <작은 DB> -- 로 돌린다 — 그 래퍼가 주는 PGAPPNAME을 JDBC는 스스로 안 읽어 연결 이름으로 넘긴다.
+        boolean smallDb = db.startsWith("stock_screener_gate_");
+        String appName = Optional.ofNullable(System.getenv("PGAPPNAME")).filter(v -> !v.isBlank()).orElse(null);
+        String params = smallDb
+                ? (appName == null ? "" : "?ApplicationName=" + java.net.URLEncoder.encode(appName, java.nio.charset.StandardCharsets.UTF_8))
+                : "?options=-c%20default_transaction_read_only%3Don";
+        DriverManagerDataSource ds = new DriverManagerDataSource("jdbc:postgresql://localhost:5432/" + db + params,
                 env("DB_USERNAME", System.getProperty("user.name")), "");
         JdbcTemplate jdbc = new JdbcTemplate(ds);
 
