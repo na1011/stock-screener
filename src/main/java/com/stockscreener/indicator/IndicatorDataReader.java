@@ -379,7 +379,19 @@ public class IndicatorDataReader {
      *                         구별할 수단이 없어, <b>오염된 값이 영영 남는다.</b>
      */
     public record StockAttributes(
-            String industryDivisionKey, String marketCode, boolean financialCurrencyMismatched) {
+            String industryDivisionKey, String marketCode, boolean financialCurrencyMismatched, Integer accountingMonth) {
+
+        public StockAttributes(String industryDivisionKey, String marketCode, boolean financialCurrencyMismatched) {
+            this(industryDivisionKey, marketCode, financialCurrencyMismatched, null);
+        }
+
+        /**
+         * 국내 비12월 결산 — 저장 기간이 12월 결산 합성 규약이라 기간과 공시 순서가 실제와 다르다(A29 · 신영증권 3월 결산 FY2026이
+         * 2026-10-01~12-31 라벨로 06-11부터 보인다). 결산월을 모르면(null) 가르지 않는다.
+         */
+        public boolean nonDecemberDomesticFiscalYear() {
+            return marketCode != null && !"US".equals(marketCode) && accountingMonth != null && accountingMonth != 12;
+        }
     }
 
     /**
@@ -398,6 +410,7 @@ public class IndicatorDataReader {
         List<StockAttributes> found = jdbcTemplate.query("""
                 SELECT s.industry_division_key,
                        s.market_code,
+                       s.accounting_month,
                        EXISTS (SELECT 1
                                  FROM financial_statement f
                                  JOIN market m ON m.code = s.market_code
@@ -408,7 +421,7 @@ public class IndicatorDataReader {
                 """,
                 (rs, rowNum) -> new StockAttributes(
                         rs.getString("industry_division_key"), rs.getString("market_code"),
-                        rs.getBoolean("currency_mismatched")),
+                        rs.getBoolean("currency_mismatched"), rs.getObject("accounting_month", Integer.class)),
                 stockId);
         return found.isEmpty() ? new StockAttributes(null, null, false) : found.get(0);
     }

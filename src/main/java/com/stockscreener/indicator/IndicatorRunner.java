@@ -449,12 +449,16 @@ public class IndicatorRunner {
         int years = registry.maxFinancialYears();
         // 종목당 한 번만 읽는다. 지표마다 읽으면 850종목 × N지표의 N+1이 된다.
         IndicatorDataReader.StockAttributes attributes = reader.readStockAttributes(stockId);
+        // 국내 관문 켬(A29): 비12월 결산 국내 종목은 재무를 비운다 — 저장 기간 규약(12월 결산 합성)이 그 회계기간을 표현하지 못해 TTM ·
+        // 기준 기가 실제와 어긋난다(재무 기준 표시가 같은 종목을 이미 판정 불가로 둔다). 우리가 건 막음이라 옛 행도 걷는다(통화 게이트와
+        // 같은 문 · ADR-0094). 근본 처방(기수 → 기간을 두 국내 엔드포인트 · 소비 키까지)은 현 편입 한 종목(001720)을 위한 설계라 두지 않는다.
+        boolean nonDecember = attributes.nonDecemberDomesticFiscalYear() && reader.gateOn(attributes.marketCode());
         return new RawData(new IndicatorContext(
                 stockId,
                 attributes.industryDivisionKey(),
                 reader.readPriceBars(stockId, asOf, bars),
-                reader.readAnnualFigures(stockId, asOf, years, visibility),
-                reader.readQuarterlyFigures(stockId, asOf, years, visibility),
+                nonDecember ? List.of() : reader.readAnnualFigures(stockId, asOf, years, visibility),
+                nonDecember ? List.of() : reader.readQuarterlyFigures(stockId, asOf, years, visibility),
                 // 빠뜨려도 컴파일된다 — 전 종목이 빈 목록을 받아 권리락 구간 보정이 통째로
                 // 사라지고 값은 그럴듯하다. IndicatorRunnerTest가 이 자리를 지킨다.
                 reader.readShareAdjustments(stockId),
@@ -475,7 +479,7 @@ public class IndicatorRunner {
                 reader.readEarningsReleaseDates(stockId, asOf)).withGateOn(reader.gateOn(attributes.marketCode()))
                 // 분사 효력일(ADR-0168 F1 · 관문 켬). 빠뜨려도 컴파일되고, 빠지면 분사 뒤 가격을 분사 앞 회사의 이익으로 나눈 배수가 나간다.
                 .withSpinOffDates(reader.readSpinOffDates(stockId)),
-                attributes.financialCurrencyMismatched());
+                attributes.financialCurrencyMismatched() || nonDecember);
     }
 
     /**
