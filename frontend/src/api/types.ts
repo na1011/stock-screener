@@ -551,7 +551,7 @@ export interface StockDetailResponse {
   financialBasis: FinancialBasis | null
 }
 
-export const FINANCIAL_BASIS_STATUSES = ['PENDING', 'NONE', 'UNTRACKED'] as const
+export const FINANCIAL_BASIS_STATUSES = ['PENDING', 'SPIN_OFF', 'NONE', 'UNTRACKED'] as const
 export type FinancialBasisStatus = (typeof FINANCIAL_BASIS_STATUSES)[number]
 export const FINANCIAL_BASIS_UNTRACKED = [
   'FOREIGN_ISSUER',

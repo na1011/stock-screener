@@ -100,7 +100,8 @@ final class ValuationHistory {
                 // 과거 봉이 그때 성립하지 않던 기저로 계산된다(ADR-0164).
                 IndicatorContext atBar = context.visibleAt(bar.tradeDate());
                 blocked = FinancialMath.withheldAt(atBar, bar.tradeDate());
-                visible = FinancialMath.seriesOf(blocked ? atBar.withoutFinancials() : atBar);
+                // 분사 뒤 봉은 분사 뒤 회사의 판만 본다(관문 켬 · ADR-0168 F1 · FinancialMath.financialsAt과 같은 사본).
+                visible = FinancialMath.seriesOf(blocked ? atBar.withoutFinancials() : atBar.withoutPreSpinOffBasis(bar.tradeDate()));
             }
             withheld[i] = blocked;
             int published = FinancialMath.publishedIndexOn(visible.rows(), bar.tradeDate());

@@ -18,6 +18,9 @@ export function financialBasisStyle(status: FinancialBasisStatus): FinancialBasi
   switch (status) {
     case 'PENDING':
       return { flagsRow: true, tone: 'warn' }
+    case 'SPIN_OFF':
+      // 분사 뒤 재무 대기 — 상세에서 경고로 그린다. 결과 행에는 안 단다(재무 조건이면 그 행은 애초에 판정불가로 빠진다).
+      return { flagsRow: false, tone: 'warn' }
     case 'NONE':
       return { flagsRow: false, tone: null }
     case 'UNTRACKED':

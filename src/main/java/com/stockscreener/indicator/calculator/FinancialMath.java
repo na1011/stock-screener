@@ -606,7 +606,9 @@ final class FinancialMath {
      */
     static IndicatorContext financialsAt(IndicatorContext context, LocalDate barDate) {
         IndicatorContext visible = context.visibleAt(barDate);
-        return withheldAt(visible, barDate) ? visible.withoutFinancials() : visible;
+        // 관문 켬 · ADR-0168 F1: 분사 뒤 봉은 분사 뒤에 시작한 기간의 판만 본다(IndicatorContext.withoutPreSpinOffBasis) — 분사 앞
+        // 회사의 재무로 분사 뒤 회사의 지표를 내지 않는다. 새 실적 발표로 막는 것과 같은 꼴이다(그 봉의 회사와 재무의 회사가 다르다).
+        return withheldAt(visible, barDate) ? visible.withoutFinancials() : visible.withoutPreSpinOffBasis(barDate);
     }
 
     /** 그 봉의 재무 지표를 막는가 — {@code visible}은 그 봉 시점 사본({@link IndicatorContext#visibleAt})이다. */
@@ -665,7 +667,7 @@ final class FinancialMath {
     static List<IndicatorPoint> bySegment(
             IndicatorContext context,
             Function<IndicatorContext, List<IndicatorPoint>> compute) {
-        return bySegment(context, compute, true);
+        return bySegment(context, compute, FinancialMath::financialsAt);
     }
 
     /**
@@ -678,13 +680,13 @@ final class FinancialMath {
     static List<IndicatorPoint> sharesBySegment(
             IndicatorContext context,
             Function<IndicatorContext, List<IndicatorPoint>> compute) {
-        return bySegment(context, compute, false);
+        return bySegment(context, compute, IndicatorContext::visibleAt);
     }
 
     private static List<IndicatorPoint> bySegment(
             IndicatorContext context,
             Function<IndicatorContext, List<IndicatorPoint>> compute,
-            boolean withholdOnRelease) {
+            java.util.function.BiFunction<IndicatorContext, LocalDate, IndicatorContext> financialsOn) {
         List<PriceBar> bars = context.priceBars();
         if (bars.isEmpty()) {
             return List.of();
@@ -705,7 +707,7 @@ final class FinancialMath {
                 end++;
             }
             LocalDate to = bars.get(end - 1).tradeDate();
-            IndicatorContext atSegment = withholdOnRelease ? financialsAt(context, from) : context.visibleAt(from);
+            IndicatorContext atSegment = financialsOn.apply(context, from);
             for (IndicatorPoint point : compute.apply(atSegment)) {
                 if (!point.tradeDate().isBefore(from) && !point.tradeDate().isAfter(to)) {
                     out.add(point);

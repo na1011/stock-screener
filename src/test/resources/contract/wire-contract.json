@@ -104,6 +104,7 @@
     ],
     "FinancialBasisStatus": [
       "PENDING",
+      "SPIN_OFF",
       "NONE",
       "UNTRACKED"
     ],

@@ -529,6 +529,48 @@ public class IndicatorDataReader {
     }
 
     /**
+     * 이 종목이 모체인 분사의 효력일(오름차순 · ADR-0168 F1) — 원장의 승인된 분사({@code APPLIED}) 중 가격 배수가 1이 아닌 것. 그날부터 가격이
+     * 분사 뒤 회사를 뜻하므로 가격과 짝짓는 계산기가 분사 앞 기준 판을 안 쓰는 재료다({@code IndicatorContext.withoutPreSpinOffBasis} · 관문 켬).
+     * 가격 배수가 1이면(SYRE 2023-07-03 양도불가 CVR) 가격 기저가 안 바뀌었으므로 싣지 않는다. 판정 대기 · 미해석은 억제가 따로 막는다(ADR-0055).
+     *
+     * <p>자식이 <b>모체와 같은 등록인(CIK)의 증권</b>이면 싣지 않는다 — 회사가 안 쪼개졌고 재무가 그대로 그 회사다(OPEN 2025-11-18 워런트 ·
+     * UHAL 2022-11-10 클래스 B · 자식은 기호 시대로도 찾는다). 자식 CIK를 모르면(국내 인적분할 · 새 등록인 · GME.WS) 쪼개진 것으로 본다 —
+     * 틀려도 값을 숨기는 쪽이다.
+     */
+    public List<LocalDate> readSpinOffDates(long stockId) {
+        return readSpinOffDates(List.of(stockId)).getOrDefault(stockId, List.of());
+    }
+
+    /** {@link #readSpinOffDates(long)}를 여러 종목 한 번에 — 재무 기준 표시가 읽는다. 분사가 없는 종목은 맵에 없다. */
+    public Map<Long, List<LocalDate>> readSpinOffDates(Collection<Long> stockIds) {
+        Map<Long, List<LocalDate>> out = new HashMap<>();
+        if (stockIds.isEmpty()) {
+            return out;
+        }
+        jdbcTemplate.query(con -> {
+            var ps = con.prepareStatement(SELECT_SPIN_OFF_DATES);
+            ps.setArray(1, con.createArrayOf("bigint", stockIds.toArray()));
+            return ps;
+        }, rs -> {
+            out.computeIfAbsent(rs.getLong(1), k -> new ArrayList<>()).add(rs.getObject(2, LocalDate.class));
+        });
+        return out;
+    }
+
+    private static final String SELECT_SPIN_OFF_DATES = """
+                SELECT DISTINCT ca.stock_id, ca.effective_date FROM corporate_action ca JOIN stock s ON s.id = ca.stock_id
+                LEFT JOIN corporate_action_distribution d ON d.corporate_action_id = ca.id
+                WHERE ca.stock_id = ANY (?) AND ca.type = 'SPIN_OFF' AND ca.status = 'APPLIED'
+                  AND ca.price_ratio IS NOT NULL AND ca.price_ratio <> 1
+                  AND NOT EXISTS (
+                      SELECT 1 FROM stock c
+                      WHERE c.sec_cik = s.sec_cik AND c.id <> s.id
+                        AND (c.ticker = ANY (string_to_array(d.new_symbol, ','))
+                             OR c.id IN (SELECT e.stock_id FROM stock_symbol_era e
+                                         WHERE e.symbol = ANY (string_to_array(d.new_symbol, ',')))))
+                ORDER BY 1, 2""";
+
+    /**
      * 한 종목의 그 시점 판 이력 — 연간 · 분기, 그리고 기말마다의 보고서 양식({@code report_code}의 콜론 앞, 국내는 보고서 코드 그대로).
      */
     public record KnownFigures(List<FinancialFigures> annual, List<FinancialFigures> quarterly,

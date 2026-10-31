@@ -36,7 +36,8 @@ class IndicatorContextCopyTest {
             "withMarketIndex", "marketIndex",
             "withGovernanceFacts", "governanceFacts",
             "withEarningsReleaseDates", "earningsReleaseDates",
-            "withGateOn", "gateOn");
+            "withGateOn", "gateOn",
+            "withSpinOffDates", "spinOffDates");
 
     @Test
     @DisplayName("withDependencies가 나머지 필드를 전부 나른다")
@@ -77,6 +78,13 @@ class IndicatorContextCopyTest {
         IndicatorContext base = fullyPopulated();
         assertCarriesEverythingExcept(base, base.withEarningsReleaseDates(List.of(LocalDate.of(2026, 7, 7))),
                 "withEarningsReleaseDates");
+    }
+
+    @Test
+    @DisplayName("withSpinOffDates가 나머지 필드를 전부 나른다")
+    void withSpinOffDatesCarriesEveryOtherField() throws Exception {
+        IndicatorContext base = fullyPopulated();
+        assertCarriesEverythingExcept(base, base.withSpinOffDates(List.of(LocalDate.of(2023, 1, 4))), "withSpinOffDates");
     }
 
     @Test
@@ -179,7 +187,8 @@ class IndicatorContextCopyTest {
                 Map.of("PARENT", new TreeMap<>(index)),
                 List.of(LocalDate.of(2026, 4, 7)))
                 // 기본값(꺼짐)이 아닌 쪽으로 채워야 사본이 이 필드를 떨어뜨렸을 때 드러난다.
-                .withGateOn(true);
+                .withGateOn(true)
+                .withSpinOffDates(List.of(LocalDate.of(2024, 4, 2)));
     }
 
     private static FinancialFigures annual() {

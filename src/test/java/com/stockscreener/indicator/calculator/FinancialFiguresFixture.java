@@ -140,6 +140,11 @@ final class FinancialFiguresFixture {
      * 픽스처가 여럿이라, {@code FinancialMath.sharesOf}가 봉 시점 분기를 고르게 된 뒤
      * (ADR-0103) 그 픽스처들은 「그 시점에 공시된 분기가 없다」로 떨어진다.
      */
+    FinancialFiguresFixture fiscalPeriod(FinancialFigures.FiscalPeriod value) {
+        this.fiscalPeriod = value;
+        return this;
+    }
+
     FinancialFiguresFixture publishedAt(LocalDate value) {
         this.publishedAt = value;
         return this;

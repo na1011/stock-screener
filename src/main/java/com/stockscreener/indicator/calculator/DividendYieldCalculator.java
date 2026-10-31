@@ -65,6 +65,15 @@ public class DividendYieldCalculator implements IndicatorCalculator {
             if (dps == null || bar.close() == null || bar.close().signum() <= 0) {
                 return null;
             }
+            // 관문 켬 · ADR-0168 F1: 분사 뒤 가격을 분사 앞에 시작한 해의 주당 배당으로 나누지 않는다 — 그 해 FY 판이 분사 뒤 기준
+            // 사본에 있을 때만 낸다(CTVA 2026-10-01 0.90 → 5.57 · 가격 배수 6.43).
+            if (context.gateOn() && !context.spinOffDates().isEmpty()) {
+                IndicatorContext visible = context.visibleAt(bar.tradeDate());
+                IndicatorContext post = visible.withoutPreSpinOffBasis(bar.tradeDate());
+                if (post != visible && GovernanceMath.annualOf(post, figures.fiscalYear(), bar.tradeDate()) == null) {
+                    return null;
+                }
+            }
             // 공시 시점부터 이 봉까지의 분할·무상증자를 나눈다. 안 나누면 5:1 분할 뒤
             // 배당수익률이 다섯 배로 나온다.
             BigDecimal multiple =

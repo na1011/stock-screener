@@ -68,6 +68,11 @@ public class FinancialBasisReader {
     public enum Status {
         /** 기준 기보다 새로운 실적 발표가 있다 — 지표에 아직 반영 안 됐다. */
         PENDING,
+        /**
+         * 분사 뒤인데 분사 뒤 회사의 TTM이 아직 안 섰다 — 재무 지표는 분사 뒤에 시작한 기간의 재무로만 계산하므로 TTM · 여러 해
+         * 지표가 비어 있다(관문 켬 · ADR-0168 F1). 기준 기 라벨은 원장의 최신 기다.
+         */
+        SPIN_OFF,
         /** 기준 기보다 새로운 실적 발표가 없다(원장이 덮는 구간에서). */
         NONE,
         /** 모른다 — 사유는 {@link Untracked}. 「없음」이 아니다. */
@@ -123,6 +128,7 @@ public class FinancialBasisReader {
             known.putAll(indicatorDataReader.readKnownFigures(ids, asOf, writtenBy));
             releaseDates.putAll(releaseDates(ids, asOf, writtenBy));
         });
+        Map<Long, List<LocalDate>> spinOffs = indicatorDataReader.readSpinOffDates(stockIds);
         Map<String, LocalDate> cursors = listingCursors();
         Map<Long, IndicatorContext> contexts = new HashMap<>();
         Map<Long, ReportingBasis.Basis> bases = new HashMap<>();
@@ -132,7 +138,9 @@ public class FinancialBasisReader {
                 continue;
             }
             IndicatorContext context = new IndicatorContext(stockId, List.of(), figures.annual(), figures.quarterly(), Map.of())
-                    .withEarningsReleaseDates(releaseDates.getOrDefault(stockId, List.of()));
+                    .withEarningsReleaseDates(releaseDates.getOrDefault(stockId, List.of()))
+                    .withGateOn(indicatorDataReader.gateOn(facts.get(stockId).marketCode()))
+                    .withSpinOffDates(spinOffs.getOrDefault(stockId, List.of()));
             ReportingBasis.of(context).ifPresent(basis -> {
                 bases.put(stockId, basis);
                 contexts.put(stockId, context);
@@ -168,6 +176,14 @@ public class FinancialBasisReader {
             return new Basis(flowLabel, balanceLabel, Status.PENDING, null, pending,
                     "%s 새 실적 발표가 있어 이 날의 재무 지표를 계산하지 않았습니다 — 재무 기준이 %s라 정식 공시가 반영되면 다시 계산합니다."
                             .formatted(DAY.format(pending), flowLabel));
+        }
+        // 지표 계산과 같은 판정이다(IndicatorContext.withoutPreSpinOffBasis) — 분사 뒤 재무가 다 서기 전에는 주가 대비 지표가 없다.
+        IndicatorContext visible = context.visibleAt(asOf);
+        if (visible.awaitingPostSpinOffFinancials(asOf)) {
+            LocalDate spinOff = context.spinOffDates().stream().filter(d -> !d.isAfter(asOf)).reduce((x, y) -> y).orElseThrow();
+            return new Basis(flowLabel, balanceLabel, Status.SPIN_OFF, null, null,
+                    "%s 분사로 회사가 바뀌어 분사 뒤에 시작한 기간의 재무로만 지표를 계산합니다 — 분사 뒤 네 분기가 쌓일 때까지 TTM 지표(PER · PSR · ROE 등)가, 여러 해 지표는 그 햇수가 찰 때까지 비어 있습니다."
+                            .formatted(DAY.format(spinOff)));
         }
         if (unresolved != null) {
             return untracked(flowLabel, balanceLabel, Untracked.UNRESOLVED,
