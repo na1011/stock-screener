@@ -23,7 +23,7 @@ public record FlowSupersession(LocalDate since, NavigableMap<LocalDate, BigDecim
     }
 
     /** {@code day}의 봉이 보는 그 칸 — 낡기 전이면 저장 값, 낡은 뒤면 그날까지 공개된 마지막 새 값(없으면 {@code null}). */
-    BigDecimal seenOn(LocalDate day, BigDecimal stored) {
+    public BigDecimal seenOn(LocalDate day, BigDecimal stored) {
         if (since.isAfter(day)) {
             return stored;
         }
@@ -31,7 +31,7 @@ public record FlowSupersession(LocalDate since, NavigableMap<LocalDate, BigDecim
         return e == null ? null : e.getValue();
     }
 
-    boolean staleOn(LocalDate day) {
+    public boolean staleOn(LocalDate day) {
         return !since.isAfter(day);
     }
 }

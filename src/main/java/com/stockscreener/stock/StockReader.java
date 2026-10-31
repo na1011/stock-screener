@@ -216,17 +216,39 @@ public class StockReader {
                 ORDER BY period_end DESC, fiscal_period DESC
                 LIMIT ?
                 """.formatted(extra),
-                (rs, n) -> new FinancialRow(
+                (rs, n) -> {
+                    // 국내 관문 켬: 칸마다 오늘 보이는 값 — FY의 새 기저 값(restated)이 있으면 그것을 그리고 낡음으로 안 센다(지표와 같은 값 ·
+                    // FlowSupersession.seenOn). 새 값이 없는 낡은 칸은 원값을 그리되 전년 동기 대비를 안 낸다.
+                    java.util.Map<String, com.stockscreener.indicator.FlowSupersession> sup = withStale
+                            ? com.stockscreener.indicator.IndicatorDataReader.supersession(rs.getString("flow_superseded")) : null;
+                    LocalDate today = LocalDate.now();
+                    java.util.Set<String> stale = new java.util.HashSet<>();
+                    java.util.function.BiFunction<String, BigDecimal, BigDecimal> seen = (column, stored) -> {
+                        com.stockscreener.indicator.FlowSupersession s = sup == null ? null : sup.get(column);
+                        if (s == null || !s.staleOn(today)) {
+                            return stored;
+                        }
+                        BigDecimal now = s.seenOn(today, stored);
+                        return now == null ? stored : now;
+                    };
+                    if (sup != null) {
+                        sup.forEach((column, s) -> {
+                            if (s.staleOn(today) && s.seenOn(today, BigDecimal.ZERO) == null) {
+                                stale.add(column);
+                            }
+                        });
+                    }
+                    return new FinancialRow(
                         rs.getInt("fiscal_year"),
                         rs.getString("fiscal_period"),
                         rs.getObject("published_at", LocalDate.class),
                         rs.getInt("revision_no"),
                         rs.getString("report_code"),
                         rs.getString("currency_code"),
-                        rs.getBigDecimal("revenue"),
-                        rs.getBigDecimal("operating_income"),
-                        rs.getBigDecimal("net_income"),
-                        rs.getBigDecimal("operating_cash_flow"),
+                        seen.apply("revenue", rs.getBigDecimal("revenue")),
+                        seen.apply("operating_income", rs.getBigDecimal("operating_income")),
+                        seen.apply("net_income", rs.getBigDecimal("net_income")),
+                        seen.apply("operating_cash_flow", rs.getBigDecimal("operating_cash_flow")),
                         rs.getBigDecimal("total_assets"),
                         rs.getBigDecimal("total_liabilities"),
                         rs.getBigDecimal("total_equity"),
@@ -237,23 +259,9 @@ public class StockReader {
                         withEquity ? commonEquity(rs.getBigDecimal("total_equity_controlling"), rs.getBigDecimal("total_equity"),
                                 rs.getBigDecimal("equity_non_common"), rs.getBigDecimal("equity_common_fraction"),
                                 rs.getString("equity_branch")) : null,
-                        withStale ? staleOn(rs.getString("flow_superseded"), LocalDate.now()) : null),
+                        withStale ? stale : null);
+                },
                 stockId, limit);
-    }
-
-    /** 기저 대체일 jsonb에서 {@code day}까지 대체된 칸. */
-    private static java.util.Set<String> staleOn(String json, LocalDate day) {
-        if (json == null || json.isBlank()) {
-            return null;
-        }
-        java.util.Set<String> out = new java.util.HashSet<>();
-        new tools.jackson.databind.ObjectMapper().readTree(json).properties().forEach(e -> {
-            String since = e.getValue().isString() ? e.getValue().asString() : e.getValue().path("since").asString();
-            if (!LocalDate.parse(since).isAfter(day)) {
-                out.add(e.getKey());
-            }
-        });
-        return out;
     }
 
     private static String equityColumn(String column, String alias, boolean us, String commonMatch) {

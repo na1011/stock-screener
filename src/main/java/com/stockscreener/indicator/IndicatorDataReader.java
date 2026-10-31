@@ -874,7 +874,7 @@ public class IndicatorDataReader {
     }
 
     /** 기저 대체일 jsonb({@code {"revenue": "2024-11-14", …}}) — 국내 관문 켬 행만 싣는다(재고 A6). */
-    private static java.util.Map<String, FlowSupersession> supersession(String json) {
+    public static java.util.Map<String, FlowSupersession> supersession(String json) {
         if (json == null || json.isBlank()) {
             return null;
         }
