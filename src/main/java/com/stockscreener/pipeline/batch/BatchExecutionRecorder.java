@@ -451,16 +451,28 @@ public class BatchExecutionRecorder {
      */
     @Transactional(readOnly = true)
     public Map<CollectionPhase, Set<Long>> unresolvedStockPhases() {
+        return unresolvedStockPhases(null);
+    }
+
+    /**
+     * 그 잡이 낸 미해결 실패만 — 실행의 해결 표시는 같은 잡의 실패만 닫는다({@link #resolveFailures(long, CollectionPhase, String)}).
+     *
+     * @param jobName {@code null}이면 모든 잡
+     */
+    @Transactional(readOnly = true)
+    public Map<CollectionPhase, Set<Long>> unresolvedStockPhases(String jobName) {
         Map<CollectionPhase, Set<Long>> byPhase = new EnumMap<>(CollectionPhase.class);
         jdbcTemplate.query("""
-                SELECT DISTINCT stock_id, failed_phase FROM batch_execution_failure
-                WHERE NOT resolved
+                SELECT DISTINCT f.stock_id, f.failed_phase FROM batch_execution_failure f
+                WHERE NOT f.resolved
+                  AND (CAST(? AS varchar) IS NULL
+                       OR f.execution_id IN (SELECT e.id FROM batch_execution e WHERE e.job_name = ?))
                 """, rs -> {
             byPhase.computeIfAbsent(
                             CollectionPhase.valueOf(rs.getString("failed_phase")),
                             k -> ConcurrentHashMap.newKeySet())
                     .add(rs.getLong("stock_id"));
-        });
+        }, jobName, jobName);
         return byPhase;
     }
 
@@ -476,8 +488,9 @@ public class BatchExecutionRecorder {
      * <p>IMPORTANT — 여기서 말하는 성공은 <b>예외가 없었다</b>이지 <b>행을 썼다</b>가 아니다
      * ({@code StockTaskExecutor}가 0행도 성공으로 센다). 거래정지처럼 정상적으로 빈 종목을
      * 영원히 미해결로 남기지 않으려고 일부러 그렇게 두었다. 그 대가로, 같은 단계를 쓰는 다른
-     * 잡이 0행 성공만으로도 이 실패를 닫을 수 있다 — {@code FINANCIAL}을 쓰는 잡이 셋이고
-     * 받아오는 범위가 서로 다르다.
+     * 잡이 0행 성공만으로도 실패를 닫을 수 있었다 — {@code FINANCIAL}을 쓰는 잡이 셋(FR · FSR · initial-load)이고
+     * 받아오는 범위가 서로 다르다. 그래서 실행의 해결 표시는 {@link #resolveFailures(long, CollectionPhase, String)}로
+     * <b>같은 잡</b>의 실패만 닫는다. 이 갈래(잡 무관)는 성공이 아니라 <b>사실</b>로 닫는 자리 — 구멍이 사라진 {@code PRICE_GAP} — 에만 쓴다.
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public int resolveFailures(long stockId, CollectionPhase phase) {
@@ -485,6 +498,19 @@ public class BatchExecutionRecorder {
                 UPDATE batch_execution_failure SET resolved = true
                 WHERE stock_id = ? AND failed_phase = ? AND NOT resolved
                 """, stockId, phase.name());
+    }
+
+    /**
+     * 그 잡이 낸 이 종목 · 이 단계의 미해결 실패를 해결로 표시한다 — <b>같은 잡이 같은 종목 · 같은 단계를 다시 성공시켜야</b> 닫힌다.
+     * spec §4의 「미해결 에러 건수」가 FSR 성공으로 FR 실패가 닫히는 식으로 거짓이 되지 않게 한다.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public int resolveFailures(long stockId, CollectionPhase phase, String jobName) {
+        return jdbcTemplate.update("""
+                UPDATE batch_execution_failure SET resolved = true
+                WHERE stock_id = ? AND failed_phase = ? AND NOT resolved
+                  AND execution_id IN (SELECT id FROM batch_execution WHERE job_name = ?)
+                """, stockId, phase.name(), jobName);
     }
 
     private static String describe(String message, Throwable cause) {

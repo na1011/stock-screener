@@ -19,7 +19,7 @@ public enum CollectionPhase {
      * 시세 구멍 구간 수집 — 일일 갱신의 15일 창 밖에서 지표가 읽는 범위의 빈 거래일
      * ({@code StockRegistrar.priceGapRuns}).
      *
-     * <p><b>{@link #PRICE}와 단계를 가르는 이유</b>: 실패는 같은 (종목, 단계)가 뒤에 성공해야 닫힌다.
+     * <p><b>{@link #PRICE}와 단계를 가르는 이유</b>: 실패는 같은 잡의 같은 (종목, 단계)가 뒤에 성공해야 닫힌다.
      * 한 단계로 두면 다음 날 창 수집의 성공이 구간 실패를 닫아 <b>안 받은 구간이 해결로 접힌다.</b>
      */
     PRICE_GAP,

@@ -187,6 +187,36 @@ class StockFailureIsolationTest {
                 .isEqualTo(1);
     }
 
+    /**
+     * <b>다른 잡</b>의 같은 단계 성공은 남의 실패를 닫지 않는다 — {@code FINANCIAL}을 FR · FSR · initial-load가 함께 쓰고 받는 범위가
+     * 다르다. FSR이 성공했다고 FR 실패를 닫으면 spec §4의 미해결 수가 그만큼 거짓이다.
+     */
+    @Test
+    @DisplayName("IMPORTANT — 다른 잡의 같은 단계 성공은 남의 실패를 닫지 않고, 같은 잡의 성공은 닫는다")
+    void successOfAnotherJobInSamePhaseDoesNotResolve() throws Exception {
+        SecurityRef broken = insertStock("000022", "잡실패");
+
+        BatchExecutionContext first = batchExecutions.start(
+                JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.SCHEDULER, 1, BatchExecutionRecorder.DeclaredScope.FULL);
+        first.process(broken, CollectionPhase.FINANCIAL, s -> {
+            throw new DataSourceException(
+                    DataSourceException.Kind.TRANSIENT, "stub-source", "일시적 오류");
+        });
+        first.finish();
+
+        BatchExecutionContext other = batchExecutions.start(
+                JOB_NAME + "-other", TARGET_DATE, BatchExecutionRecorder.TriggeredBy.SCHEDULER, 1, BatchExecutionRecorder.DeclaredScope.FULL);
+        other.process(broken, CollectionPhase.FINANCIAL, s -> 3L);
+        other.finish();
+        assertThat(unresolved(broken)).as("다른 잡의 성공으로는 안 닫힌다").isEqualTo(1);
+
+        BatchExecutionContext again = batchExecutions.start(
+                JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.SCHEDULER, 1, BatchExecutionRecorder.DeclaredScope.FULL);
+        again.process(broken, CollectionPhase.FINANCIAL, s -> 3L);
+        again.finish();
+        assertThat(unresolved(broken)).as("같은 잡이 다시 성공하면 닫힌다").isZero();
+    }
+
     private int unresolved(SecurityRef security) {
         return jdbcTemplate.queryForObject("""
                 SELECT count(*) FROM batch_execution_failure
