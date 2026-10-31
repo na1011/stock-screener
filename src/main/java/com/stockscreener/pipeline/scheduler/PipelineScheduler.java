@@ -17,6 +17,7 @@ import com.stockscreener.pipeline.batch.FullStatementRefillJob;
 import com.stockscreener.pipeline.batch.GovernanceDeriveJob;
 import com.stockscreener.pipeline.batch.GovernanceLoadJob;
 import com.stockscreener.pipeline.batch.IndicatorReconciler;
+import com.stockscreener.pipeline.batch.MarketCalendarJob;
 import com.stockscreener.pipeline.batch.JobFreshnessAlerter;
 import com.stockscreener.pipeline.batch.JobFreshnessPolicy;
 import com.stockscreener.pipeline.batch.UniverseIntegrityAlerter;
@@ -91,6 +92,7 @@ public class PipelineScheduler {
     private final com.stockscreener.pipeline.batch.KrXbrlCollectJob krXbrlCollectJob;
     private final UsCandidateFeed usCandidateFeed;
     private final CandidateSplitJob candidateSplitJob;
+    private final MarketCalendarJob marketCalendarJob;
 
     public PipelineScheduler(DailyUpdateJob dailyUpdateJob,
                              UniverseRebalanceJob universeRebalanceJob,
@@ -113,7 +115,9 @@ public class PipelineScheduler {
                              CandidateSplitJob candidateSplitJob,
                              com.stockscreener.pipeline.batch.PriceIntegrityAlerter priceIntegrityAlerter,
                              com.stockscreener.pipeline.batch.KrXbrlCollectJob krXbrlCollectJob,
-                             EarningsReleaseJob earningsReleaseJob) {
+                             EarningsReleaseJob earningsReleaseJob,
+                             MarketCalendarJob marketCalendarJob) {
+        this.marketCalendarJob = marketCalendarJob;
         this.priceIntegrityAlerter = priceIntegrityAlerter;
         this.earningsReleaseJob = earningsReleaseJob;
         this.krXbrlCollectJob = krXbrlCollectJob;
@@ -261,6 +265,16 @@ public class PipelineScheduler {
                         e.addSuppressed(held);
                     }
                     throw e;
+                }
+                // 세션 달력(ADR-0091) — 13:30 KST면 전날 미국 세션이 닫혀 있다. 크론에 안 걸려 있던 동안 달력이 2026-08-28에
+                // 멈춰 봉 결측 판정 창이 소리 없이 좁아졌다(판정은 [첫 봉, 마지막 봉] ∩ 달력 범위). 거래소당 1콜이고 시세를 안 막는다.
+                try {
+                    marketCalendarJob.run(targetDate, BatchExecutionRecorder.TriggeredBy.SCHEDULER, null);
+                } catch (BatchShutdownException e) {
+                    log.info("일일 갱신 뒤 세션 달력이 종료로 중단됐다. targetDate={}", targetDate);
+                    return;
+                } catch (RuntimeException e) {
+                    held = keepFirst(held, e);
                 }
                 if (held != null) {
                     throw held;

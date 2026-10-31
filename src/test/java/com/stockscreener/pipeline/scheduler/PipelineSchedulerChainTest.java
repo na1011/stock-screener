@@ -8,6 +8,7 @@ import com.stockscreener.pipeline.batch.BatchExecutionRecorder;
 import com.stockscreener.pipeline.batch.BatchShutdownException;
 import com.stockscreener.pipeline.batch.FilingConsumptionJob;
 import com.stockscreener.pipeline.batch.EarningsReleaseJob;
+import com.stockscreener.pipeline.batch.MarketCalendarJob;
 import com.stockscreener.pipeline.batch.FilingListingJob;
 import com.stockscreener.pipeline.batch.BatchExecutions;
 import com.stockscreener.pipeline.batch.BatchShutdownException;
@@ -93,6 +94,7 @@ class PipelineSchedulerChainTest {
     private WriteLock writeLock;
     private FilingListingJob filingListingJob;
     private EarningsReleaseJob earningsReleaseJob;
+    private MarketCalendarJob marketCalendarJob;
     private com.stockscreener.pipeline.batch.KrXbrlCollectJob krXbrlCollectJob;
     private FilingConsumptionJob filingConsumptionJob;
     private FreshnessCatchUpJob freshnessCatchUpJob;
@@ -118,6 +120,7 @@ class PipelineSchedulerChainTest {
         writeLock = WriteLock.inactive("단위 시험");
         filingListingJob = mock(FilingListingJob.class);
         earningsReleaseJob = mock(EarningsReleaseJob.class);
+        marketCalendarJob = mock(MarketCalendarJob.class);
         krXbrlCollectJob = mock(com.stockscreener.pipeline.batch.KrXbrlCollectJob.class);
         filingConsumptionJob = mock(FilingConsumptionJob.class);
         candidateSplitJob = mock(CandidateSplitJob.class);
@@ -147,7 +150,7 @@ class PipelineSchedulerChainTest {
                 universeIntegrityAlerter, batchExecutions, writeLock, filingListingJob, filingConsumptionJob,
                 freshnessCatchUpJob, new UsCandidateFeed(candidateFeed), candidateSplitJob,
                 mock(com.stockscreener.pipeline.batch.PriceIntegrityAlerter.class),
-                krXbrlCollectJob, earningsReleaseJob);
+                krXbrlCollectJob, earningsReleaseJob, marketCalendarJob);
     }
 
     @Test
@@ -222,6 +225,27 @@ class PipelineSchedulerChainTest {
         order.verify(filingListingJob).run(any(), eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER));
         order.verify(earningsReleaseJob).run(any(), eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER));
         order.verify(dailyUpdateJob).run(TARGET_DATE, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+    }
+
+    @Test
+    @DisplayName("13:30 세션 달력은 일일 갱신 뒤에 돈다 — 크론 밖에 있던 동안 달력이 멈춰 봉 결측 판정 창이 좁아졌다")
+    void marketCalendarRunsAfterDailyUpdate() {
+        scheduler.runDailyUpdate();
+
+        InOrder order = inOrder(dailyUpdateJob, marketCalendarJob);
+        order.verify(dailyUpdateJob).run(TARGET_DATE, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+        order.verify(marketCalendarJob).run(TARGET_DATE, BatchExecutionRecorder.TriggeredBy.SCHEDULER, null);
+    }
+
+    @Test
+    @DisplayName("13:30 세션 달력이 던지면 일일 갱신을 되돌리지 않고 끝에 다시 던진다")
+    void marketCalendarFailureIsRethrownAfterDailyUpdate() {
+        RuntimeException boom = new IllegalStateException("달력 실패");
+        when(marketCalendarJob.run(any(), any(), any())).thenThrow(boom);
+
+        assertThatThrownBy(() -> scheduler.runDailyUpdate()).isSameAs(boom);
+
+        verify(dailyUpdateJob).run(TARGET_DATE, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
     }
 
     @Test
@@ -691,7 +715,7 @@ class PipelineSchedulerChainTest {
                 universeIntegrityAlerter, batchExecutions, WriteLock.inactive("단위 시험"), mock(FilingListingJob.class),
                 mock(FilingConsumptionJob.class), mock(FreshnessCatchUpJob.class), new UsCandidateFeed(false), mock(CandidateSplitJob.class),
                 mock(com.stockscreener.pipeline.batch.PriceIntegrityAlerter.class),
-                mock(com.stockscreener.pipeline.batch.KrXbrlCollectJob.class), mock(EarningsReleaseJob.class));
+                mock(com.stockscreener.pipeline.batch.KrXbrlCollectJob.class), mock(EarningsReleaseJob.class), mock(MarketCalendarJob.class));
 
         Map<String, LocalDate> picked = new java.util.LinkedHashMap<>();
         for (LocalDate day = LocalDate.of(2026, 10, 19); !day.isAfter(LocalDate.of(2026, 11, 5));
@@ -759,7 +783,7 @@ class PipelineSchedulerChainTest {
                 universeIntegrityAlerter, batchExecutions, refusing, blockedListing, blockedConsumption,
                 blockedCatchUp, new UsCandidateFeed(false), mock(CandidateSplitJob.class),
                 mock(com.stockscreener.pipeline.batch.PriceIntegrityAlerter.class),
-                mock(com.stockscreener.pipeline.batch.KrXbrlCollectJob.class), mock(EarningsReleaseJob.class));
+                mock(com.stockscreener.pipeline.batch.KrXbrlCollectJob.class), mock(EarningsReleaseJob.class), mock(MarketCalendarJob.class));
 
         // 성질로 센다(잠금 결정 7) — 손으로 든 목록이면 새 쓰기 크론이 잠금 없이 붙어도 이 시험이 못 본다.
         List<String> writeCrons = new java.util.ArrayList<>();
@@ -807,7 +831,7 @@ class PipelineSchedulerChainTest {
                 universeIntegrityAlerter, batchExecutions, failing, mock(FilingListingJob.class),
                 mock(FilingConsumptionJob.class), mock(FreshnessCatchUpJob.class), new UsCandidateFeed(false), mock(CandidateSplitJob.class),
                 mock(com.stockscreener.pipeline.batch.PriceIntegrityAlerter.class),
-                mock(com.stockscreener.pipeline.batch.KrXbrlCollectJob.class), mock(EarningsReleaseJob.class));
+                mock(com.stockscreener.pipeline.batch.KrXbrlCollectJob.class), mock(EarningsReleaseJob.class), mock(MarketCalendarJob.class));
 
         assertThatThrownBy(broken::runHeavyJobOfTheDay).isSameAs(boom);
 

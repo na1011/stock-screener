@@ -31,8 +31,9 @@ import java.util.List;
  *   <li>거래소마다 따로 잡는다. 하나가 실패해도 나머지는 받는다.</li>
  * </ul>
  *
- * <p><b>MUST NOT: 스케줄러에 걸지 않는다.</b> 미국 장은 한국 시각 다음 날 오전 5~6시에 닫으므로
- * {@code PipelineScheduler}의 13시 30분 크론이 뜻을 갖지 않는다.
+ * <p><b>평일 13:30 일일 갱신 뒤에 돈다</b>({@code PipelineScheduler#runDailyUpdate}). 미국 장은 한국 시각 오전 5~6시에
+ * 닫으므로 13:30이면 대상일 세션이 끝나 있다. 크론 밖에 두었을 때 달력이 한 번 받은 날(2026-08-28)에 멈춰
+ * 그 뒤 거래일이 판정 밖으로 빠졌다 — 판정 창이 달력 범위로 잘리므로 에러 없이 좁아진다.
  */
 @Component
 public class MarketCalendarJob {
