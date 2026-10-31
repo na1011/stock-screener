@@ -1,5 +1,5 @@
 import { createPinia, setActivePinia } from 'pinia'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { ScreenResponse } from '@/api/types'
 
@@ -577,5 +577,68 @@ describe('프리셋 설명 — 표시 전용으로 편집기까지 따라온다'
     )
 
     expect(JSON.stringify(draft.toConditionGroup())).not.toContain('xxx')
+  })
+})
+
+describe('편집 중인 초안은 그 탭의 세션 저장소에서 새로고침을 넘긴다', () => {
+  let store: Map<string, string>
+
+  beforeEach(() => {
+    store = new Map()
+    vi.stubGlobal('sessionStorage', {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => void store.set(k, v),
+      removeItem: (k: string) => void store.delete(k),
+    })
+    setActivePinia(createPinia())
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  /** 새로고침 = 새 피니아. 스토어 모듈은 그대로라 키 발급기도 이어진다. */
+  async function reload() {
+    await Promise.resolve()
+    setActivePinia(createPinia())
+    return useScreenDraftStore()
+  }
+
+  it('불러온 프리셋의 출처 · 설명 · 조건이 새로고침 뒤에도 남는다', async () => {
+    const draft = useScreenDraftStore()
+    draft.loadFrom({ ...readOnlyPreset(), description: '결손 고지' })
+    await Promise.resolve()
+
+    const restored = await reload()
+
+    expect(restored.origin).toEqual({ kind: 'preset', code: 'VALUE', name: '가치주', description: '결손 고지' })
+    expect(restored.presetDescription).toBe('결손 고지')
+    expect(restored.conditions.map((it) => it.indicatorCode)).toEqual(['PER'])
+    expect(restored.editable).toBe(false)
+  })
+
+  it('되살린 뒤 새로 만든 조건의 키가 되살린 키와 안 부딪힌다', async () => {
+    const draft = useScreenDraftStore()
+    draft.loadFrom(screen())
+    await Promise.resolve()
+    const restored = await reload()
+
+    restored.addCondition()
+
+    const keys = restored.conditions.map((it) => it.key)
+    expect(new Set(keys).size).toBe(keys.length)
+  })
+
+  it('이 판의 모양이 아닌 값은 버리고 새 초안으로 시작한다', async () => {
+    store.set('screenDraft.v1', JSON.stringify({ version: 0, conditions: 'x' }))
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    const fresh = await reload()
+
+    expect(fresh.origin).toEqual({ kind: 'custom' })
+    expect(fresh.conditions).toEqual([])
+    expect(store.has('screenDraft.v1')).toBe(false)
+    expect(warn).toHaveBeenCalled()
+    warn.mockRestore()
   })
 })
