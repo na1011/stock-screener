@@ -73,3 +73,6 @@ docs/api-document/
 
 # 어댑터 리플레이용 companyfacts 캐시 — 빌드에 안 씻기게 build/ 밖에 둔다
 .factcache/
+
+# 국내 0콜 스윕용 DART 녹화본(DartRecordedSweepTest) — .factcache와 같은 이유로 build/ 밖에 둔다
+.dartcache/
