@@ -475,6 +475,7 @@ final class SecEdgarFacts {
         if (usGate) {
             keepPartnersEquityOnBalanceSheets(byColumn);
             dropInterimAnnualEqualToShorter(byColumn);
+            dropCopiedQuarterContexts(byColumn);
         }
         return byColumn;
     }
@@ -1122,6 +1123,83 @@ final class SecEdgarFacts {
             }
         });
         return Set.copyOf(touched);
+    }
+
+    /**
+     * 관문 켬(P2 v2 · K11) — 한 공시 안의 두 분기 창이 <b>공통 태그 둘 이상에서 전부 같은 값</b>이면 한쪽은 문맥을 통째로 복사한 것이다. 그 공시가 앞
+     * 공시와 1% 넘게 다른 값을 낸 쪽이 복사본이라 그 공시에서 그 창을 안 읽는다 — 어느 쪽인지 안 갈리면(둘 다 · 둘 다 아님) 둔다.
+     *
+     * <p>근거(탐색 {@code P2-NOTES.md} 「P2a-3」 · P2 v1 반증 판정 4): 같은 공시 안 다른 분기 창과 같은 값이 된 사건 312 중 일괄로 거르면 정당한 재작성을
+     * 버리지만(누계 산수로 판정되는 30 중 24가 정당), 그 공시가 두 창에 실은 태그가 전부 같으면 n ≥ 2에서 뒤 공시가 앞 값으로 돌아감 9 · 확인 0이다.
+     * 사정거리: 한 팩트만 잘못 태그한 꼴(MTD 2023 Q1 · CNP 2019 · APTV 2017)은 못 잡는다.
+     */
+    private static void dropCopiedQuarterContexts(Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn) {
+        BigDecimal same = new BigDecimal("0.001");
+        BigDecimal moved = new BigDecimal("0.01");
+        // 공시 → 분기 창 → 태그 → 팩트(유량만)
+        Map<String, Map<Window, Map<String, Fact>>> byFiling = new HashMap<>();
+        // (태그 · 창) → 그 창을 실은 팩트들(공시 가로질러)
+        Map<String, List<Fact>> byTagWindow = new HashMap<>();
+        for (Map.Entry<SecEdgarColumn, Map<String, Map<Slot, Fact>>> e : byColumn.entrySet()) {
+            if (e.getKey().instant() || e.getKey().perShare()) {
+                continue;
+            }
+            for (Map.Entry<String, Map<Slot, Fact>> tag : e.getValue().entrySet()) {
+                for (Fact f : tag.getValue().values()) {
+                    if (f.start() == null || f.value() == null || !isQuarterSpan(ChronoUnit.DAYS.between(f.start(), f.end()))) {
+                        continue;
+                    }
+                    Window w = new Window(f.start(), f.end());
+                    byFiling.computeIfAbsent(f.accn(), k -> new HashMap<>()).computeIfAbsent(w, k -> new HashMap<>())
+                            .put(tag.getKey(), f);
+                    byTagWindow.computeIfAbsent(tag.getKey() + "|" + w, k -> new ArrayList<>()).add(f);
+                }
+            }
+        }
+        Set<String> copies = new HashSet<>();
+        byFiling.forEach((accn, windows) -> {
+            List<Window> list = new ArrayList<>(windows.keySet());
+            for (int i = 0; i < list.size(); i++) {
+                for (int j = i + 1; j < list.size(); j++) {
+                    Map<String, Fact> a = windows.get(list.get(i));
+                    Map<String, Fact> b = windows.get(list.get(j));
+                    List<String> common = a.keySet().stream().filter(b::containsKey).toList();
+                    if (common.size() < 2 || common.stream().anyMatch(t ->
+                            a.get(t).value().subtract(b.get(t).value()).abs().compareTo(a.get(t).value().abs().multiply(same)) > 0)) {
+                        continue;
+                    }
+                    boolean aMoved = movedFromEarlier(a, common, byTagWindow, list.get(i), moved);
+                    boolean bMoved = movedFromEarlier(b, common, byTagWindow, list.get(j), moved);
+                    if (aMoved != bMoved) {
+                        copies.add(accn + "|" + (aMoved ? list.get(i) : list.get(j)));
+                    }
+                }
+            }
+        });
+        if (copies.isEmpty()) {
+            return;
+        }
+        for (Map<String, Map<Slot, Fact>> byTag : byColumn.values()) {
+            for (Map<Slot, Fact> slots : byTag.values()) {
+                slots.values().removeIf(f -> f.start() != null
+                        && copies.contains(f.accn() + "|" + new Window(f.start(), f.end())));
+            }
+        }
+    }
+
+    /** 그 창의 공통 태그 중 하나라도 앞 공시(더 이르게 제출)가 낸 같은 창 값과 1% 넘게 다른가. */
+    private static boolean movedFromEarlier(Map<String, Fact> window, List<String> tags, Map<String, List<Fact>> byTagWindow,
+                                            Window w, BigDecimal moved) {
+        for (String t : tags) {
+            Fact mine = window.get(t);
+            for (Fact earlier : byTagWindow.getOrDefault(t + "|" + w, List.of())) {
+                if (earlier.filed().isBefore(mine.filed())
+                        && earlier.value().subtract(mine.value()).abs().compareTo(earlier.value().abs().multiply(moved)) > 0) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /** 그 해 9개월 누계 — 같은 컬럼의 후보 태그 중 그 공시 앞에 제출된 것에서 가장 큰 값(같은 값이면 늦게 제출된 것). */
