@@ -65,9 +65,22 @@ public class KrEarlierVintages {
     private final FinancialWriter writer;
 
     public KrEarlierVintages(JdbcTemplate jdbc, FinancialWriter writer) {
+        this(jdbc, writer, false);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public KrEarlierVintages(JdbcTemplate jdbc, FinancialWriter writer,
+                             @org.springframework.beans.factory.annotation.Value("${stockscreener.gate.kr}") boolean krGate) {
         this.jdbc = jdbc;
         this.writer = writer;
+        this.krGate = krGate;
     }
+
+    /**
+     * 국내 관문 켬 — 복사본에 원천을 적고(`copied_from` · 관문 시험 마이그레이션 V70_10) 매 실행 원천 값으로 다시 맞춘다. 복사본은 값 사본이라
+     * 다시 지어지지 않아, 관문 재적재가 원천 판에 채운 칸(중단영업 · 비표준 지배 NI · 기저 대체)이 빈 채 남는다(반증 안 렌즈 · 11-01).
+     */
+    private final boolean krGate;
 
     private record Candidate(long rowId, int fiscalYear, String fiscalPeriod, LocalDate earliest) {
     }
@@ -77,6 +90,9 @@ public class KrEarlierVintages {
         List<Candidate> candidates = jdbc.query(CANDIDATES, (rs, i) -> new Candidate(rs.getLong("id"), rs.getInt("fiscal_year"),
                 rs.getString("fiscal_period"), rs.getObject("earliest", LocalDate.class)), stockId, stockId, stockId);
         if (candidates.isEmpty()) {
+            if (krGate) {
+                resync(stockId);
+            }
             return 0;
         }
         String columns = copiedColumns();
@@ -84,14 +100,31 @@ public class KrEarlierVintages {
         for (Candidate c : candidates) {
             // 임시 번호는 그 라벨의 최대 + 1 — 넣은 즉시 공시일 순으로 다시 맞춘다(uq 번호 충돌을 같은 트랜잭션 안에서 풀려고).
             inserted += jdbc.update("""
-                    INSERT INTO financial_statement (%1$s, published_at, revision_no, is_latest)
+                    INSERT INTO financial_statement (%1$s, published_at, revision_no, is_latest%2$s)
                     SELECT %1$s, ?, (SELECT max(revision_no) + 1 FROM financial_statement
-                                     WHERE stock_id = ? AND fiscal_year = ? AND fiscal_period = ?), false
+                                     WHERE stock_id = ? AND fiscal_year = ? AND fiscal_period = ?), false%3$s
                     FROM financial_statement WHERE id = ?
-                    """.formatted(columns), Date.valueOf(c.earliest()), stockId, c.fiscalYear(), c.fiscalPeriod(), c.rowId());
+                    """.formatted(columns, krGate ? ", copied_from" : "", krGate ? ", " + c.rowId() : ""),
+                    Date.valueOf(c.earliest()), stockId, c.fiscalYear(), c.fiscalPeriod(), c.rowId());
             writer.renumberLabel(stockId, c.fiscalYear(), c.fiscalPeriod());
         }
+        if (krGate) {
+            resync(stockId);
+        }
         return inserted;
+    }
+
+    /** 국내 관문 켬 — 그 종목의 복사본을 원천 값으로 다시 맞춘다. 고친 행 수. */
+    int resync(long stockId) {
+        List<String> names = java.util.Arrays.asList(copiedColumns().split(", "));
+        String target = String.join(", ", names);
+        String source = names.stream().map(n -> "s." + n).collect(Collectors.joining(", "));
+        String current = names.stream().map(n -> "c." + n).collect(Collectors.joining(", "));
+        return jdbc.update("""
+                UPDATE financial_statement c SET (%1$s) = (%2$s)
+                  FROM financial_statement s
+                 WHERE s.id = c.copied_from AND c.stock_id = ? AND ROW(%3$s) IS DISTINCT FROM ROW(%2$s)
+                """.formatted(target, source, current), stockId);
     }
 
     /** 판을 복사할 열 — 식별 · 생성 시각 · 판 표지(공시일 · 번호 · 최신)를 뺀 전부. 열이 늘어도 같이 따라간다. */
@@ -99,7 +132,7 @@ public class KrEarlierVintages {
         return jdbc.queryForList("""
                 SELECT column_name FROM information_schema.columns
                 WHERE table_schema = current_schema() AND table_name = 'financial_statement'
-                  AND column_name NOT IN ('id', 'created_at', 'published_at', 'revision_no', 'is_latest')
+                  AND column_name NOT IN ('id', 'created_at', 'published_at', 'revision_no', 'is_latest', 'copied_from')
                 ORDER BY ordinal_position
                 """, String.class).stream().collect(Collectors.joining(", "));
     }

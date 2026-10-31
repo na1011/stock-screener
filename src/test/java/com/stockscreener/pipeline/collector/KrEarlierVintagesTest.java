@@ -66,6 +66,22 @@ class KrEarlierVintagesTest {
     }
 
     @Test
+    @DisplayName("국내 관문 켬 — 복사본은 원천을 적고 매 실행 원천 값으로 다시 맞춘다(관문 재적재가 원천에 채운 칸이 복사본에도 온다)")
+    void gatedCopiesFollowTheirSource() {
+        KrEarlierVintages gated = new KrEarlierVintages(jdbc, new FinancialWriter(jdbc, new NoOpIndicatorInvalidationPort()), true);
+        annual(LocalDate.of(2026, 6, 19));
+        filing("20260313001191", LocalDate.of(2026, 3, 13), SAME);
+        filing("20260619000667", LocalDate.of(2026, 6, 19), SAME);
+        assertThat(gated.insert(stockId)).isEqualTo(2);
+
+        jdbc.update("UPDATE financial_statement SET discontinued_income = 7, discontinued_rule = 1 WHERE stock_id = ? AND is_latest", stockId);
+        assertThat(gated.insert(stockId)).as("넣을 것은 없다").isZero();
+        assertThat(jdbc.queryForList("""
+                SELECT discontinued_income FROM financial_statement WHERE stock_id = ? AND published_at = DATE '2026-03-13'
+                """, java.math.BigDecimal.class, stockId)).as("원천 값으로 다시 맞췄다").allSatisfy(v -> assertThat(v).isEqualByComparingTo("7"));
+    }
+
+    @Test
     @DisplayName("정정이 숫자를 바꿨으면 원본 날짜로 넣지 않는다 — 그 값은 원본 날에 공개되지 않았다")
     void keepsTheCorrectionDateWhenTheNumbersChanged() {
         annual(LocalDate.of(2026, 6, 19));
