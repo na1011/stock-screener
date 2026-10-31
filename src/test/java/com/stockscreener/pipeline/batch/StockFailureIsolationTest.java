@@ -211,6 +211,30 @@ class StockFailureIsolationTest {
         assertThat(unresolved(broken)).as("받는 것이 다른 단계의 성공으로는 안 닫힌다").isEqualTo(1);
     }
 
+    /**
+     * 같은 원칙 — 평일 15일 창({@code PRICE})의 성공이 초기 적재의 이력({@code PRICE_HISTORY}) 실패를 닫지 않는다. 한 단계였을 때 긴 창 거절
+     * ({@code [05] SERVICETIMEOUT_ERROR})이 다음 평일에 「해결」로 접혀 짧은 이력이 신호 없이 남았다(ADR-0141 「남는 구멍」 · 2026-10-31).
+     */
+    @Test
+    @DisplayName("IMPORTANT — 평일 창 시세의 성공은 초기 적재 이력 실패를 닫지 않는다")
+    void windowPriceSuccessDoesNotResolveHistoryFailure() throws Exception {
+        SecurityRef refused = insertStock("000023", "이력거절");
+
+        BatchExecutionContext first = batchExecutions.start(
+                JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.SCHEDULER, 1, BatchExecutionRecorder.DeclaredScope.FULL);
+        first.process(refused, CollectionPhase.PRICE_HISTORY, s -> {
+            throw new DataSourceException(
+                    DataSourceException.Kind.TRANSIENT, "stub-source", "공공데이터포털 오류 [05] SERVICETIMEOUT_ERROR");
+        });
+        first.finish();
+
+        BatchExecutionContext daily = batchExecutions.start(
+                JOB_NAME, TARGET_DATE, BatchExecutionRecorder.TriggeredBy.SCHEDULER, 1, BatchExecutionRecorder.DeclaredScope.FULL);
+        daily.process(refused, CollectionPhase.PRICE, s -> 10L);
+        daily.finish();
+        assertThat(unresolved(refused)).as("15일 창 성공으로는 이력 실패가 안 닫힌다").isEqualTo(1);
+    }
+
     private int unresolved(SecurityRef security) {
         return jdbcTemplate.queryForObject("""
                 SELECT count(*) FROM batch_execution_failure

@@ -176,6 +176,15 @@ class InitialLoadTargetSelectionTest {
     }
 
     @Test
+    @DisplayName("IMPORTANT — 시세 단계는 창 길이가 정한다: 편입 이력(7년) 창만 PRICE_HISTORY — 1년 손 적재의 성공이 7년 이력 실패를 닫지 않는다")
+    void pricePhaseFollowsTheWindow() {
+        assertThat(InitialLoadJob.pricePhase(new InitialLoadJob.LoadRange(MembershipGapFiller.PRICE_YEARS, 0, false, List.of(), null, true)))
+                .isEqualTo(CollectionPhase.PRICE_HISTORY);
+        assertThat(InitialLoadJob.pricePhase(new InitialLoadJob.LoadRange(1, 0, false, List.of(), null, true)))
+                .isEqualTo(CollectionPhase.PRICE);
+    }
+
+    @Test
     @DisplayName("IMPORTANT — 재무를 건너뛰면 그 단계의 계획도 함께 빠진다")
     void skippingFinancialAlsoDropsItsPlan() {
         job.run(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL,
@@ -188,7 +197,7 @@ class InitialLoadTargetSelectionTest {
                 """, String.class, InitialLoadJob.JOB_NAME);
 
         // 계획만 남기고 안 돌면 진행률이 절반에서 끝나고, 그것은 멎은 것과 구분되지 않는다.
-        assertThat(phases).containsExactly("PRICE");
+        assertThat(phases).as("1년 창은 평일 창과 같은 단계다(CollectionPhase.PRICE_HISTORY는 7년 이력만)").containsExactly("PRICE");
     }
 
     @Test

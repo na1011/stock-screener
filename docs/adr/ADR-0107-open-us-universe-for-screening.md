@@ -209,6 +209,8 @@ win AS (SELECT market_code, min(trade_date) AS lo, max(trade_date) AS hi FROM in
 c AS (
   SELECT mem.*, (SELECT min(p.trade_date) FROM price_daily p WHERE p.stock_id = mem.id) AS first_bar,
          NOT EXISTS (SELECT 1 FROM financial_statement f WHERE f.stock_id = mem.id) AS no_financial,
+         EXISTS (SELECT 1 FROM batch_execution_failure hf WHERE hf.stock_id = mem.id
+                  AND hf.failed_phase = 'PRICE_HISTORY' AND NOT hf.resolved) AS history_failed,
          (SELECT count(*) FROM price_daily p WHERE p.stock_id = mem.id AND p.trade_date BETWEEN
             greatest(win.lo, (SELECT min(p2.trade_date) FROM price_daily p2 WHERE p2.stock_id = mem.id)) AND win.hi) AS bars,
          (SELECT count(*) FROM indicator_trade_date d WHERE d.market_code = mem.market_code AND d.trade_date BETWEEN
@@ -225,9 +227,10 @@ SELECT CASE
   END
 FROM (SELECT ticker || '(' || concat_ws('+',
         CASE WHEN first_bar IS NULL OR first_bar > joined THEN '시세이력' END,
+        CASE WHEN history_failed THEN '이력재시도' END,
         CASE WHEN no_financial AND NOT exempt_financial THEN '재무' END,
         CASE WHEN days > 0 AND bars < days * 0.25 THEN '시세구멍' END) || ')' AS t
-      FROM c WHERE (first_bar IS NULL OR first_bar > joined)
+      FROM c WHERE (first_bar IS NULL OR first_bar > joined) OR history_failed
          OR (no_financial AND NOT exempt_financial)
          OR (days > 0 AND bars < days * 0.25)) z"
 ```

@@ -44,6 +44,15 @@ public record MembershipGap(long stockId, String marketCode, String ticker, Stri
          */
         PRICE_HISTORY,
 
+        /**
+         * 초기 적재의 <b>이력 받기가 실패한 채 남아 있다</b>(미해결 {@code CollectionPhase.PRICE_HISTORY} 실패).
+         *
+         * <p>{@link #PRICE_HISTORY}와 축을 가르는 이유: 첫 봉은 편입일 앞(평일 15일 창이 남긴 봉)이라 그 축에 안 걸리는데 이력은 짧을 수 있다 —
+         * 「돌렸는데 소스가 안 줬다」는 기록이 상장일 없이 그것을 가른다(ADR-0141 「남는 구멍」). 문구가 다르고(「편입 이전으로 안 뻗었다」가
+         * 거짓이다), 리밸런싱 꼬리의 자동 적재 상한 합집합 밖에서 센다 — 끝내 안 닫히는 실패가 상한을 밀어 신규 편입의 적재까지 막지 않게.
+         */
+        PRICE_HISTORY_RETRY,
+
         /** 업종 두 컬럼이 다 비었다. 면제는 {@link KnownSourceGaps#KNOWN_MISSING_SIC}. */
         INDUSTRY,
 

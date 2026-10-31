@@ -131,7 +131,7 @@ public class InitialLoadJob {
         if (!range.skipPrice()) {
             // MUST: 건너뛰면 계획도 함께 뺀다. 재무 쪽과 같은 이유다 — 안 빼면 진행률이
             // 절반에서 끝나고, 그것은 멎은 것과 구분되지 않는다.
-            execution.plan(CollectionPhase.PRICE, targets.size() - skippedForResume.size());
+            execution.plan(pricePhase(range), targets.size() - skippedForResume.size());
         }
         if (!range.skipFinancial()) {
             // MUST: 건너뛰면 계획도 함께 뺀다. 안 빼면 진행률이 절반에서 끝나고, 그것은
@@ -159,7 +159,7 @@ public class InitialLoadJob {
                 // 시세와 재무를 각각 독립된 단계로 처리한다. 재무만 실패한 종목의 시세를
                 // 재실행에서 다시 받지 않으려면 실패 기록이 단계를 구분해야 한다.
                 if (!range.skipPrice() && !skippedForResume.contains(target.stockId())) {
-                    execution.process(target, CollectionPhase.PRICE,
+                    execution.process(target, pricePhase(range),
                             security -> priceCollector.collect(security, priceFrom, asOf));
                 }
                 if (!range.skipFinancial()) {
@@ -272,9 +272,21 @@ public class InitialLoadJob {
             return Set.of();
         }
         String placeholders = stockIds.stream().map(id -> "?").collect(Collectors.joining(","));
+        // 봉이 있어도 이력 받기가 실패한 채면 「이력 있음」이 아니다 — 평일 15일 창이 남긴 봉이다(CollectionPhase.PRICE_HISTORY).
         return new HashSet<>(jdbcTemplate.queryForList(
-                "SELECT DISTINCT stock_id FROM price_daily WHERE stock_id IN (" + placeholders + ")",
+                "SELECT DISTINCT stock_id FROM price_daily p WHERE stock_id IN (" + placeholders + ")"
+                        + " AND NOT EXISTS (SELECT 1 FROM batch_execution_failure f WHERE f.stock_id = p.stock_id"
+                        + " AND f.failed_phase = '" + CollectionPhase.PRICE_HISTORY.name() + "' AND NOT f.resolved)",
                 Long.class, stockIds.toArray()));
+    }
+
+    /**
+     * 시세 단계 — 받은 것의 종류다. 편입 이력({@link MembershipGapFiller#PRICE_YEARS}년 이상) 창이면 {@link CollectionPhase#PRICE_HISTORY},
+     * 그보다 짧으면 평일 창과 같은 {@link CollectionPhase#PRICE}다. 짧은 손 적재(일일 갱신 실패를 고치는 1년 · data-pipeline 규칙)의 성공이
+     * 이력 실패를 닫지 않고, 그 실패가 이력 실패로 잘못 남지도 않게.
+     */
+    static CollectionPhase pricePhase(LoadRange range) {
+        return range.priceYears() >= MembershipGapFiller.PRICE_YEARS ? CollectionPhase.PRICE_HISTORY : CollectionPhase.PRICE;
     }
 
     /**
@@ -292,10 +304,8 @@ public class InitialLoadJob {
                 || targetIds.isEmpty()) {
             return Set.of();
         }
-        String placeholders = targetIds.stream().map(id -> "?").collect(Collectors.joining(","));
-        return new HashSet<>(jdbcTemplate.queryForList(
-                "SELECT DISTINCT stock_id FROM price_daily WHERE stock_id IN (" + placeholders + ")",
-                Long.class, targetIds.toArray()));
+        // 이력 받기가 실패한 채 남은 종목은 봉이 있어도 건너뛰지 않는다(stocksWithBars).
+        return stocksWithBars(targetIds);
     }
 
     /**

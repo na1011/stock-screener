@@ -118,9 +118,10 @@ public class MembershipGapFiller {
      * 안 나는 종목을 매주 새로 만든다.</b> 실측(그때 읽기 창 1,441 — 2026-09-09에 1,516으로 넓어졌다)으로 이미 편입 155종목(11.5%)이 1,441봉 미만이고
      * 46종목이 500봉 미만이다.
      *
-     * <p><b>소스가 긴 창을 거절하는 상태가 실재한다</b>({@code [05] SERVICETIMEOUT_ERROR}).
-     * 그때는 짧게 들어오고 {@code PRICE_COVERAGE} 축이 <b>못 잡는다</b> — 앵커가 첫 봉이라
-     * 충족률이 100%가 된다. 그것을 가르려면 상장일이 필요한데 소스가 없다.
+     * <p><b>이 창의 받기가 실패하면</b>(2026-09-06 실행 283 — 7년 창 실패 7종목) 그 실패는 단계
+     * {@code CollectionPhase.PRICE_HISTORY}로 남는다 — 평일 15일 창 성공이 닫지 않고, 미해결이면 축
+     * {@code PRICE_HISTORY_RETRY}로 이 꼬리가 다시 받는다({@link #retryHistories}). 상장일 없이 「짧은 이력」을 가르는 재료가 그 기록이다.
+     * 단계는 창 길이가 정하므로({@code InitialLoadJob.pricePhase}) 이 값을 바꾸면 그 문턱도 함께 움직인다.
      */
     static final int PRICE_YEARS = 7;
 
@@ -349,6 +350,23 @@ public class MembershipGapFiller {
                 PRICE_YEARS, 0, false, tickers, null, true, false));
     }
 
+    /**
+     * 이력 받기가 실패한 채 남은 편입 종목({@link MembershipGap.Axis#PRICE_HISTORY_RETRY})을 다시 {@link #PRICE_YEARS}년으로 받는다 — 성공이 그
+     * 실패를 닫는다. <b>자동 적재 상한 합집합 밖이다</b>: 끝내 안 닫히는 실패가 그 수를 밀어 신규 편입의 시세 · 재무 적재까지 막으면, 그 실패를
+     * 닫을 유일한 정기 경로도 함께 막힌다(톱니). 종목당 1콜(국내 7년 1페이지 · 미국 1페이지)이다.
+     *
+     * @param alreadyLoaded 이번 꼬리가 이미 7년으로 받은 종목 — 두 번 안 받는다
+     */
+    private void retryHistories(List<MembershipGap> gaps, LocalDate asOf, List<String> alreadyLoaded) {
+        List<String> retry = tickersOf(gaps, MembershipGap.Axis.PRICE_HISTORY_RETRY).stream()
+                .filter(t -> !alreadyLoaded.contains(t)).toList();
+        if (retry.isEmpty()) {
+            return;
+        }
+        log.info("편입 결손 보충 — 이력 받기 실패가 남은 {}종목을 {}년으로 다시 받는다. 종목={}", retry.size(), PRICE_YEARS, retry);
+        loadPrices(asOf, retry);
+    }
+
     private void loadMissingRawData(List<MembershipGap> gaps, LocalDate asOf) {
         BatchExecutionRecorder.TriggeredBy triggeredBy = BatchExecutionRecorder.TriggeredBy.GAP_FILL;
         List<String> priceTickers = tickersOf(gaps, MembershipGap.Axis.PRICE_HISTORY);
@@ -373,7 +391,8 @@ public class MembershipGapFiller {
                             + "손으로 확인하고 적재한다. 종목=%s")
                             .formatted(distinct.size(), AUTO_LOAD_STOCK_LIMIT, distinct),
                     "universe-integrity-limit"));
-            // 적재만 건너뛴다. 호출자가 이어서 부르는 company-profile은 이 상한과 무관하다.
+            // 적재만 건너뛴다. 호출자가 이어서 부르는 company-profile은 이 상한과 무관하다. 이력 재시도는 상한 밖이다(retryHistories).
+            retryHistories(gaps, asOf, List.of());
             return;
         }
 
@@ -382,6 +401,7 @@ public class MembershipGapFiller {
                     priceTickers.size(), PRICE_YEARS, priceTickers);
             loadPrices(asOf, priceTickers);
         }
+        retryHistories(gaps, asOf, priceTickers);
         if (!financialTickers.isEmpty()) {
             log.info("편입 결손 보충 — 재무 {}종목을 받는다. 종목={}",
                     financialTickers.size(), financialTickers);

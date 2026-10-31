@@ -266,8 +266,9 @@ public class StockRegistrar {
      * 최근 상장한 일곱(봉 8~261개)도 첫 봉이 편입일보다 앞선다.
      *
      * <p><b>그 술어의 오탐 하나를 알고 쓴다</b>: 상장하자마자 편입된 종목은 첫 봉이 영원히
-     * 편입일 뒤라 <b>매 실행 다시 걸린다.</b> 끄려면 "돌렸는데 소스가 더 안 줬다"를 기록해야
-     * 하는데, <b>상장일 소스가 없다</b> — {@code stock.listed_on}이 양 시장 전량 NULL이고,
+     * 편입일 뒤라 <b>매 실행 다시 걸린다.</b> 「돌렸는데 소스가 안 줬다」는 이제 미해결 {@code PRICE_HISTORY} 실패로 남지만(그 실패는
+     * 이 술어가 함께 고른다 — 2026-10-31) 그것은 받기가 실패한 경우이고, 받기가 성공했는데 소스가 상장일부터만 준 경우는 여전히 못 가른다 —
+     * <b>상장일 소스가 없다</b> — {@code stock.listed_on}이 양 시장 전량 NULL이고,
      * DART 기업개황의 {@code est_dt}는 설립일이며(삼성전자 1969 vs 상장 1975), KRX 상장종목
      * 서비스도 주지 않는다(둘 다 {@code docs/api-spec/}에 기록돼 있다). <b>그래서 그것을 끄는
      * 것은 새 저장을 두는 결정이다.</b>
@@ -287,6 +288,9 @@ public class StockRegistrar {
                   AND s.market_code IN (%s)
                   AND (
                     NOT EXISTS (SELECT 1 FROM price_daily p WHERE p.stock_id = m.stock_id)
+                    -- 이력 받기가 실패한 채 남은 종목 — 평일 창이 봉을 남겨도 이력은 짧을 수 있다(CollectionPhase.PRICE_HISTORY).
+                    OR EXISTS (SELECT 1 FROM batch_execution_failure hf
+                                WHERE hf.stock_id = m.stock_id AND hf.failed_phase = '%s' AND NOT hf.resolved)
                     OR (
                       EXISTS (SELECT 1 FROM batch_execution_failure f
                                WHERE f.stock_id = m.stock_id
@@ -296,7 +300,7 @@ public class StockRegistrar {
                     )
                   )
                 ORDER BY m.stock_id
-                """.formatted(eraCovers("s", TODAY_US), collectedMarketPlaceholders()), Long.class, collectedMarkets());
+                """.formatted(eraCovers("s", TODAY_US), collectedMarketPlaceholders(), HISTORY_PHASE), Long.class, collectedMarkets());
     }
 
     /**
@@ -833,6 +837,12 @@ public class StockRegistrar {
      */
     private static final double COVERAGE_FLOOR = 0.25;
 
+    /**
+     * 이력 받기 단계 이름({@code CollectionPhase.PRICE_HISTORY}) — 이 패키지는 batch를 참조하지 않아 문자열로 든다. 어긋나면
+     * {@code MembershipGapQueryTest}가 그 단계로 심은 실패 행에서 붉는다(마이그레이션 제약이 enum 이름만 받는다 — {@code CollectionPhaseConstraintTest}).
+     */
+    static final String HISTORY_PHASE = "PRICE_HISTORY";
+
     /** 직전 거래일 대비 지표 코드 수가 이 비율 미만이면 {@code INDICATOR_DROP}으로 본다. */
     private static final double INDICATOR_FLOOR = 0.70;
 
@@ -888,6 +898,11 @@ public class StockRegistrar {
                   SELECT mem.*, win.lo, win.hi, win.prev,
                          (SELECT min(p.trade_date) FROM price_daily p
                            WHERE p.stock_id = mem.id) AS first_bar,
+                         -- 미해결 이력 실패(PRICE_HISTORY) — 「돌렸는데 소스가 안 줬다」. 첫 봉이 편입일 앞이어도(평일 15일 창) 이력이 짧다는
+                         -- 기록이라 이 축에 싣는다(ADR-0141 「남는 구멍」 · 상장일 없이 가른다).
+                         EXISTS (SELECT 1 FROM batch_execution_failure hf
+                                  WHERE hf.stock_id = mem.id AND hf.failed_phase = '%s'
+                                    AND NOT hf.resolved) AS history_failed,
                          NOT EXISTS (SELECT 1 FROM financial_statement f
                                       WHERE f.stock_id = mem.id) AS no_financial,
                          NOT EXISTS (SELECT 1 FROM financial_statement f
@@ -918,6 +933,7 @@ public class StockRegistrar {
                 )
                 SELECT id, market_code, ticker, name, exempt_industry, exempt_financial,
                        (first_bar IS NULL OR first_bar > joined) AS gap_price_history,
+                       history_failed AS gap_price_history_retry,
                        (industry_code IS NULL AND sic_code IS NULL) AS gap_industry,
                        no_financial AS gap_financial,
                        no_cash_flow AS gap_cash_flow,
@@ -925,7 +941,7 @@ public class StockRegistrar {
                        (days > 0 AND bars < days * %s) AS gap_price_coverage,
                        (codes_prev > 0 AND codes_now < codes_prev * %s) AS gap_indicator_drop
                 FROM c
-                WHERE (first_bar IS NULL OR first_bar > joined)
+                WHERE (first_bar IS NULL OR first_bar > joined OR history_failed)
                    OR (industry_code IS NULL AND sic_code IS NULL)
                    OR no_financial OR no_cash_flow
                    OR (no_governance AND market_has_governance)
@@ -934,7 +950,7 @@ public class StockRegistrar {
                 ORDER BY market_code, ticker
                 """.formatted(KnownSourceGaps.KNOWN_MISSING_SIC,
                         KnownSourceGaps.INFRA_FUND, KnownSourceGaps.FINANCIAL_CURRENCY_MISMATCH,
-                        eraCovers("s", TODAY_US), collectedMarketPlaceholders(),
+                        eraCovers("s", TODAY_US), collectedMarketPlaceholders(), HISTORY_PHASE,
                         COVERAGE_FLOOR, INDICATOR_FLOOR, COVERAGE_FLOOR, INDICATOR_FLOOR),
                 (rs, rowNum) -> {
                     Set<MembershipGap.Axis> missing = EnumSet.noneOf(MembershipGap.Axis.class);
@@ -943,6 +959,9 @@ public class StockRegistrar {
                     boolean financialExempt = rs.getBoolean("exempt_financial");
                     if (rs.getBoolean("gap_price_history")) {
                         missing.add(MembershipGap.Axis.PRICE_HISTORY);
+                    }
+                    if (rs.getBoolean("gap_price_history_retry")) {
+                        missing.add(MembershipGap.Axis.PRICE_HISTORY_RETRY);
                     }
                     if (rs.getBoolean("gap_industry")) {
                         (industryExempt ? exempt : missing).add(MembershipGap.Axis.INDUSTRY);

@@ -168,6 +168,8 @@ public class UniverseIntegrityAlerter {
         return switch (axis) {
             case PRICE_HISTORY -> "[시세 이력] 시세가 편입 이전으로 뻗어 있지 않다 — "
                     + "창이 긴 지표가 원리적으로 안 난다.";
+            case PRICE_HISTORY_RETRY -> "[시세 이력 재시도] 초기 적재의 이력 받기가 실패한 채 남아 있다 — "
+                    + "첫 봉은 편입일 앞(평일 창)이어도 이력이 짧을 수 있어 창이 긴 지표가 안 날 수 있다.";
             case INDUSTRY -> "[업종] 업종 코드가 비어 업종 상대 조건이 전부 판정불가다.";
             case FINANCIAL -> "[재무] 재무가 한 행도 없다 — 재무 지표 전부가 안 난다.";
             case CASH_FLOW -> "[영업활동현금흐름] 재무는 있는데 현금흐름이 없다.";
@@ -191,6 +193,8 @@ public class UniverseIntegrityAlerter {
         String tickers = String.join(",", hits.stream().map(MembershipGap::ticker).toList());
         return switch (axis) {
             case PRICE_HISTORY -> bootstrap(
+                    "--job=initial-load --skip-financial=true --price-years=7 --tickers=" + tickers);
+            case PRICE_HISTORY_RETRY -> bootstrap(
                     "--job=initial-load --skip-financial=true --price-years=7 --tickers=" + tickers);
             case INDUSTRY -> bootstrap("--job=company-profile");
             case FINANCIAL -> bootstrap(

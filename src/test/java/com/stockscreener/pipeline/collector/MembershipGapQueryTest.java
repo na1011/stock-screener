@@ -74,6 +74,23 @@ class MembershipGapQueryTest {
     }
 
     @Test
+    @DisplayName("IMPORTANT — 미해결 이력 실패(PRICE_HISTORY)는 첫 봉이 편입일 앞이어도 이력 재시도 축에 걸린다 — 평일 15일 창이 그 앞 봉을 남긴다")
+    void unresolvedHistoryFailureKeepsTheSignal() {
+        long refused = member("005930", "삼성전자");
+        bar(refused, JOINED.minusDays(10));
+        historyFailure(refused, false);
+        long retried = member("035420", "NAVER");
+        bar(retried, JOINED.minusDays(10));
+        historyFailure(retried, true);
+
+        assertThat(gapOf("005930").orElseThrow().missing())
+                .as("이력 받기가 실패한 기록이 남아 있으면 이력이 짧을 수 있다 — 상장일 없이 그것을 가른다(ADR-0141 「남는 구멍」)")
+                .contains(MembershipGap.Axis.PRICE_HISTORY_RETRY)
+                .as("첫 봉은 편입일 앞이라 「편입 이전으로 안 뻗었다」 축은 아니다").doesNotContain(MembershipGap.Axis.PRICE_HISTORY);
+        assertThat(axesOf("035420")).as("다시 받아 닫힌 실패는 신호가 아니다").doesNotContain(MembershipGap.Axis.PRICE_HISTORY_RETRY);
+    }
+
+    @Test
     @DisplayName("업종 결손이 알려진 SIC 결손이면 면제로 간다 — 신고가 아니라 OK 문장으로 옮긴다")
     void knownMissingSicIsExemptNotReported() {
         usMember("ARCC", "Ares Capital");
@@ -290,6 +307,18 @@ class MembershipGapQueryTest {
      * 시드 쪽으로 잡힌다 — 그러면 <b>모든 종목의 최신일 지표가 0</b>이 되어 급감 축이
      * 전부 참이 되고, 시험은 <b>엉뚱한 이유로 붉거나 초록</b>이 된다. 실제로 그랬다.
      */
+    private void historyFailure(long stockId, boolean resolved) {
+        Long execution = jdbcTemplate.queryForObject("""
+                INSERT INTO batch_execution (job_name, target_date, status, triggered_by)
+                VALUES ('initial-load', ?, 'PARTIAL_SUCCESS', 'GAP_FILL') RETURNING id
+                """, Long.class, JOINED);
+        jdbcTemplate.update("""
+                INSERT INTO batch_execution_failure
+                    (execution_id, stock_id, failed_phase, source_name, failure_kind, message, resolved)
+                VALUES (?, ?, 'PRICE_HISTORY', 'data-go-kr', 'TRANSIENT', '공공데이터포털 오류 [05] SERVICETIMEOUT_ERROR', ?)
+                """, execution, stockId, resolved);
+    }
+
     private void resetCalendar() {
         jdbcTemplate.update("DELETE FROM indicator_trade_date WHERE market_code = 'KOSPI'");
     }
