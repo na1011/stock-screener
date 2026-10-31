@@ -747,6 +747,15 @@ enum SecEdgarColumn {
     }
 
     /** 주당 컬럼인가 — 분기와 연간이 같은 값일 수 있어(반올림 · 한 분기 이익) 문맥 판정의 증거로 안 쓴다. */
+    /**
+     * 손익계산서의 금액 유량인가 — 수시보고서(8-K)에서 받는 컬럼(관문 켬). 현금흐름 · 자본적지출 · 잔액 · 주식수 · 주당 값은 아니다.
+     */
+    boolean incomeStatement() {
+        return kind == Kind.DURATION && unit == Unit.MONETARY
+                && this != OPERATING_CASH_FLOW && this != OPERATING_CASH_FLOW_TOTAL
+                && this != OPERATING_CASH_FLOW_CONTINUING && this != OPERATING_CASH_FLOW_DISCONTINUED && this != CAPEX;
+    }
+
     boolean perShare() {
         return unit == Unit.PER_SHARE;
     }

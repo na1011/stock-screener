@@ -180,7 +180,9 @@ public final class CommonIncomeRows {
             return new Resolved(q4, null, CommonIncome.Basis.T, "q4-" + fyCommon.branch());
         }
         for (String p : List.of("Q1", "Q2", "Q3")) {
-            Row q = vintageOf(rows, q4.fiscalYear(), p, fy.published());
+            // 분기 몫은 그 4분기 행의 공시일에 보이던 분기 판에서 뺀다 — 관문 켬 분기 사건 4분기는 FY 코드를 달고 FY보다 늦은 날 새 분기 판으로 지어졌다
+            // (FY 공시일 판으로 빼면 한 행의 보통주 몫과 지배 순이익이 다른 분기 판에서 나온다). FY 판 날의 4분기는 두 날이 같다.
+            Row q = vintageOf(rows, q4.fiscalYear(), p, q4.published() != null ? q4.published() : fy.published());
             if (q == null) {
                 // 세 분기 판이 없다(상장 첫해 · INGM · RKT) — FY 배분이 0이면 분기 배분도 0이다(우선주 배당 · 참가증권 배분은 이익이 양수인
                 // 해에 음수가 아니다 — 합이 0이면 각각 0). 그 밖은 못 정한다.

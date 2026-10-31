@@ -65,7 +65,13 @@ bad AS (
   WHERE NOT EXISTS (SELECT 1 FROM financial_statement y WHERE y.stock_id = q4.stock_id
       AND y.fiscal_year = q4.fiscal_year AND y.fiscal_period = 'FY' AND y.published_at = q4.published_at)
     AND NOT EXISTS (SELECT 1 FROM financial_statement o WHERE o.stock_id = q4.stock_id
-      AND o.report_code = q4.report_code AND o.fiscal_year > q4.fiscal_year))
+      AND o.report_code = q4.report_code AND o.fiscal_year > q4.fiscal_year)
+    AND NOT (EXISTS (SELECT 1 FROM financial_statement f WHERE f.stock_id = q4.stock_id
+        AND f.fiscal_year = q4.fiscal_year AND f.fiscal_period = 'FY' AND f.report_code = q4.report_code)
+      AND EXISTS (SELECT 1 FROM financial_statement p WHERE p.stock_id = q4.stock_id
+        AND p.fiscal_year = q4.fiscal_year AND p.fiscal_period IN ('Q1', 'Q2', 'Q3') AND p.published_at = q4.published_at))
+    AND NOT (q4.report_code LIKE '8-K%' AND NOT EXISTS (SELECT 1 FROM financial_statement f8
+      WHERE f8.stock_id = q4.stock_id AND f8.report_code = q4.report_code AND f8.fiscal_period = 'FY')))
 SELECT CASE
   WHEN (SELECT count(*) FROM q4) = 0 THEN '잴 것이 없었다 — 미국 4분기 행이 없다'
   WHEN (SELECT count(*) FROM bad) = 0 THEN 'OK 세대가 맞는 4분기 ' || (SELECT count(*) FROM q4) || '행'
@@ -82,6 +88,14 @@ SELECT CASE
 가려진다 — 실측으로 어긋난 116행 중 115행이 그 꼴이었다(`CAH` 2016·`MDLZ` 2015와 같은 비교 열 · K3의 `6-K`·`10-K` 11건도).
 그래서 여유를 두지 않는다. 남은 1행은 `FERG` 2026 — 회계연도를 7월에서 12월 결산으로 바꾼 전환기에 10-Q의 4~6월 분기가
 `Q4`로 붙은 라벨 결함이다(유도 세대가 아니라 결산월 변경 축 · progress [A29]).
+
+**관문 켬(미국 · 2026-10-31)에서는 4분기가 분기 사건에서도 다시 지어진다** — 첫 FY 판 뒤에 그 해 분기 판이 나오면 그날 4분기를 다시 짓는다. 그 컬럼의
+FY와 분기 셋이 앞 4분기 판 뒤로 모두 1% 안이면 같은 세대라 앞 값을 두고(`SecEdgarFacts.keepSameGeneration`), 값이 있던 칸이 하나라도 비게 되면
+그 사건은 새 판을 안 낸다(`keepsEveryValue`). 새 판은 **그날 분기 판의 공시일에 FY 판의 공시 코드**를 단다 — 보통주 몫(`CommonIncomeRows.fourth`)이
+같은 코드의 FY 행으로 4분기를 잇기 때문이다. 그 꼴(같은 코드의 FY 행 + 같은 날 그 해 분기 행)은 세대 불일치가 아니라 면제한다. 이 면제는 꼴만
+보므로 그 행의 세대가 맞는지는 이 펜스가 재지 않는다 — 세대 판정은 어댑터의 몫이다. **FY 행이 없는 8-K 공시의 4분기 행**도 뺀다 — 그 공시가 직접
+실은 3개월 값이다(MSFT 2015 · 8-K가 FY 판이면 그날 FY 행이 함께 있어 첫 술어가 이미 통과시킨다). 0콜 스윕 대조(편입 필터 없는 근사): 면제 전 175행 ·
+면제 뒤 FERG · PLUG 2행. 관문 꺼짐 출력에는 두 꼴이 없어 운영 수는 그대로다.
 
 **MUST: 모집단을 유지 대상으로 좁힌다.** 처음에 `market_code = 'US'`로 썼더니 **재적재가 닿지
 않는 미국 상장 8,504종목**까지 세었다. 범위 밖은 고칠 기제가 없어 **영구 RED**가 되고, 영구
