@@ -1396,63 +1396,11 @@ ADR-0162의 새 펜스 둘은 **통과했다**.
 - **MUST: 새 전제를 더할 때 뺄 것을 함께 정한다** — 내 펜스 둘은 **0.234초**라 원인이 아니었지만,
   예산이 64초에서 시작했다면 그 둘로 넘쳤을 자리다.
 
-**[A59 후속 실측 · 2026-09-25] dead 생산량을 갈랐다.** 일일 갱신 2회가 **328,297**(회당 약 164k)이고
-백필 한 판이 **약 1.1M**인데 `indicator_value`의 발동선이 **1,083,728**이다 — **일일은 안 넘고
-백필만 넘긴다.** 지금은 dead 328,297 · 가시비율 **1.000**으로 건강하다.
-
-**[A59 · 2026-09-23 갱신] 대량 쓰기 뒤 전제 검사가 무너진다 — 범인은 설정이 **있는** 표였다.**
-
-**처음 서술(「`financial_statement`만 설정이 없다」)이 이번 재발을 설명하지 못한다.** 같은 날
-백필 한 판 직후 다시 재니 갈래가 반대였다:
-
-| 표 | dead | 발동선 | 가시비율 | 설정 |
-|---|---|---|---|---|
-| `indicator_value` | **1,134,136** | **1,086,956** | **0.836** | 있다(ADR-0140) |
-| `financial_statement` | 22 | 45,756 | 1.000 | 없다 |
-
-**전제가 판정 불가 38이 됐다**(직전 0). `VACUUM (ANALYZE) indicator_value` 한 번에 dead가
-**0** · 가시비율 **1.000**이 됐다. **설정이 있어도 발동선(약 109만)이 백필 한 판의 dead 생산량과
-같은 자리라, 넘긴 직후부터 autovacuum이 따라오기 전까지 가시맵이 내려앉는다.**
-
-- **MUST: 대량 쓰기 뒤에는 전제 검사 전에 `indicator_value`를 VACUUM한다.** `psql`에
-  `statement_timeout=30s`가 환경으로 걸려 있어 그냥 돌리면 **30초에 잘린다** —
-  `PGOPTIONS='-c statement_timeout=0' command psql`로 푼다(유지보수 명령이라 그 상한은 뜻이 없다).
-- **`pgstattuple`이 설치돼 있다**(2026-09-23 사용자 승인). 카운터가 이력을 잃어도 이것으로 직접 잰다.
-  그렇게 재니 `price_daily`는 dead **0.080%** · `governance_report_row`는 살아있는 튜플 **96.87%**로
-  **둘 다 블로트가 없다** — 「같은 처방인가」의 답은 **아니다**다.
-- **loop가 아직 미완이다** — 유도안(`financial_statement`에 `{scale_factor=0.02, threshold=2000}`)은
-  **이번 재발을 못 막는다.** 고칠 자리는 `indicator_value`의 발동선이거나 백필 뒤 VACUUM의 자동화다.
-  **다시 계획하고 반증부터 받는다.**
-
-**[A63] 크래시 복구가 `pg_stat_*` 카운터를 0/NULL로 되돌린다 — A59와 같은 축이다.**
-
-postgres가 강제 종료되면 다음 기동의 crash recovery가 누적 통계를 버린다. **2026-08-30·
-09-20·09-26 세 번 다 그랬고**(ADR-0163 §배경이 그 세 번을 센다) 지금도 그 상태다 —
-`indicator_value`의 `n_live_tup 0 · n_dead_tup 0 · vacuum_count 0 · last_autovacuum NULL`
-인데 `pg_class.reltuples`는 **51,686,384**(9,218 MB)다. `pg_stat_database.stats_reset`도
-NULL이라 **리셋됐다는 사실조차 안 남는다.**
-
-**읽는 쪽이 다섯 파일에 여섯 군데 있고 셋이 MUST다** — `.claude/hooks/check-premises.sh:102` ·
-`.claude/skills/batch-load/SKILL.md:481-482` · `ADR-0140:35` · `ADR-0011:91` · `ADR-0045:120`.
-전부 **0/NULL을 「청소할 것이 없다」로 읽는다** — 결과 0과 죽은 계기의 빈 출력이 구분되지 않는다.
-autovacuum 발동선은 `50 + 0.2 × reltuples` ≈ **1,033만 dead**인데 카운터가 0부터 다시 세므로
-크래시 전에 쌓인 것(일일 갱신 1회 ≈ 164k)은 영영 안 세어진다.
-
-**크기를 쟀다(2026-09-26, DB에 쓰지 않고 카탈로그만) — 실익도 비용도 작다.**
-`relallvisible/relpages`는 `pg_class` 컬럼이라 **크래시로 안 날아가고 그것이 살아 있다**:
-`indicator_value` **1.0000** · `financial_statement` 1.0000 · `governance_fact` 1.0000 ·
-`batch_execution_failure` 0.9622 · `price_daily` 0.8497 · `governance_report_row` 0.8482.
-**1.0000은 dead가 사실상 없다는 뜻이다** — 즉 지금 `n_dead_tup 0`은 **우연히 맞는 값**이고,
-MUST 셋이 당장 틀린 판단을 하고 있지는 않다. VACUUM은 all-visible 페이지를 건너뛰므로
-**전체 5,501 MB 중 스캔 대상이 64 MB뿐**이다(가장 큰 `price_daily` 58 MB).
-
-- **남는 위험은 「앞으로 쌓이는 dead를 못 세는 것」이 아니라 발동선이다** — autovacuum은
-  `50 + 0.2 × reltuples` ≈ **1,033만 dead**에서 발동하는데 카운터가 0부터 다시 센다.
-  지금은 dead가 거의 없어 같은 값이지만, **대량 쓰기가 한 번 들어가면 갈린다.**
-- **처방은 `VACUUM (ANALYZE)` 한 번**이고 스캔 64 MB라 싸다. **대량 쓰기(재적재·백필) 직전에
-  돌리는 것이 가장 값싸다** — 그때 발동선이 실제로 쓰이기 때문이다.
-- **MUST NOT: 「한계」로 적고 넘기지 않는다** — 원장이 정직하게 주는데 계기가 꺼진 것이라 가짜 한계다.
-- **A59가 정확히 이 카운터 위에 서 있다.** 그 축을 열 때 함께 판정한다.
+**[A59 · A63] 대량 쓰기 뒤 가시성 맵 붕괴 — 지표 백필이 끝에서 `VACUUM (ANALYZE) indicator_value`를 돈다(2026-10-31 · `IndicatorBackfillJob.vacuumIndicatorValue`).**
+백필 한 판의 dead 생산(약 110만)이 `indicator_value`의 autovacuum 발동선(약 108만 · ADR-0140)과 같은 자리라, 넘긴 직후 전제 검사가 판정 불가 38로 무너졌다(VACUUM 한 번에 0). 크래시 복구가 `pg_stat_*`를 0/NULL로 되돌리는 것(A63 — 08-30 · 09-20 · 09-26)도 그 VACUUM이 실제 값으로 되돌린다.
+- **조건부로만 닫혔다**: 백필(관문 · 손)만 VACUUM을 붙인다. 일일 갱신(회당 dead 약 164k)과 14:20 화해는 autovacuum에 맡긴다 — 백필 없이 크래시가 나면 카운터는 다음 백필까지 0부터 센다(`relallvisible/relpages`는 `pg_class`라 안 날아간다).
+- **MUST: 가시성 진단은 `pgstattuple_approx('indicator_value')`의 `scanned_percent`로 한다** — `relallvisible`·`n_dead_tup`은 VACUUM·ANALYZE 때만 갱신되는 대리값이라 낡은 맵을 「멀쩡」으로 보인다(ADR-0011). `pgstattuple`은 설치돼 있다.
+- **손 SQL 쓰기 뒤에는 그대로 손으로 돈다**: `psql`에 `statement_timeout=30s`가 환경으로 걸려 있어 `PGOPTIONS='-c statement_timeout=0' command psql`로 푼다.
 
 #### 묶음 7 — 알림·관리 화면·프론트
 

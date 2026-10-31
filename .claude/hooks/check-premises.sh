@@ -99,7 +99,8 @@ guard="$root/.claude/hooks/guard-destructive.sh"
 # **33.2초**가 됐다. 전제별로 재보니 **어느 것도 안 튀었다**(최댓값 ADR-0080 2.91초 = 전체의
 # 10%, 긴 꼬리). `VACUUM (ANALYZE) indicator_value` 17초로 죽은 튜플 0이 되고 **29.0초**다
 # (3회 28.94·29.03·31.02). **느려졌는데 특정 전제가 안 튀면 여기를 본다** —
-# `pg_stat_user_tables.n_dead_tup`이 그 답이고, 대량 백필·재적재 뒤가 발생점이다.
+# `pgstattuple_approx('indicator_value')`가 그 답이고(`n_dead_tup`은 크래시 복구가 0으로 되돌린다), 대량 백필·재적재 뒤가
+# 발생점이다 — 지표 백필은 끝에서 VACUUM을 스스로 돈다(`IndicatorBackfillJob.vacuumIndicatorValue`).
 #
 # **그리고 이 예산은 유휴가 아니라 경합에서 깨진다.** 같은 날 `./gradlew test`(1,356건) 직후
 # 훅이 `참 95 · 발견 3 · **판정 불가 19**`를 냈고 ADR-0036이 `statement_timeout`으로 rc=1이었다 —

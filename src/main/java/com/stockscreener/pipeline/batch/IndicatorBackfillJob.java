@@ -1,6 +1,7 @@
 package com.stockscreener.pipeline.batch;
 
 import com.stockscreener.indicator.IndicatorRetentionPolicy;
+import com.stockscreener.notification.AlertSeverity;
 import com.stockscreener.indicator.IndicatorTradeDateIndex;
 import com.stockscreener.indicator.IndicatorRunner;
 import com.stockscreener.indicator.LayerChange;
@@ -21,6 +22,9 @@ import org.springframework.stereotype.Component;
 import javax.sql.DataSource;
 
 import java.math.BigDecimal;
+import java.sql.Connection;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -285,6 +289,9 @@ public class IndicatorBackfillJob {
             // (ADR-0095) 여기를 빠뜨리면 새로 채운 날짜가 화면에 영영 안 보인다.
             execution.stage("거래일 색인 갱신");
             log.info("지표 거래일 색인을 갱신했다. 색인={}건", tradeDateIndex.rebuild());
+
+            execution.stage("가시성 맵 복구");
+            vacuumIndicatorValue(execution);
 
             // 날짜 루프 백필의 작업 단위는 (거래일 × 종목)이라 날짜 실패를 같은 단계에 세지 않는다(ADR-0037) —
             // 나머지 날짜와 정리·색인을 다 돈 뒤 잡을 실패로 끝내 그 날짜를 다시 돌리게 한다.
@@ -604,6 +611,31 @@ public class IndicatorBackfillJob {
             thread.setDaemon(true);
             return thread;
         };
+    }
+
+    /**
+     * 백필 한 판이 남긴 죽은 튜플을 그 자리에서 치운다(A59 · ADR-0011 「그 비가 2배 아래면 VACUUM」).
+     *
+     * <p>백필 한 판의 dead 생산(약 110만)이 {@code indicator_value}의 autovacuum 발동선(약 108만 · ADR-0140)과 같은 자리라,
+     * 넘긴 직후부터 autovacuum이 따라오기 전까지 가시성 맵이 내려앉아 Index Only Scan이 힙을 읽는다 — 전제 검사가 판정 불가
+     * 38로 무너졌고 VACUUM 한 번에 0이 됐다. 크래시가 누적 통계를 버린 뒤(A63)에도 이 VACUUM이 카운터를 실제 값으로 되돌린다.
+     *
+     * <p>VACUUM은 트랜잭션 안에서 못 돌아 풀에서 따로 자동 커밋 커넥션을 빌린다. 실패해도 쓴 값은 그대로라 잡을 실패로 바꾸지
+     * 않고 운영자에게 알린다 — 치우지 못한 dead는 autovacuum이 늦게라도 치운다.
+     */
+    private void vacuumIndicatorValue(BatchExecutionContext execution) {
+        long started = System.nanoTime();
+        try (Connection connection = dataSource.getConnection();
+             Statement statement = connection.createStatement()) {
+            connection.setAutoCommit(true);
+            statement.execute("VACUUM (ANALYZE) indicator_value");
+            log.info("indicator_value를 VACUUM (ANALYZE)했다. {}초", (System.nanoTime() - started) / 1_000_000_000L);
+        } catch (SQLException e) {
+            log.error("백필 뒤 indicator_value VACUUM에 실패했다 — 값은 그대로이고 가시성 맵만 autovacuum까지 낡는다", e);
+            execution.alertOperator(AlertSeverity.WARNING, "백필 뒤 VACUUM 실패",
+                    "indicator_value VACUUM (ANALYZE)가 실패했다(" + e.getMessage() + "). 값은 그대로다. 전제 검사가 판정 불가로 "
+                            + "무너지면 PGOPTIONS='-c statement_timeout=0' psql로 VACUUM (ANALYZE) indicator_value를 한 번 돌린다.");
+        }
     }
 
     /**
