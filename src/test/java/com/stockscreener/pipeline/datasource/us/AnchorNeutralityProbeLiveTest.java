@@ -56,7 +56,7 @@ class AnchorNeutralityProbeLiveTest {
         properties.getAlpaca().setSecretKey(System.getenv("APCA_API_SECRET_KEY"));
         properties.getAlpaca().setReadTimeout(Duration.ofSeconds(60));
         AlpacaPriceAdapter adapter = new AlpacaPriceAdapter(new ExternalApiClientFactory(), properties,
-                new TokenBucketRateLimiter("alpaca", 150, 0));
+                new TokenBucketRateLimiter("alpaca", 150, 0), false);
 
         record Row(long id, String ticker, LocalDate anchor, LocalDate from, LocalDate to, int bars) {
         }

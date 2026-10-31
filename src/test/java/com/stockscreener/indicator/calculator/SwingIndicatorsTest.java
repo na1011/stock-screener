@@ -210,20 +210,32 @@ class SwingIndicatorsTest {
         }
 
         @Test
-        @DisplayName("거래대금이 없는 날은 빼고 평균한다 — 0으로 채우면 유동성이 없는 것처럼 보인다")
-        void excludesMissingDaysInsteadOfZeroing() {
-            List<PriceBar> bars = withTradeValue(Turnover60Calculator.WINDOW, 1_000_000);
-            // 절반을 거래정지(거래대금 없음)로 만든다.
-            for (int i = 0; i < Turnover60Calculator.WINDOW / 2; i++) {
-                PriceBar b = bars.get(i);
-                bars.set(i, new PriceBar(b.tradeDate(), b.open(), b.high(), b.low(),
-                        b.close(), b.adjClose(), b.volume(), null, b.listedShares()));
-            }
+        @DisplayName("창에 거래대금이 빈 날이 하나라도 있으면 값을 안 낸다 — 빼고 평균하면 짧은 창의 평균이 60일 평균으로 나간다")
+        void yieldsNothingWhenAnyDayInWindowIsMissing() {
+            List<PriceBar> bars = withTradeValue(Turnover60Calculator.WINDOW + 1, 1_000_000);
+            // 첫 봉만 비운다 — 그 봉이 든 첫 창은 값이 없고, 그 봉이 빠진 둘째 창은 값이 난다.
+            PriceBar b = bars.get(0);
+            bars.set(0, new PriceBar(b.tradeDate(), b.open(), b.high(), b.low(),
+                    b.close(), b.adjClose(), b.volume(), null, b.listedShares()));
 
             List<IndicatorPoint> points = calculator.calculate(contextOf(bars));
 
-            // 0으로 메웠다면 500,000이 된다.
+            assertThat(points).hasSize(1);
+            assertThat(points.get(0).tradeDate()).isEqualTo(bars.get(Turnover60Calculator.WINDOW).tradeDate());
             assertThat(points.get(0).value()).isEqualByComparingTo("1000000");
+        }
+
+        @Test
+        @DisplayName("거래가 없던 날의 0은 값이다 — 정지 봉은 0으로 와서 평균을 낮춘다")
+        void zeroIsAValueNotAGap() {
+            List<PriceBar> bars = withTradeValue(Turnover60Calculator.WINDOW, 1_000_000);
+            for (int i = 0; i < Turnover60Calculator.WINDOW / 2; i++) {
+                PriceBar z = bars.get(i);
+                bars.set(i, new PriceBar(z.tradeDate(), z.open(), z.high(), z.low(),
+                        z.close(), z.adjClose(), 0L, java.math.BigDecimal.ZERO, z.listedShares()));
+            }
+
+            assertThat(calculator.calculate(contextOf(bars)).get(0).value()).isEqualByComparingTo("500000");
         }
 
         @Test

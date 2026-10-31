@@ -310,6 +310,28 @@ class AlpacaPriceAdapterTest {
         assertThat(adapter().sourceName()).isEqualTo("alpaca:price");
     }
 
+    @Test
+    @DisplayName("관문 켬은 거래대금을 vw × v로 싣는다 — 거래량 0이면 0, vw가 없으면 null · 꺼짐은 null 그대로(ADR-0196)")
+    void carriesTradeValueOnlyWhenGateIsOn() throws Exception {
+        String body = """
+                {"bars":{"AAPL":[
+                 {"t":"2026-08-24T04:00:00Z","o":310,"h":312,"l":309,"c":310.34,"v":1000,"n":5,"vw":310.50},
+                 {"t":"2026-08-25T04:00:00Z","o":310,"h":310,"l":310,"c":310,"v":0,"n":0},
+                 {"t":"2026-08-26T04:00:00Z","o":311,"h":312,"l":310,"c":311,"v":500,"n":3}]},"next_page_token":null}""";
+        enqueue(200, body);
+        enqueue(200, body);
+
+        List<RawPriceBar> on = new AlpacaPriceAdapter(
+                new ExternalApiClientFactory(), properties("test-key-id", "test-secret"),
+                new TokenBucketRateLimiter("alpaca", 0, 0), server.url("/").toString(), 50, true)
+                .fetchDailyBars(AAPL, FROM, TO);
+        List<RawPriceBar> off = adapter().fetchDailyBars(AAPL, FROM, TO);
+
+        assertThat(on).extracting(RawPriceBar::tradeValue)
+                .containsExactly(new BigDecimal("310500.00"), BigDecimal.ZERO, null);
+        assertThat(off).extracting(RawPriceBar::tradeValue).containsOnlyNulls();
+    }
+
     private AlpacaPriceAdapter adapter() {
         return adapter(50);
     }

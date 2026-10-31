@@ -79,6 +79,6 @@ class AlpacaPriceLiveTest {
         properties.getAlpaca().setSecretKey(System.getenv("APCA_API_SECRET_KEY"));
         return new AlpacaPriceAdapter(
                 new ExternalApiClientFactory(), properties,
-                new TokenBucketRateLimiter("alpaca", 0, 0));
+                new TokenBucketRateLimiter("alpaca", 0, 0), false);
     }
 }
