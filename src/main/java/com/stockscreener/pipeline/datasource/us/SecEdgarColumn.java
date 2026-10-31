@@ -746,6 +746,11 @@ enum SecEdgarColumn {
         return kind != Kind.DURATION;
     }
 
+    /** 주당 컬럼인가 — 분기와 연간이 같은 값일 수 있어(반올림 · 한 분기 이익) 문맥 판정의 증거로 안 쓴다. */
+    boolean perShare() {
+        return unit == Unit.PER_SHARE;
+    }
+
     /**
      * 이 컬럼이 <b>「그 보고서가 그 기간을 보고했다」의 증거</b>가 되는가.
      *

@@ -473,6 +473,7 @@ final class SecEdgarFacts {
         if (usGate) {
             keepPartnersEquityOnBalanceSheets(byColumn);
             dropInterimAnnualEqualToShorter(byColumn);
+            dropAnnualQuarterContextCarryingTheYear(byColumn);
         }
         return byColumn;
     }
@@ -1014,6 +1015,68 @@ final class SecEdgarFacts {
                             .toList();
                     return !subWindowsSum(parts, f.start(), f.end(), f.value(), band, 0);
                 });
+            }
+        }
+    }
+
+    /**
+     * 관문 켬(P2 v2 · K8) — 연차보고서가 <b>3개월 문맥에 그 해 12개월 값</b>을 실으면 그 공시의 그 분기 문맥을 <b>행 단위로</b> 읽지 않는다.
+     * 그러면 Q4는 FY − 9개월 누계로 유도된다(유도할 재료가 없으면 빈다 — 미표시).
+     *
+     * <p>증거: 같은 공시 · 같은 태그의 3개월 값(끝 = FY 끝)이 FY 값과 0.1% 안이고, 그 해 9개월 누계(같은 태그 · 그 공시 앞에 제출)가 FY의 1%를 넘는다 —
+     * 9개월 동안 실적이 있었는데 4분기 하나가 한 해 전체일 수 없다. 주당 컬럼은 증거로 안 쓴다(반올림 · 한 분기 이익이 연간과 같을 수 있다 — EPS 정밀도
+     * 3/37). 실측: ORCL 2020 Q4 매출 39,068(분기 10,440) · NI 2024 · 2025 · TSCO 2025 Q4 지배 순이익 1,096(분기 227) · LHX FY2025 · SGI(탐색 {@code P2-PLAN.md}).
+     *
+     * <p><b>왜 행 단위인가</b>(P2 v1 반증 판정 2): 컬럼만 버리면 LHX FY2025 Q4가 영업이익 3개월 값과 매출 · 원가 12개월 값(FY 문맥에 매출이 없어
+     * 그 공시가 12개월 값을 Q4 문맥에만 실었다)이 한 행에 섞여 영업이익률이 10.05% → 5.54%(진실 9.65%)가 된다. 그 공시의 Q4 문맥은 원장이 스스로 어긋난
+     * 것이고, 12개월 값을 FY 자리로 옮겨 쓰는 것은 두 증인의 산수가 필요한 복원이라 하지 않는다(2026-10-25 사용자 기준 — 뒤틀린 원장은 미표시).
+     */
+    private static void dropAnnualQuarterContextCarryingTheYear(Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn) {
+        BigDecimal same = new BigDecimal("0.001");
+        BigDecimal floor = new BigDecimal("0.01");
+        Set<String> suspect = new HashSet<>();
+        for (Map.Entry<SecEdgarColumn, Map<String, Map<Slot, Fact>>> e : byColumn.entrySet()) {
+            if (e.getKey().instant() || e.getKey().perShare()) {
+                continue;
+            }
+            for (Map<Slot, Fact> slots : e.getValue().values()) {
+                List<Fact> tag = slots.values().stream().filter(f -> f.start() != null && f.value() != null).toList();
+                for (Fact q : tag) {
+                    if (!ANNUAL_FORMS.contains(q.form()) || q.value().signum() == 0
+                            || !isQuarterSpan(ChronoUnit.DAYS.between(q.start(), q.end()))) {
+                        continue;
+                    }
+                    for (Fact fy : tag) {
+                        long d = ChronoUnit.DAYS.between(fy.start(), fy.end());
+                        if (!fy.accn().equals(q.accn()) || !fy.end().equals(q.end()) || d < ANNUAL_MIN || d > ANNUAL_MAX
+                                || fy.value().subtract(q.value()).abs().compareTo(fy.value().abs().multiply(same)) > 0) {
+                            continue;
+                        }
+                        BigDecimal minimum = fy.value().abs().multiply(floor);
+                        boolean yearHadQuarters = tag.stream().anyMatch(n -> {
+                            long nd = ChronoUnit.DAYS.between(n.start(), n.end());
+                            return Math.abs(ChronoUnit.DAYS.between(fy.start(), n.start())) <= 7 && n.end().isBefore(q.start())
+                                    && nd >= 255 && nd <= 285 && n.filed().isBefore(q.filed())
+                                    && n.value().abs().compareTo(minimum) > 0;
+                        });
+                        if (yearHadQuarters) {
+                            suspect.add(q.accn() + "|" + q.end());
+                        }
+                    }
+                }
+            }
+        }
+        if (suspect.isEmpty()) {
+            return;
+        }
+        for (Map.Entry<SecEdgarColumn, Map<String, Map<Slot, Fact>>> e : byColumn.entrySet()) {
+            if (e.getKey().instant()) {
+                continue;
+            }
+            for (Map<Slot, Fact> slots : e.getValue().values()) {
+                slots.values().removeIf(f -> f.start() != null && ANNUAL_FORMS.contains(f.form())
+                        && isQuarterSpan(ChronoUnit.DAYS.between(f.start(), f.end()))
+                        && suspect.contains(f.accn() + "|" + f.end()));
             }
         }
     }
