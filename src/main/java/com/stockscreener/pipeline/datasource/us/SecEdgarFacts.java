@@ -472,6 +472,7 @@ final class SecEdgarFacts {
         }
         if (usGate) {
             keepPartnersEquityOnBalanceSheets(byColumn);
+            dropInterimAnnualEqualToShorter(byColumn);
         }
         return byColumn;
     }
@@ -957,6 +958,84 @@ final class SecEdgarFacts {
     private static boolean endsInMonth(LocalDate close, int month) {
         for (int shift = -7; shift <= 7; shift++) {
             if (close.plusDays(shift).getMonthValue() == month) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 관문 켬(P2 v2 · P1) — 중간보고(10-Q · 6-K)가 12개월 창에 실은 값이 <b>같은 공시 · 같은 컬럼의 더 짧은 창 값</b>(0.1%)과 같으면 읽지 않는다.
+     * 문맥을 잘못 붙인 오태깅이다 — FIX FY2025(2026-04-23 10-Q가 FY 창에 1분기 값 1,831.3) · AXON · AA · GPI · PPG 2017 FY 매출 3,486(뒤 판 14,748)
+     * (탐색 {@code P2-PLAN.md} · K11 사건 중 이 꼴 19건에서 뒤 공시가 앞 값으로 돌아감 13 · 뒤 없음 4 · 확인 1).
+     *
+     * <p><b>예외 — 같은 공시 · 같은 태그의 하위 창 산수가 그 12개월 값을 지지하면 남긴다</b>: 그 창을 빈틈없이(사흘 안) 잇는 둘 이상의 창(누계 + 나머지 ·
+     * 분기 넷)이 같은 공시에 있고 합이 0.1% 안이다. 규칙이 실제로 발화한 전수 100팩트 중 뒤 공시가 확인한 정당한 재작성 2(M FY2023 세전 43 — 2024-12-12
+     * 10-Q가 재작성 분기를 함께 실었다)가 그렇게 서고, 오태깅 79 중 0이 선다(P2 v1 반증 판정 1).
+     */
+    private static void dropInterimAnnualEqualToShorter(Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn) {
+        BigDecimal tolerance = new BigDecimal("0.001");
+        for (Map.Entry<SecEdgarColumn, Map<String, Map<Slot, Fact>>> e : byColumn.entrySet()) {
+            if (e.getKey().instant()) {
+                continue;
+            }
+            Map<String, List<Fact>> byAccn = new HashMap<>();
+            for (Fact f : allFacts(e.getValue())) {
+                if (f.start() != null && f.value() != null) {
+                    byAccn.computeIfAbsent(f.accn(), k -> new ArrayList<>()).add(f);
+                }
+            }
+            for (Map<Slot, Fact> slots : e.getValue().values()) {
+                List<Fact> sameTag = new ArrayList<>(slots.values());
+                slots.values().removeIf(f -> {
+                    if (f.start() == null || f.value() == null || !INTERIM_FORMS.contains(f.form()) || f.value().signum() == 0) {
+                        return false;
+                    }
+                    long days = ChronoUnit.DAYS.between(f.start(), f.end());
+                    if (days < ANNUAL_MIN || days > ANNUAL_MAX) {
+                        return false;
+                    }
+                    BigDecimal band = f.value().abs().multiply(tolerance);
+                    boolean twin = false;
+                    for (Fact o : byAccn.getOrDefault(f.accn(), List.of())) {
+                        long od = ChronoUnit.DAYS.between(o.start(), o.end());
+                        if (od < ANNUAL_MIN - 20 && o.value().subtract(f.value()).abs().compareTo(band) <= 0) {
+                            twin = true;
+                            break;
+                        }
+                    }
+                    if (!twin) {
+                        return false;
+                    }
+                    List<Fact> parts = sameTag.stream()
+                            .filter(o -> o.accn().equals(f.accn()) && o.start() != null && o.value() != null
+                                    && !o.start().isBefore(f.start().minusDays(3)) && !o.end().isAfter(f.end().plusDays(3))
+                                    && ChronoUnit.DAYS.between(o.start(), o.end()) < ANNUAL_MIN)
+                            .toList();
+                    return !subWindowsSum(parts, f.start(), f.end(), f.value(), band, 0);
+                });
+            }
+        }
+    }
+
+    /** {@code from}에서 {@code to}까지를 빈틈없이(사흘 안) 잇는 둘 이상의 창의 합이 {@code target}과 {@code band} 안인가. */
+    private static boolean subWindowsSum(List<Fact> parts, LocalDate from, LocalDate to, BigDecimal target, BigDecimal band,
+                                         int depth) {
+        if (depth > 4) {
+            return false;
+        }
+        for (Fact p : parts) {
+            if (Math.abs(ChronoUnit.DAYS.between(from, p.start())) > 3) {
+                continue;
+            }
+            BigDecimal rest = target.subtract(p.value());
+            if (Math.abs(ChronoUnit.DAYS.between(p.end(), to)) <= 3) {
+                if (depth > 0 && rest.abs().compareTo(band) <= 0) {
+                    return true;
+                }
+                continue;
+            }
+            if (subWindowsSum(parts, p.end().plusDays(1), to, rest, band, depth + 1)) {
                 return true;
             }
         }
