@@ -99,6 +99,7 @@ class PipelineSchedulerChainTest {
     private FilingConsumptionJob filingConsumptionJob;
     private FreshnessCatchUpJob freshnessCatchUpJob;
     private CandidateSplitJob candidateSplitJob;
+    private com.stockscreener.pipeline.batch.PriceIntegrityAlerter priceIntegrityAlerter;
     private PipelineScheduler scheduler;
 
     @BeforeEach
@@ -125,6 +126,7 @@ class PipelineSchedulerChainTest {
         filingConsumptionJob = mock(FilingConsumptionJob.class);
         candidateSplitJob = mock(CandidateSplitJob.class);
         freshnessCatchUpJob = mock(FreshnessCatchUpJob.class);
+        priceIntegrityAlerter = mock(com.stockscreener.pipeline.batch.PriceIntegrityAlerter.class);
         // 평상시: 13:30이 지표 달력을 대상일까지 늘려 두었다.
         when(indicatorCalendar.latestIndicatorDate(anyCollection())).thenReturn(Optional.of(TARGET_DATE));
 
@@ -149,7 +151,7 @@ class PipelineSchedulerChainTest {
                         indicatorCalendar, null, false),
                 universeIntegrityAlerter, batchExecutions, writeLock, filingListingJob, filingConsumptionJob,
                 freshnessCatchUpJob, new UsCandidateFeed(candidateFeed), candidateSplitJob,
-                mock(com.stockscreener.pipeline.batch.PriceIntegrityAlerter.class),
+                priceIntegrityAlerter,
                 krXbrlCollectJob, earningsReleaseJob, marketCalendarJob);
     }
 
@@ -210,7 +212,7 @@ class PipelineSchedulerChainTest {
                 eq(List.of("005930")));
         order.verify(shareBasisDeriver).derive("US");
         order.verify(governanceDeriveJob).run(eq(TARGET_DATE), eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER), eq(List.of()));
-        order.verify(dailyUpdateJob).run(TARGET_DATE, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+        order.verify(dailyUpdateJob).run(TARGET_DATE, BatchExecutionRecorder.TriggeredBy.SCHEDULER, DailyUpdateJob.Markets.DOMESTIC);
         // 좁힌 화해 — 원본층은 지운 종목만, 파생층은 창 전체(14:00 사슬과 같은 꼴)
         order.verify(indicatorBackfillJob).rewriteOriginLayer(eq(TARGET_DATE), any(), eq(List.of("GOOGL")));
         order.verify(indicatorBackfillJob).rebuildDerived(eq(TARGET_DATE), any());
@@ -224,28 +226,143 @@ class PipelineSchedulerChainTest {
         InOrder order = inOrder(filingListingJob, earningsReleaseJob, dailyUpdateJob);
         order.verify(filingListingJob).run(any(), eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER));
         order.verify(earningsReleaseJob).run(any(), eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER));
-        order.verify(dailyUpdateJob).run(TARGET_DATE, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+        order.verify(dailyUpdateJob).run(TARGET_DATE, BatchExecutionRecorder.TriggeredBy.SCHEDULER, DailyUpdateJob.Markets.DOMESTIC);
     }
 
     @Test
-    @DisplayName("13:30 세션 달력은 일일 갱신 뒤에 돈다 — 크론 밖에 있던 동안 달력이 멈춰 봉 결측 판정 창이 좁아졌다")
-    void marketCalendarRunsAfterDailyUpdate() {
+    @DisplayName("13:30은 국내만 받는다 — 미국 일일 갱신 · 세션 달력 · 시세 무결성은 21:00 사슬의 몫이다")
+    void dailyUpdateAt1330IsDomesticOnly() {
         scheduler.runDailyUpdate();
 
-        InOrder order = inOrder(dailyUpdateJob, marketCalendarJob);
-        order.verify(dailyUpdateJob).run(TARGET_DATE, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
-        order.verify(marketCalendarJob).run(TARGET_DATE, BatchExecutionRecorder.TriggeredBy.SCHEDULER, null);
+        verify(dailyUpdateJob).run(TARGET_DATE, BatchExecutionRecorder.TriggeredBy.SCHEDULER, DailyUpdateJob.Markets.DOMESTIC);
+        verify(dailyUpdateJob, never()).run(any(), any(), eq(DailyUpdateJob.Markets.US));
+        verify(dailyUpdateJob, never()).runUs(any(), any());
+        verifyNoInteractions(marketCalendarJob, priceIntegrityAlerter);
     }
 
     @Test
-    @DisplayName("13:30 세션 달력이 던지면 일일 갱신을 되돌리지 않고 끝에 다시 던진다")
-    void marketCalendarFailureIsRethrownAfterDailyUpdate() {
-        RuntimeException boom = new IllegalStateException("달력 실패");
-        when(marketCalendarJob.run(any(), any(), any())).thenThrow(boom);
+    @DisplayName("21:00은 달력 → 미국 일일 갱신 → 미국 기업 행위 → 미국 재구축 → 무결성 순서이고 국내를 안 돈다")
+    void usChainRunsInOrderAndOnlyForTheUs() {
+        givenUsRun(LocalDate.parse("2026-10-29"));
+        givenInvalidation();
 
-        assertThatThrownBy(() -> scheduler.runDailyUpdate()).isSameAs(boom);
+        scheduler.runUsDailyUpdate();
 
-        verify(dailyUpdateJob).run(TARGET_DATE, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+        InOrder order = inOrder(marketCalendarJob, dailyUpdateJob, corporateActionJob, adjustmentRebuildJob,
+                priceIntegrityAlerter);
+        order.verify(marketCalendarJob).run(any(), eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER), eq(null));
+        order.verify(dailyUpdateJob).runUs(any(), eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER));
+        order.verify(corporateActionJob).run(any(), eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER),
+                eq(null), eq(List.of()), eq(null), eq(DailyUpdateJob.Markets.US.codes()));
+        order.verify(adjustmentRebuildJob).runAndReport(any(),
+                eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER), eq(List.of()), eq(null), eq(DailyUpdateJob.Markets.US.codes()));
+        order.verify(priceIntegrityAlerter).evaluateAndAlert();
+        verify(dailyUpdateJob, never()).run(any(), any(), eq(DailyUpdateJob.Markets.DOMESTIC));
+        // 계수가 원장과 같으면 사슬 안 화해가 없다(14:00 사슬과 같은 꼴).
+        verifyNoInteractions(indicatorBackfillJob);
+    }
+
+    @Test
+    @DisplayName("14:00 사슬은 국내만 돈다 — 미국은 21:00 사슬이 같은 셋을 돈다(미국을 두 번 돌리지 않는다)")
+    void chainAt1400IsDomesticOnly() {
+        givenInvalidation();
+
+        scheduler(true).runCorporateActionChain();
+
+        verify(corporateActionJob).run(any(), eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER),
+                eq(null), eq(List.of()), eq(null), eq(DailyUpdateJob.Markets.DOMESTIC.codes()));
+        verify(adjustmentRebuildJob).runAndReport(any(),
+                eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER), eq(List.of()), eq(null),
+                eq(DailyUpdateJob.Markets.DOMESTIC.codes()));
+        verifyNoInteractions(candidateSplitJob, marketCalendarJob);
+    }
+
+    @Test
+    @DisplayName("21:00 무효화가 있으면 사슬 안에서 화해한다 — 기준일은 미국 대상 세션이고 미국 지표 달력 최신일을 넘지 않는다")
+    void usInvalidationIsReconciledAtTheUsSession() {
+        LocalDate session = LocalDate.parse("2026-10-29");
+        givenUsRun(session);
+        givenInvalidation("AAPL", LocalDate.parse("2020-08-31"));
+        when(indicatorCalendar.latestIndicatorDate(java.util.Set.of("US"))).thenReturn(Optional.of(session));
+
+        scheduler.runUsDailyUpdate();
+
+        InOrder order = inOrder(indicatorBackfillJob);
+        order.verify(indicatorBackfillJob).rewriteOriginLayer(eq(session),
+                eq(BatchExecutionRecorder.TriggeredBy.GAP_FILL), eq(List.of("AAPL")));
+        order.verify(indicatorBackfillJob).rebuildDerived(eq(session), eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER));
+    }
+
+    @Test
+    @DisplayName("21:00 대상 세션을 못 정했으면(달력 낡음) 화해 기준일이 미국 지표 달력 최신일로 내려온다 — 앞으로 넘지 않는다")
+    void usReconcileFallsBackToTheUsIndicatorCalendar() {
+        LocalDate lastUs = LocalDate.parse("2026-10-20");
+        givenUsRun(null);
+        givenInvalidation("AAPL", LocalDate.parse("2020-08-31"));
+        when(indicatorCalendar.latestIndicatorDate(java.util.Set.of("US"))).thenReturn(Optional.of(lastUs));
+
+        scheduler.runUsDailyUpdate();
+
+        verify(indicatorBackfillJob).rewriteOriginLayer(eq(lastUs), any(), eq(List.of("AAPL")));
+    }
+
+    @Test
+    @DisplayName("21:00 앞 단계가 던져도 뒤는 돌고 처음 예외를 끝에 다시 던진다 — 달력 실패가 시세 · 계수 · 무결성을 막지 않는다")
+    void usChainKeepsGoingAfterAFailure() {
+        RuntimeException calendar = new IllegalStateException("달력 실패");
+        RuntimeException corporate = new IllegalStateException("기업 행위 실패");
+        when(marketCalendarJob.run(any(), any(), any())).thenThrow(calendar);
+        givenUsRun(LocalDate.parse("2026-10-29"));
+        when(corporateActionJob.run(any(), any(), any(), anyList(), any(), any())).thenThrow(corporate);
+        givenInvalidation();
+
+        assertThatThrownBy(() -> scheduler.runUsDailyUpdate()).isSameAs(calendar).hasSuppressedException(corporate);
+
+        verify(dailyUpdateJob).runUs(any(), eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER));
+        verify(adjustmentRebuildJob).runAndReport(any(), any(), anyList(), any(), eq(DailyUpdateJob.Markets.US.codes()));
+        verify(priceIntegrityAlerter).evaluateAndAlert();
+    }
+
+    @Test
+    @DisplayName("21:00 일일 갱신이 종료 신호로 끊기면 사슬을 그 자리에서 끝낸다 — 내려가는 프로세스가 쿼터를 더 태우지 않는다")
+    void shutdownDuringUsDailyUpdateEndsTheChain() {
+        when(dailyUpdateJob.runUs(any(), any())).thenThrow(new BatchShutdownException("종료"));
+
+        scheduler.runUsDailyUpdate();
+
+        verifyNoInteractions(corporateActionJob, adjustmentRebuildJob, priceIntegrityAlerter);
+    }
+
+    @Test
+    @DisplayName("21:00 사슬의 기업 행위 · 재구축 호출도 FULL이다 — 시장 인자는 범위를 안 좁힌다(사슬이 시장마다 전량을 돈다)")
+    @SuppressWarnings("unchecked")
+    void usChainCallsAreFullScope() {
+        givenUsRun(LocalDate.parse("2026-10-29"));
+        givenInvalidation();
+
+        scheduler.runUsDailyUpdate();
+
+        ArgumentCaptor<LocalDate> caFrom = ArgumentCaptor.forClass(LocalDate.class);
+        ArgumentCaptor<List<String>> caTickers = ArgumentCaptor.forClass(List.class);
+        ArgumentCaptor<String> caUniverse = ArgumentCaptor.forClass(String.class);
+        verify(corporateActionJob).run(any(), eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER), caFrom.capture(),
+                caTickers.capture(), caUniverse.capture(), eq(DailyUpdateJob.Markets.US.codes()));
+        assertThat(CorporateActionJob.scopeOf(caFrom.getValue(), caTickers.getValue(), caUniverse.getValue()))
+                .isEqualTo(BatchExecutionRecorder.DeclaredScope.FULL);
+        ArgumentCaptor<List<String>> adjTickers = ArgumentCaptor.forClass(List.class);
+        ArgumentCaptor<String> adjUniverse = ArgumentCaptor.forClass(String.class);
+        verify(adjustmentRebuildJob).runAndReport(any(), eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER),
+                adjTickers.capture(), adjUniverse.capture(), eq(DailyUpdateJob.Markets.US.codes()));
+        assertThat(AdjustmentRebuildJob.scopeOf(adjTickers.getValue(), adjUniverse.getValue()))
+                .isEqualTo(BatchExecutionRecorder.DeclaredScope.FULL);
+    }
+
+    @Test
+    @DisplayName("15:30 점검은 미국 시세 무결성을 안 잰다 — 미국 봉이 들어오는 21:00 사슬 끝으로 옮겼다")
+    void freshnessCheckLeavesPriceIntegrityToTheUsChain() {
+        scheduler.checkJobFreshness();
+
+        verifyNoInteractions(priceIntegrityAlerter);
     }
 
     @Test
@@ -256,7 +373,7 @@ class PipelineSchedulerChainTest {
 
         assertThatThrownBy(() -> scheduler.runDailyUpdate()).isSameAs(boom);
 
-        verify(dailyUpdateJob).run(TARGET_DATE, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+        verify(dailyUpdateJob).run(TARGET_DATE, BatchExecutionRecorder.TriggeredBy.SCHEDULER, DailyUpdateJob.Markets.DOMESTIC);
     }
 
     @Test
@@ -268,7 +385,7 @@ class PipelineSchedulerChainTest {
         assertThatThrownBy(() -> scheduler.runDailyUpdate()).isSameAs(boom);
 
         verify(earningsReleaseJob).run(any(), eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER));
-        verify(dailyUpdateJob).run(TARGET_DATE, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+        verify(dailyUpdateJob).run(TARGET_DATE, BatchExecutionRecorder.TriggeredBy.SCHEDULER, DailyUpdateJob.Markets.DOMESTIC);
     }
 
     @Test
@@ -290,7 +407,7 @@ class PipelineSchedulerChainTest {
     void dailyUpdateSkipsDeriveWhenNothingWasFed() {
         scheduler.runDailyUpdate();
 
-        verify(dailyUpdateJob).run(TARGET_DATE, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+        verify(dailyUpdateJob).run(TARGET_DATE, BatchExecutionRecorder.TriggeredBy.SCHEDULER, DailyUpdateJob.Markets.DOMESTIC);
         verifyNoInteractions(shareBasisDeriver, governanceDeriveJob, indicatorBackfillJob);
     }
 
@@ -302,7 +419,7 @@ class PipelineSchedulerChainTest {
 
         assertThatThrownBy(() -> scheduler.runDailyUpdate()).isSameAs(boom);
 
-        verify(dailyUpdateJob).run(TARGET_DATE, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+        verify(dailyUpdateJob).run(TARGET_DATE, BatchExecutionRecorder.TriggeredBy.SCHEDULER, DailyUpdateJob.Markets.DOMESTIC);
     }
 
     @Test
@@ -311,7 +428,7 @@ class PipelineSchedulerChainTest {
         IllegalStateException listing = new IllegalStateException("목록 고장");
         IllegalStateException daily = new IllegalStateException("시세 고장");
         when(filingListingJob.run(any(), any())).thenThrow(listing);
-        when(dailyUpdateJob.run(any(), any())).thenThrow(daily);
+        when(dailyUpdateJob.run(any(), any(), any())).thenThrow(daily);
 
         assertThatThrownBy(() -> scheduler.runDailyUpdate()).isSameAs(daily).hasSuppressedException(listing);
     }
@@ -395,38 +512,40 @@ class PipelineSchedulerChainTest {
         // MUST: universeCode에 null을 준다. 비활성 유니버스를 손으로 고르는 갈래는
         // 자동 실행에 걸지 않는다(ADR-0088·0090).
         verify(corporateActionJob).run(any(), eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER),
-                eq(null), eq(List.of()), eq(null));
+                eq(null), eq(List.of()), eq(null), eq(DailyUpdateJob.Markets.DOMESTIC.codes()));
         verify(adjustmentRebuildJob).runAndReport(any(),
-                eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER), eq(List.of()), eq(null));
+                eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER), eq(List.of()), eq(null), eq(DailyUpdateJob.Markets.DOMESTIC.codes()));
     }
 
     @Test
-    @DisplayName("후보 분할 다리는 설정이 켜졌을 때만, 수집 뒤 · 재구축 앞에 돈다 — 같은 사슬의 재구축이 그 행을 APPLIED로 올린다")
+    @DisplayName("후보 분할 다리는 설정이 켜졌을 때만, 21:00 미국 수집 뒤 · 미국 재구축 앞에 돈다 — 같은 사슬의 재구축이 그 행을 APPLIED로 올린다")
     void candidateSplitsRunBetweenCollectionAndRebuild() {
+        givenUsRun(LocalDate.parse("2026-10-29"));
         givenInvalidation();
 
-        scheduler.runCorporateActionChain();
+        scheduler.runUsDailyUpdate();
         verifyNoInteractions(candidateSplitJob);
 
-        scheduler(true).runCorporateActionChain();
+        scheduler(true).runUsDailyUpdate();
         InOrder order = inOrder(corporateActionJob, candidateSplitJob, adjustmentRebuildJob);
         order.verify(corporateActionJob).run(any(), eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER),
-                eq(null), eq(List.of()), eq(null));
+                eq(null), eq(List.of()), eq(null), eq(DailyUpdateJob.Markets.US.codes()));
         order.verify(candidateSplitJob).run(any(), eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER));
         order.verify(adjustmentRebuildJob).runAndReport(any(),
-                eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER), eq(List.of()), eq(null));
+                eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER), eq(List.of()), eq(null), eq(DailyUpdateJob.Markets.US.codes()));
     }
 
     @Test
     @DisplayName("후보 분할 다리가 던져도 편입의 재구축은 돌고, 사슬은 그 예외를 끝에서 다시 던진다")
     void candidateSplitFailureDoesNotBlockTheRebuild() {
+        givenUsRun(LocalDate.parse("2026-10-29"));
         givenInvalidation();
         IllegalStateException boom = new IllegalStateException("후보 분할 실패");
         when(candidateSplitJob.run(any(), any())).thenThrow(boom);
 
-        assertThatThrownBy(() -> scheduler(true).runCorporateActionChain()).isSameAs(boom);
+        assertThatThrownBy(() -> scheduler(true).runUsDailyUpdate()).isSameAs(boom);
         verify(adjustmentRebuildJob).runAndReport(any(),
-                eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER), eq(List.of()), eq(null));
+                eq(BatchExecutionRecorder.TriggeredBy.SCHEDULER), eq(List.of()), eq(null), eq(DailyUpdateJob.Markets.US.codes()));
     }
 
     @Test
@@ -480,7 +599,7 @@ class PipelineSchedulerChainTest {
     @DisplayName("IMPORTANT — 무효화가 아무리 커도 화해한다 — 상한을 넘으면 지운 채 두던 것이 이 결함이었다")
     void hugeInvalidationIsStillReconciled() {
         List<String> many = java.util.stream.IntStream.range(0, 300).mapToObj(i -> "T" + i).toList();
-        when(adjustmentRebuildJob.runAndReport(any(), any(), anyList(), any()))
+        when(adjustmentRebuildJob.runAndReport(any(), any(), anyList(), any(), any()))
                 .thenReturn(new AdjustmentRebuildJob.Invalidation(
                         BatchStatus.SUCCESS, many, LocalDate.parse("2026-05-01")));
 
@@ -793,7 +912,7 @@ class PipelineSchedulerChainTest {
                 writeCrons.add(method.getName());
             }
         }
-        assertThat(writeCrons).as("쓰기 크론 — 15:30 점검 밖 전부(14:16 공시 목록 포함)").hasSize(7);
+        assertThat(writeCrons).as("쓰기 크론 — 15:30 점검 밖 전부(14:16 공시 목록 · 21:00 미국 사슬 포함)").hasSize(8);
         for (String cron : writeCrons) {
             try {
                 PipelineScheduler.class.getMethod(cron).invoke(blocked);
@@ -949,7 +1068,7 @@ class PipelineSchedulerChainTest {
         // 13:30 — 앞 단계의 공시 목록·소비도 정기 실행이다(14:16과 같은 인자)
         scheduler.runDailyUpdate();
         ArgumentCaptor<LocalDate> dailyDate = ArgumentCaptor.forClass(LocalDate.class);
-        verify(dailyUpdateJob).run(dailyDate.capture(), eq(scheduled));
+        verify(dailyUpdateJob).run(dailyDate.capture(), eq(scheduled), eq(DailyUpdateJob.Markets.DOMESTIC));
         current.accept(dailyDate.getValue());
         ArgumentCaptor<LocalDate> listingDate = ArgumentCaptor.forClass(LocalDate.class);
         verify(filingListingJob).run(listingDate.capture(), eq(scheduled));
@@ -966,7 +1085,7 @@ class PipelineSchedulerChainTest {
         ArgumentCaptor<List<String>> caTickers = ArgumentCaptor.forClass(List.class);
         ArgumentCaptor<String> caUniverse = ArgumentCaptor.forClass(String.class);
         verify(corporateActionJob).run(caDate.capture(), eq(scheduled), caFrom.capture(), caTickers.capture(),
-                caUniverse.capture());
+                caUniverse.capture(), eq(DailyUpdateJob.Markets.DOMESTIC.codes()));
         assertThat(CorporateActionJob.scopeOf(caFrom.getValue(), caTickers.getValue(), caUniverse.getValue()))
                 .isEqualTo(BatchExecutionRecorder.DeclaredScope.FULL);
         current.accept(caDate.getValue());
@@ -974,7 +1093,7 @@ class PipelineSchedulerChainTest {
         ArgumentCaptor<List<String>> adjTickers = ArgumentCaptor.forClass(List.class);
         ArgumentCaptor<String> adjUniverse = ArgumentCaptor.forClass(String.class);
         verify(adjustmentRebuildJob).runAndReport(adjDate.capture(), eq(scheduled), adjTickers.capture(),
-                adjUniverse.capture());
+                adjUniverse.capture(), eq(DailyUpdateJob.Markets.DOMESTIC.codes()));
         assertThat(AdjustmentRebuildJob.scopeOf(adjTickers.getValue(), adjUniverse.getValue()))
                 .isEqualTo(BatchExecutionRecorder.DeclaredScope.FULL);
         current.accept(adjDate.getValue());
@@ -1053,19 +1172,25 @@ class PipelineSchedulerChainTest {
         current.accept(rebalanceDate.getValue());
     }
 
+    /** 21:00 미국 일일 갱신이 그 세션을 정해 돌았다({@code null}이면 세션을 못 정해 FAILED로 끝났다). */
+    private void givenUsRun(LocalDate session) {
+        when(dailyUpdateJob.runUs(any(), any())).thenReturn(new DailyUpdateJob.UsRun(
+                session == null ? BatchStatus.FAILED : BatchStatus.SUCCESS, session));
+    }
+
     private void givenConsumption(List<String> fed, List<String> fedKr, List<String> invalidated) {
         when(filingConsumptionJob.runAndReport(any(), any()))
                 .thenReturn(new FilingConsumptionJob.Report(BatchStatus.SUCCESS, fed, fedKr, invalidated));
     }
 
     private void givenInvalidation() {
-        when(adjustmentRebuildJob.runAndReport(any(), any(), anyList(), any()))
+        when(adjustmentRebuildJob.runAndReport(any(), any(), anyList(), any(), any()))
                 .thenReturn(new AdjustmentRebuildJob.Invalidation(
                         BatchStatus.SUCCESS, List.of(), null));
     }
 
     private void givenInvalidation(String ticker, LocalDate earliest) {
-        when(adjustmentRebuildJob.runAndReport(any(), any(), anyList(), any()))
+        when(adjustmentRebuildJob.runAndReport(any(), any(), anyList(), any(), any()))
                 .thenReturn(new AdjustmentRebuildJob.Invalidation(
                         BatchStatus.SUCCESS, List.of(ticker), earliest));
     }

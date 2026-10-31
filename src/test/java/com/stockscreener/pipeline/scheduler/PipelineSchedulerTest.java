@@ -235,6 +235,75 @@ class PipelineSchedulerTest {
         }
     }
 
+    @Test
+    @DisplayName("미국 저녁 사슬이 모든 뉴욕 세션을 확정 뒤에 덮는다 — 휴장이 낀 주 · 서머타임 끝 주에도 낡음 거짓 경보 없이")
+    void usEveningChainCoversEverySessionAfterItSettles() {
+        CronExpression cron = cronOf("runUsDailyUpdate");
+        java.time.ZoneId seoul = java.time.ZoneId.of("Asia/Seoul");
+        java.time.ZoneId newYork = java.time.ZoneId.of("America/New_York");
+        // 합성 휴장(월 · 목)과 서머타임 끝(2026-11-01)이 낀 4주. 세션은 평일 16:00(뉴욕) 마감이다.
+        Set<LocalDate> closed = Set.of(LocalDate.of(2026, 10, 19), LocalDate.of(2026, 11, 5));
+        LocalDate from = LocalDate.of(2026, 10, 12);
+        LocalDate until = LocalDate.of(2026, 11, 6);
+        // 달력은 첫 발화보다 앞부터 실려 있다(운영 달력은 2016년부터다).
+        List<LocalDate> sessions = openDaysBetween(from.minusDays(30), until.plusDays(14), closed);
+
+        List<LocalDate[]> windows = new ArrayList<>();
+        LocalDateTime cursor = from.atStartOfDay();
+        while (true) {
+            LocalDateTime fire = cron.next(cursor);
+            assertThat(fire).isNotNull();
+            cursor = fire;
+            if (fire.toLocalDate().isAfter(until.plusDays(7))) {
+                break;
+            }
+            java.time.Instant now = fire.atZone(seoul).toInstant();
+            // 사슬 맨 앞의 달력 수집이 오늘(KST)까지 받는다 — 그날 뉴욕 예정 세션까지 실린다.
+            java.util.Optional<LocalDate> calendarMax = sessions.stream()
+                    .filter(day -> !day.isAfter(fire.toLocalDate())).max(LocalDate::compareTo);
+            java.util.Optional<LocalDate> settled = sessions.stream()
+                    .filter(day -> !day.atTime(16, 0).atZone(newYork).toInstant()
+                            .plus(com.stockscreener.pipeline.batch.UsSessionTarget.SETTLE_AFTER_CLOSE).isAfter(now))
+                    .max(LocalDate::compareTo);
+
+            com.stockscreener.pipeline.batch.UsSessionTarget.Resolution resolution =
+                    com.stockscreener.pipeline.batch.UsSessionTarget.judge(now, settled, calendarMax);
+            assertThat(resolution).as("%s 발화가 정상 달력을 낡음으로 읽었다", fire)
+                    .isInstanceOf(com.stockscreener.pipeline.batch.UsSessionTarget.Resolved.class);
+            LocalDate target = ((com.stockscreener.pipeline.batch.UsSessionTarget.Resolved) resolution).session();
+            assertThat(target.atTime(16, 0).atZone(newYork).toInstant()
+                    .plus(com.stockscreener.pipeline.batch.UsSessionTarget.SETTLE_AFTER_CLOSE))
+                    .as("%s 발화의 대상 %s는 거래량이 확정된 세션이어야 한다", fire, target)
+                    .isBeforeOrEqualTo(now);
+            windows.add(new LocalDate[] {DailyUpdateJob.priceWindowStart(target), target});
+        }
+
+        for (LocalDate session : openDaysBetween(from, until, closed)) {
+            boolean covered = windows.stream()
+                    .anyMatch(w -> !session.isBefore(w[0]) && !session.isAfter(w[1]));
+            assertThat(covered).as("%s(%s) 세션을 받는 미국 실행이 없다", session, session.getDayOfWeek()).isTrue();
+        }
+    }
+
+    @Test
+    @DisplayName("미국 저녁 사슬은 평일 21시 하나이고 국내 사슬보다 뒤다 — 뉴욕 확정(KST 18:40~19:40) 뒤 · 개장(뉴욕 09:30) 전")
+    void usEveningChainRunsAfterSettlementAndBeforeTheOpen() {
+        LocalDateTime base = LocalDate.of(2026, 9, 2).atStartOfDay();
+        LocalDateTime us = cronOf("runUsDailyUpdate").next(base);
+        LocalDateTime freshness = cronOf("checkJobFreshness").next(base);
+
+        assertThat(us).isNotNull();
+        assertThat(us.toLocalDate()).isEqualTo(freshness.toLocalDate());
+        assertThat(us.toLocalTime()).isAfter(freshness.toLocalTime());
+        // 확정의 늦은 끝은 뉴욕 05:40 — EST 철에 KST 19:40이다. 그보다 앞이면 겨울에 잠정값을 받는다.
+        assertThat(us.toLocalTime()).isAfter(LocalTime.of(19, 40));
+        LocalDateTime at = base;
+        for (int i = 0; i < 10; i++) {
+            at = cronOf("runUsDailyUpdate").next(at);
+            assertThat(TRADING_DAYS).contains(at.getDayOfWeek());
+        }
+    }
+
     /** 주어진 일자 다음의 첫 개장일 — 주말도 휴장일도 아닌 날. */
     private static LocalDate nextOpenDay(LocalDate date, Set<LocalDate> closed) {
         LocalDate next = date.plusDays(1);

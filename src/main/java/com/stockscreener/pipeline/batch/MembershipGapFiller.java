@@ -23,7 +23,7 @@ import java.util.Set;
  *
  * <h2>왜 리밸런싱 꼬리인가</h2>
  * <p>결손이 생기는 유일한 순간이 <b>편입이 바뀌는 때</b>다. 그리고 그 창이 좁다 —
- * 리밸런싱(토 20:00)부터 다음 일일 갱신(월 13:30)까지 약 41시간이고, 그 사이에 아무도 안
+ * 리밸런싱(토 20:00)부터 다음 일일 갱신(국내 월 13:30 · 미국 월 21:00)까지 약 41~49시간이고, 그 사이에 아무도 안
  * 채우면 그 종목은 <b>지표가 대부분 판정불가인 채 유니버스에 남는다.</b>
  *
  * <p><b>다만 41시간에 매여 있지는 않다.</b> {@code InitialLoadJob}은 티커를 주면
@@ -54,8 +54,8 @@ import java.util.Set;
  *
  * <p><b>그 대가를 알고 쓴다</b>: 여기서 적재한 시세는 <b>미보정</b>이다
  * ({@code DataGoKrPriceAdapter}·{@code AlpacaPriceAdapter} 둘 다 {@code fetchCorporateActions}를
- * 오버라이드하지 않아 원장에 한 건도 안 적힌다). 월 13:30 일일 갱신이 그 미보정 봉으로 지표를
- * 내고, 월 14:00 사슬이 바로잡는다 — <b>그 한 시간은 ADR-0055의 억제도 안 걸린다</b>(원장이
+ * 오버라이드하지 않아 원장에 한 건도 안 적힌다). 월요일 그 시장의 일일 갱신(국내 13:30 · 미국 21:00)이 그 미보정 봉으로
+ * 지표를 내고, 그 시장의 사슬(국내 14:00 · 미국은 같은 21:00 사슬의 재구축)이 바로잡는다 — <b>그 사이는 ADR-0055의 억제도 안 걸린다</b>(원장이
  * 비어 있어 억제할 대상이 없다). 실측으로 최근 여섯 리밸런싱의 신규 편입 84종목 중 2년 안에
  * 기업행위가 있는 것은 <b>5(6.0%)</b>였다 — 사슬은 무효화된 종목을 상한 없이 화해한다(ADR-0166).
  *
@@ -398,7 +398,7 @@ public class MembershipGapFiller {
             //
             // MUST NOT: 여기에 백필을 잇지 않는다. 이 잡은 indicator_value를 건드리지 않고,
             // 실측(2026-09-20 001820)으로 정정 0·교정 0이라 지워지는 지표가 없다. 채운 값은
-            // 다음 평일 13:30 일일 갱신이 반영한다 — IndicatorRunner가 retain(points, cutoff)로
+            // 다음 평일 그 시장의 일일 갱신(국내 13:30 · 미국 21:00)이 반영한다 — IndicatorRunner가 retain(points, cutoff)로
             // 보존 창 전체를 다시 쓰기 때문이다. 백필을 붙이면 그 일을 두 번 한다.
             fullStatementRefillJob.run(asOf, triggeredBy, null, cashFlowTickers, true, false);
         }
@@ -440,7 +440,7 @@ public class MembershipGapFiller {
         governanceLoadJob.run(asOf, triggeredBy, null, null, List.of(), governanceTickers);
         // MUST: 유도를 이어 부른다. 적재만 하면 governance_fact가 안 바뀌는데 둘 다 성공으로 끝난다.
         //
-        // MUST NOT: 여기에 백필을 잇지 않는다. 신규 편입은 다음 평일 13:30 일일 갱신의 대상이고
+        // MUST NOT: 여기에 백필을 잇지 않는다. 신규 편입은 다음 평일 그 시장의 일일 갱신(국내 13:30 · 미국 21:00)의 대상이고
         // (activeUniverseMemberIds), IndicatorRunner가 retain(points, cutoff)로 보존 창 전체를
         // 다시 쓰므로 저절로 반영된다 — CASH_FLOW 갈래와 같은 근거다.
         governanceDeriveJob.run(asOf, triggeredBy, governanceTickers);

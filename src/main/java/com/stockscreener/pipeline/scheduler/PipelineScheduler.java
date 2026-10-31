@@ -49,6 +49,13 @@ import java.util.Optional;
  * 트리거이고, 대상이 <b>새로 결손이 생긴 종목뿐</b>이라 위 근거가 걸리지 않는다.
  * <b>그 꼬리는 이제 {@code UniverseRebalanceJob} 안에 있다</b> — 손·관리자 경로도 타야 한다.
  *
+ * <h2>시장마다 사슬이 따로다(사용자 결정 「시장별 분리」 2026-10-21)</h2>
+ * <p>국내는 평일 13:30({@link #runDailyUpdate}) → 14:00({@link #runCorporateActionChain}), 미국은 평일 21:00
+ * ({@link #runUsDailyUpdate}) 한 사슬이다. 미국 소스는 일봉 거래량을 다음 날 뉴욕 새벽에 고쳐 13:30에 받는 값은 잠정이었다
+ * ({@code docs/api-spec/alpaca-bars.md}). 원칙: <b>봉이 들어온 사슬이 그 봉의 기업 행위 계수까지 닫는다</b> — 그래서 14:00 사슬은
+ * 국내만, 미국의 수집 · 재구축 · 좁힌 화해는 21:00 사슬이 돈다. 14:15~14:20의 무거운 잡 · 공시 · 유도 · 화해와 15:30 점검은
+ * 시장을 가르지 않는다(화해는 보존 창 편입 전원).
+ *
  * <p>{@code pipeline.scheduler.enabled}로 끌 수 있게 한 이유는 개발 중에 배치가 저절로
  * 도는 것을 막기 위해서다. 기본값은 꺼짐이다 — 어댑터가 없는 상태에서 켜두면 매일
  * 실패 알림만 쌓인다. 운영 배포 시 명시적으로 켠다.
@@ -167,7 +174,7 @@ public class PipelineScheduler {
     }
 
     /**
-     * 일일 갱신. 평일 13시 30분(KST)에 <b>직전 평일</b>의 종가를 받는다.
+     * 국내 일일 갱신({@code daily-update} · KOSPI · KOSDAQ). 평일 13시 30분(KST)에 <b>직전 평일</b>의 종가를 받는다.
      *
      * <p>시각과 대상 일자가 함께 정해진다. 소스가 거래일 T의 종가를 <b>T의 다음 영업일
      * 13시 이후</b>에 내기 때문이다(ADR-0042). 그러므로 시각은 13시보다 뒤여야 하고, 대상은
@@ -191,8 +198,9 @@ public class PipelineScheduler {
      * 그 뒤로 잡아 그날 남은 발화가 빠진다. 놓친 날짜는 {@link DailyUpdateJob}의 조회 창이 흡수한다 —
      * 이후 실행이 계속 다시 시도한다.
      *
-     * <p>미국 시장(v1.1, ADR-0010)은 이 시각을 쓸 수 없다 — 미국 장은 한국 시각 다음 날
-     * 오전 5~6시에 닫는다. 붙일 때 별도 스케줄이 필요하다.
+     * <p>미국은 이 사슬에 없다 — 21:00 {@link #runUsDailyUpdate}가 받는다. 13:30(뉴욕 00:30 EDT · 23:30 EST)에 받는 미국 일봉
+     * 거래량은 소스가 아직 안 고친 잠정값이다. 앞 단계의 공시 목록 · 소비 · 실적 발표 감지는 그대로 두 시장을 돈다 — 재무 장부라
+     * 봉 시각과 무관하다.
      *
      * <p>MUST NOT: 여기서 초기 적재 여부를 분기하지 않는다.
      *
@@ -246,9 +254,10 @@ public class PipelineScheduler {
                 } catch (RuntimeException e) {
                     held = keepFirst(held, e);
                 }
-                log.info("일일 갱신을 시작한다. targetDate={}", targetDate);
+                log.info("국내 일일 갱신을 시작한다. targetDate={}", targetDate);
                 try {
-                    dailyUpdateJob.run(targetDate, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+                    dailyUpdateJob.run(targetDate, BatchExecutionRecorder.TriggeredBy.SCHEDULER,
+                            DailyUpdateJob.Markets.DOMESTIC);
                     if (consumption != null && !consumption.invalidatedTickers().isEmpty()) {
                         indicatorReconciler.reconcile(indicatorReconciler.dataAsOf(today),
                                 consumption.invalidatedTickers(), BatchExecutionRecorder.TriggeredBy.SCHEDULER);
@@ -266,13 +275,117 @@ public class PipelineScheduler {
                     }
                     throw e;
                 }
-                // 세션 달력(ADR-0091) — 13:30 KST면 전날 미국 세션이 닫혀 있다. 크론에 안 걸려 있던 동안 달력이 2026-08-28에
-                // 멈춰 봉 결측 판정 창이 소리 없이 좁아졌다(판정은 [첫 봉, 마지막 봉] ∩ 달력 범위). 거래소당 1콜이고 시세를 안 막는다.
+                // 세션 달력은 여기 없다 — 미국 대상 세션을 정하는 21:00 사슬 맨 앞으로 옮겼다(runUsDailyUpdate).
+                if (held != null) {
+                    throw held;
+                }
+            });
+        } finally {
+            // 끝 줄 — ops/crons-done.sh가 크론마다 「명목 시각 뒤에 끝났다」를 이 줄로 잰다(크론마다 밀림이 다르다).
+            log.info("크론 발화를 마쳤다. 크론={}", "runDailyUpdate");
+        }
+    }
+
+    /**
+     * 미국 저녁 사슬. <b>평일 21시(KST)</b> — 세션 달력 → 미국 일일 갱신({@code us-daily-update}) → 미국 기업 행위 수집 → (후보 공급이
+     * 켜졌으면) 후보 분할 다리 → 미국 계수 재구축 → (무효화가 있으면) 좁힌 화해 → 시세 원장 무결성 점검.
+     *
+     * <h2>왜 21시인가</h2>
+     * <p>소스가 일봉 거래량을 다음 날 뉴욕 새벽에 고친다 — 실측의 늦은 끝이 뉴욕 05:40 = KST 18:40(EDT) · 19:40(EST)이다
+     * ({@code docs/api-spec/alpaca-bars.md} 「일봉 거래량은 다음 날 뉴욕 새벽까지 잠정이다」). 21시면 두 철 모두 1시간 20분 넘게 남고
+     * 뉴욕 개장(09:30) 전이다(21:00 KST = 뉴욕 08:00 EDT · 07:00 EST). 시가 · 고가 · 저가 · 종가는 13:30에도 확정이었다.
+     *
+     * <h2>대상 세션은 달력이 정한다</h2>
+     * <p>국내의 「직전 평일」이 아니라 {@code UsSessionTarget}이다 — 장 마감 + 14시간이 지난 마지막 세션. 기계가 잠들어 이 크론이
+     * 자정을 넘겨 돌아도(ADR-0116 — 건너뛰지 않고 잠든 만큼 늦게) 장중 세션의 잠정 봉을 대상으로 잡지 않는다. 그래서 달력 수집이 맨
+     * 앞이다(거래소당 1콜). 달력이 낡았으면 일일 갱신은 수집 없이 FAILED 행과 ERROR 알림으로 끝난다.
+     *
+     * <h2>왜 계수까지 여기서 닫는가</h2>
+     * <p>봉이 들어온 사슬이 그 봉의 기업 행위 계수까지 닫는다 — 14:00 사슬의 근거({@link #runCorporateActionChain} 「왜 셋을 한 자리에
+     * 묶는가」)가 미국 봉에도 그대로 선다. 14:00에 두면 21:00에 들어온 미국 봉과 그 원장 사건이 다음 날 14:00까지 17시간 재구축을
+     * 기다리고, 그동안 그 봉 위의 지표가 화면 · 워치리스트에 실린다(이 판단은 순서에서 유도한 것이고 사건 빈도는 재지 않았다). 좁힌 화해는 14:00 사슬과 같은 꼴이다(① 지운 종목 · ② 창 전체) — 기준일은 이 실행의 대상 세션이고 미국 지표 달력
+     * 최신일을 넘지 않는다. 다음 날 14:20 화해 ①은 국내 대상일({@code dataAsOf})로 미국 원본층을 다시 쓴다.
+     *
+     * <h2>실패와 종료</h2>
+     * <p>단계마다 자기 {@code try}다 — 앞 단계가 던져도 뒤가 돌고(재구축은 원장에서 매번 다시 짓고 외부 0콜이다), 처음 예외를 끝에서 다시
+     * 던진다. 종료 신호는 그 자리에서 사슬을 끝낸다(ADR-0078).
+     */
+    @Scheduled(cron = "0 0 21 * * MON-FRI", zone = "Asia/Seoul")
+    public void runUsDailyUpdate() {
+        try {
+            underWriteLock("runUsDailyUpdate", () -> {
+                LocalDate today = LocalDate.now(KR_ZONE);
+                java.util.Set<String> us = DailyUpdateJob.Markets.US.codes();
+                log.info("미국 저녁 사슬을 시작한다. today={} — 달력 → 일일 갱신 → 기업 행위 → 재구축 → 화해 → 무결성", today);
+                RuntimeException held = null;
+                // 세션 달력(ADR-0091) — 대상 세션 판정의 입력이다. 크론에 안 걸려 있던 동안 달력이 2026-08-28에 멈춰 봉 결측 판정
+                // 창이 소리 없이 좁아졌다(판정은 [첫 봉, 마지막 봉] ∩ 달력 범위). 오늘(KST)까지 받으면 오늘 뉴욕 예정 세션까지 실린다.
                 try {
-                    marketCalendarJob.run(targetDate, BatchExecutionRecorder.TriggeredBy.SCHEDULER, null);
+                    marketCalendarJob.run(today, BatchExecutionRecorder.TriggeredBy.SCHEDULER, null);
                 } catch (BatchShutdownException e) {
-                    log.info("일일 갱신 뒤 세션 달력이 종료로 중단됐다. targetDate={}", targetDate);
+                    log.info("미국 사슬의 세션 달력이 종료로 중단됐다. today={}", today);
                     return;
+                } catch (RuntimeException e) {
+                    held = e;
+                }
+                LocalDate usTarget = null;
+                try {
+                    usTarget = dailyUpdateJob.runUs(Instant.now(), BatchExecutionRecorder.TriggeredBy.SCHEDULER).targetDate();
+                } catch (BatchShutdownException e) {
+                    log.info("미국 일일 갱신이 종료로 중단됐다. today={} — ABORTED로 남는다. 시세는 다음 평일 창이 다시 받는다.", today);
+                    return;
+                } catch (RuntimeException e) {
+                    held = keepFirst(held, e);
+                }
+                try {
+                    corporateActionJob.run(today, BatchExecutionRecorder.TriggeredBy.SCHEDULER, null, List.of(), null, us);
+                } catch (BatchShutdownException e) {
+                    log.info("미국 기업 행위 수집이 종료로 중단됐다. today={} — 다음 평일 사슬이 다시 시도한다.", today);
+                    return;
+                } catch (RuntimeException e) {
+                    held = keepFirst(held, e);
+                }
+                // 미국 순위 후보의 공시 뒤 분할을 원장에 적는다(ADR-0178) — 재구축 앞이라 같은 사슬이 APPLIED로 올린다.
+                if (usCandidateFeed.enabled()) {
+                    try {
+                        candidateSplitJob.run(today, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+                    } catch (BatchShutdownException e) {
+                        log.info("후보 분할 다리가 종료로 중단됐다. today={}", today);
+                        return;
+                    } catch (RuntimeException e) {
+                        held = keepFirst(held, e);
+                    }
+                }
+                AdjustmentRebuildJob.Invalidation invalidation = null;
+                try {
+                    invalidation = adjustmentRebuildJob.runAndReport(
+                            today, BatchExecutionRecorder.TriggeredBy.SCHEDULER, List.of(), null, us);
+                } catch (BatchShutdownException e) {
+                    log.info("미국 계수 재구축이 종료로 중단됐다. today={} — 다음 평일 사슬이 원장에서 다시 짓는다.", today);
+                    return;
+                } catch (RuntimeException e) {
+                    held = keepFirst(held, e);
+                }
+                if (invalidation != null && !invalidation.isEmpty()) {
+                    // 기준일 — 세션을 못 정했으면(달력 낡음) 뉴욕 오늘로 물어 미국 지표 달력 최신일로 내려온다.
+                    LocalDate asOf = indicatorReconciler.dataAsOfFor(
+                            usTarget != null ? usTarget : LocalDate.now(ZoneId.of("America/New_York")), us);
+                    try {
+                        indicatorReconciler.reconcile(asOf, invalidation.tickers(), BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+                    } catch (BatchShutdownException e) {
+                        log.info("미국 사슬 안 화해가 종료로 중단됐다. asOf={} — 그 종목의 지표는 다음 화해까지 지워진 채로 남는다.", asOf);
+                        return;
+                    } catch (RuntimeException e) {
+                        held = keepFirst(held, e);
+                    }
+                } else if (invalidation != null) {
+                    log.info("미국 계수가 원장과 이미 일치한다 — 지워진 지표가 없어 사슬 안 화해도 없다.");
+                }
+                // 미국 시세 원장 무결성(ADR-0181) — 다른 증권 봉 · 빠진 원장 사건의 새 꼴. 그날 미국 봉이 들어온 뒤라 여기서 잰다. 읽기만 하고
+                // batch_execution에 행을 안 만든다.
+                try {
+                    boolean priceSent = priceIntegrityAlerter.evaluateAndAlert();
+                    log.info("시세 원장을 점검했다. 알림={}", priceSent ? "보냈다" : "없거나 이미 보냈다");
                 } catch (RuntimeException e) {
                     held = keepFirst(held, e);
                 }
@@ -282,7 +395,7 @@ public class PipelineScheduler {
             });
         } finally {
             // 끝 줄 — ops/crons-done.sh가 크론마다 「명목 시각 뒤에 끝났다」를 이 줄로 잰다(크론마다 밀림이 다르다).
-            log.info("크론 발화를 마쳤다. 크론={}", "runDailyUpdate");
+            log.info("크론 발화를 마쳤다. 크론={}", "runUsDailyUpdate");
         }
     }
 
@@ -327,7 +440,9 @@ public class PipelineScheduler {
     }
 
     /**
-     * 기업 행위 사슬. <b>평일 14시(KST)</b> — 수집 → 계수 재구축 → (무효화가 있으면) 그 자리에서 화해.
+     * 국내 기업 행위 사슬. <b>평일 14시(KST)</b> — 수집 → 계수 재구축 → (무효화가 있으면) 그 자리에서 화해. <b>국내(KOSPI · KOSDAQ)만</b>
+     * 돈다 — 미국은 봉이 들어오는 21:00 사슬({@link #runUsDailyUpdate})이 같은 셋을 돈다. 여기서 미국을 다시 돌리면 그날 미국 봉
+     * (전날 21:00 수집) 위에서 같은 원장을 두 번 짓는다.
      *
      * <h2>왜 셋을 한 자리에 묶는가</h2>
      * <p><b>수집만 걸면 지금 고치려는 결함을 매 평일 재생산한다.</b> 소스가 종류까지 준 사건은
@@ -359,9 +474,8 @@ public class PipelineScheduler {
      * 키우는 순간 이 겹침 방지가 사라지고, 두 잡이 같은 종목의 {@code price_daily}를 함께 쓴다.
      *
      * <p>MUST NOT: {@code universeCode}에 값을 주지 않는다. 비활성 유니버스를 손으로 고르는
-     * 갈래는 <b>자동 실행에 걸지 않는다</b>(ADR-0088·0090). 인자 없는 기본 경로가 이미 활성
-     * 유니버스 전량을 덮는다 — {@code US_TOP1000}이 활성이 된 뒤로 그 안에 미국이 들어 있다
-     * (실측: 이 경로의 대상이 1,350종목).
+     * 갈래는 <b>자동 실행에 걸지 않는다</b>(ADR-0088·0090). 인자 없는 기본 경로가 활성 유니버스의 보존 창 편입을 덮고,
+     * 시장 인자가 그것을 그 사슬의 시장으로 거른다.
      *
      * <p>IMPORTANT — {@code guard-rebuild-without-dump.sh}는 <b>셸 명령</b>을 보는 훅이라 이
      * 경로를 못 본다. 런타임 가드는 없다. 근거는 ADR-0116에 있다.
@@ -371,30 +485,16 @@ public class PipelineScheduler {
         try {
             underWriteLock("runCorporateActionChain", () -> {
                 LocalDate asOf = LocalDate.now(KR_ZONE);
-                log.info("기업 행위 사슬을 시작한다. asOf={} — 수집 → 재구축 → 화해까지 한 번에 간다.", asOf);
+                java.util.Set<String> domestic = DailyUpdateJob.Markets.DOMESTIC.codes();
+                log.info("국내 기업 행위 사슬을 시작한다. asOf={} 시장={} — 수집 → 재구축 → 화해까지 한 번에 간다.", asOf, domestic);
                 try {
                     corporateActionJob.run(asOf, BatchExecutionRecorder.TriggeredBy.SCHEDULER,
-                            null, List.of(), null);
-                    // 미국 순위 후보의 공시 뒤 분할을 원장에 적는다(ADR-0178) — 재구축 앞이라 같은 사슬이 APPLIED로 올린다. 자기 try다:
-                    // 후보 다리의 실패가 편입 종목의 재구축·화해를 막지 않게 하고, 처음 예외는 사슬 끝에서 다시 던진다.
-                    RuntimeException candidateFailure = null;
-                    if (usCandidateFeed.enabled()) {
-                        try {
-                            candidateSplitJob.run(asOf, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
-                        } catch (BatchShutdownException e) {
-                            throw e;
-                        } catch (RuntimeException e) {
-                            candidateFailure = e;
-                        }
-                    }
-
+                            null, List.of(), null, domestic);
+                    // 미국 순위 후보의 분할 다리(ADR-0178)는 21:00 사슬로 갔다 — 미국 재구축 앞이어야 같은 사슬이 APPLIED로 올린다.
                     AdjustmentRebuildJob.Invalidation invalidation = adjustmentRebuildJob.runAndReport(
-                            asOf, BatchExecutionRecorder.TriggeredBy.SCHEDULER, List.of(), null);
+                            asOf, BatchExecutionRecorder.TriggeredBy.SCHEDULER, List.of(), null, domestic);
                     if (invalidation.isEmpty()) {
                         log.info("계수가 원장과 이미 일치한다 — 지워진 지표가 없어 사슬 안 화해도 없다.");
-                        if (candidateFailure != null) {
-                            throw candidateFailure;
-                        }
                         return;
                     }
                     // 화해의 asOf는 13:30 일일 갱신의 대상일이고 지표 달력 최신일을 넘지 않는다(IndicatorReconciler.dataAsOf).
@@ -406,9 +506,6 @@ public class PipelineScheduler {
                     LocalDate dataAsOf = indicatorReconciler.dataAsOf(asOf);
                     indicatorReconciler.reconcile(dataAsOf, invalidation.tickers(),
                             BatchExecutionRecorder.TriggeredBy.SCHEDULER);
-                    if (candidateFailure != null) {
-                        throw candidateFailure;
-                    }
                 } catch (BatchShutdownException e) {
                     // 앞의 두 잡과 같은 이유다(runDailyUpdate 참조). 사슬 중간에 끊기면 다음 실행이
                     // 이어받는다 — 수집은 전 구간 재조회라 멱등이고, 재구축도 원장에서 매번 다시 짓는다.
@@ -798,9 +895,7 @@ public class PipelineScheduler {
             boolean gapsSent = universeIntegrityAlerter.evaluateAndAlert();
             log.info("편입 원자료를 점검했다. 알림={}", gapsSent ? "보냈다" : "없거나 이미 보냈다");
 
-            // 미국 시세 원장 무결성(ADR-0181) — 다른 증권 봉 · 빠진 원장 사건의 새 꼴. 읽기만 하고 batch_execution에 행을 안 만든다.
-            boolean priceSent = priceIntegrityAlerter.evaluateAndAlert();
-            log.info("시세 원장을 점검했다. 알림={}", priceSent ? "보냈다" : "없거나 이미 보냈다");
+            // 미국 시세 원장 무결성(ADR-0181)은 여기 없다 — 미국 봉이 들어오는 21:00 사슬 끝에서 잰다(runUsDailyUpdate).
         } finally {
             // 끝 줄 — ops/crons-done.sh가 크론마다 「명목 시각 뒤에 끝났다」를 이 줄로 잰다(크론마다 밀림이 다르다).
             log.info("크론 발화를 마쳤다. 크론={}", "checkJobFreshness");

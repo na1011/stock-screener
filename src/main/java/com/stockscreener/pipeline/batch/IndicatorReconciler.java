@@ -87,8 +87,15 @@ public class IndicatorReconciler {
      * IOVA·KOD 둘뿐이었다. 정상인 날은 13:30이 달력을 대상일까지 늘려 둘이 같다.
      */
     public LocalDate dataAsOf(LocalDate today) {
-        LocalDate target = DailyUpdateJob.targetDateFor(today);
-        return indicatorCalendar.latestIndicatorDate(CollectedMarkets.ALL)
+        return dataAsOfFor(DailyUpdateJob.targetDateFor(today), CollectedMarkets.ALL);
+    }
+
+    /**
+     * 위와 같은 규칙을 대상일과 시장을 받아 쓴다 — 미국 저녁 사슬의 좁힌 화해가 미국 일일 갱신의 대상 세션으로 부른다(그 사슬의
+     * 대상일은 국내 「직전 평일」이 아니다 · {@link UsSessionTarget}).
+     */
+    public LocalDate dataAsOfFor(LocalDate target, java.util.Collection<String> markets) {
+        return indicatorCalendar.latestIndicatorDate(markets)
                 .filter(latest -> latest.isBefore(target))
                 .orElse(target);
     }

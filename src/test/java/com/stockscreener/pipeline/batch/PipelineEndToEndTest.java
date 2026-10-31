@@ -253,7 +253,7 @@ class PipelineEndToEndTest {
         fakePriceSource.withBars(stockId, List.of(bar("2026-08-05", "72000")));
 
         BatchStatus status = dailyUpdateJob.run(
-                AS_OF, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+                AS_OF, BatchExecutionRecorder.TriggeredBy.SCHEDULER, DailyUpdateJob.Markets.DOMESTIC);
 
         assertThat(status).isEqualTo(BatchStatus.SUCCESS);
         assertThat(jdbcTemplate.queryForObject(
@@ -269,7 +269,7 @@ class PipelineEndToEndTest {
 
         LocalDate saturday = LocalDate.of(2026, 8, 8);
         BatchStatus status = dailyUpdateJob.run(
-                saturday, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+                saturday, BatchExecutionRecorder.TriggeredBy.SCHEDULER, DailyUpdateJob.Markets.DOMESTIC);
 
         assertThat(status).isEqualTo(BatchStatus.SUCCESS);
         assertThat(alertPort.events).isEmpty();
@@ -286,7 +286,7 @@ class PipelineEndToEndTest {
         alertPort.events.clear();
 
         BatchStatus status = dailyUpdateJob.run(
-                AS_OF, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+                AS_OF, BatchExecutionRecorder.TriggeredBy.SCHEDULER, DailyUpdateJob.Markets.DOMESTIC);
 
         // IMPORTANT — 상태가 SUCCESS인 것이 요점이다. 빈 응답은 실패로 세지 않으므로
         // 관리자 화면도 초록이고, 이 알림이 없으면 아무 데도 흔적이 남지 않는다.
@@ -312,7 +312,7 @@ class PipelineEndToEndTest {
         alertPort.events.clear();
 
         BatchStatus status = dailyUpdateJob.run(
-                AS_OF, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+                AS_OF, BatchExecutionRecorder.TriggeredBy.SCHEDULER, DailyUpdateJob.Markets.DOMESTIC);
 
         assertThat(status).isEqualTo(BatchStatus.SUCCESS);
         assertThat(jdbcTemplate.queryForObject(
@@ -344,10 +344,10 @@ class PipelineEndToEndTest {
             fakePriceSource.withBars(member, List.of(bar("2026-08-05", "72000")));
         }
         seedMarketIndexes(AS_OF);
-        dailyUpdateJob.run(AS_OF, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+        dailyUpdateJob.run(AS_OF, BatchExecutionRecorder.TriggeredBy.SCHEDULER, DailyUpdateJob.Markets.DOMESTIC);
         alertPort.events.clear();
 
-        dailyUpdateJob.run(AS_OF, BatchExecutionRecorder.TriggeredBy.ADMIN);
+        dailyUpdateJob.run(AS_OF, BatchExecutionRecorder.TriggeredBy.ADMIN, DailyUpdateJob.Markets.DOMESTIC);
 
         // 여기에 "PriceWriter를 값이 같으면 0행으로 바꾸지 마라"는 MUST NOT이 있었다.
         // **풀렸다** — 0건 판정이 더 이상 이 실행이 쓴 행 수를 보지 않고 대상일에 행이 있는지를
@@ -370,7 +370,7 @@ class PipelineEndToEndTest {
         alertPort.events.clear();
 
         BatchStatus status = dailyUpdateJob.run(
-                AS_OF, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+                AS_OF, BatchExecutionRecorder.TriggeredBy.SCHEDULER, DailyUpdateJob.Markets.DOMESTIC);
 
         assertThat(status).isEqualTo(BatchStatus.SUCCESS);
         assertThat(jdbcTemplate.queryForObject(
@@ -428,7 +428,7 @@ class PipelineEndToEndTest {
         alertPort.events.clear();
 
         // 대상일(AS_OF)은 비어 있다. 공휴일에 도는 배치와 같은 상황이다.
-        dailyUpdateJob.run(AS_OF, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+        dailyUpdateJob.run(AS_OF, BatchExecutionRecorder.TriggeredBy.SCHEDULER, DailyUpdateJob.Markets.DOMESTIC);
 
         List<LocalDate> percentileDates = jdbcTemplate.queryForList(
                 "SELECT DISTINCT trade_date FROM indicator_value WHERE indicator_code = 'PER_PCTL'",
@@ -458,7 +458,7 @@ class PipelineEndToEndTest {
                 """, usStockId, AS_OF);
         alertPort.events.clear();
 
-        dailyUpdateJob.run(AS_OF, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+        dailyUpdateJob.run(AS_OF, BatchExecutionRecorder.TriggeredBy.SCHEDULER, DailyUpdateJob.Markets.DOMESTIC);
 
         assertThat(alertPort.events)
                 .as("전 시장 합계로 세면 미국 봉 하나가 국내 결손 알림을 죽인다(거짓 음성)")
@@ -487,7 +487,7 @@ class PipelineEndToEndTest {
         alertPort.events.clear();
 
         BatchStatus status = dailyUpdateJob.run(
-                AS_OF, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+                AS_OF, BatchExecutionRecorder.TriggeredBy.SCHEDULER, DailyUpdateJob.Markets.DOMESTIC);
 
         assertThat(status).isEqualTo(BatchStatus.PARTIAL_SUCCESS);
         // 실패한 종목만 빠지고 나머지는 저장된다.
@@ -510,7 +510,7 @@ class PipelineEndToEndTest {
         }
         fakePriceSource.failingWith(failing, new DataSourceException(
                 DataSourceException.Kind.TRANSIENT, "fake-price", "일시적 오류"));
-        dailyUpdateJob.run(AS_OF, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+        dailyUpdateJob.run(AS_OF, BatchExecutionRecorder.TriggeredBy.SCHEDULER, DailyUpdateJob.Markets.DOMESTIC);
 
         long executionId = jdbcTemplate.queryForObject("""
                 SELECT id FROM batch_execution WHERE job_name = ? ORDER BY id DESC LIMIT 1
@@ -520,7 +520,7 @@ class PipelineEndToEndTest {
         fakePriceSource.clearFailure(failing);
         fakePriceSource.fetchedStockIds.clear();
 
-        dailyUpdateJob.retryFailures(executionId, AS_OF);
+        dailyUpdateJob.retryFailures(executionId, AS_OF, DailyUpdateJob.Markets.DOMESTIC);
 
         assertThat(fakePriceSource.fetchedStockIds)
                 .as("재실행은 실패한 종목만 호출한다 — 성공 종목의 API를 다시 부르지 않는다")
@@ -543,14 +543,14 @@ class PipelineEndToEndTest {
         }
         fakePriceSource.failingWith(failing, new DataSourceException(
                 DataSourceException.Kind.TRANSIENT, "fake-price", "일시적 오류"));
-        dailyUpdateJob.run(AS_OF, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+        dailyUpdateJob.run(AS_OF, BatchExecutionRecorder.TriggeredBy.SCHEDULER, DailyUpdateJob.Markets.DOMESTIC);
 
         long executionId = jdbcTemplate.queryForObject("""
                 SELECT id FROM batch_execution WHERE job_name = ? ORDER BY id DESC LIMIT 1
                 """, Long.class, DailyUpdateJob.JOB_NAME);
 
         // 이번에도 실패하게 둔다 — 소스가 계속 죽어 있는 상황이다.
-        dailyUpdateJob.retryFailures(executionId, AS_OF);
+        dailyUpdateJob.retryFailures(executionId, AS_OF, DailyUpdateJob.Markets.DOMESTIC);
 
         assertThat(jdbcTemplate.queryForObject("""
                 SELECT count(*) FROM batch_execution_failure
@@ -603,7 +603,7 @@ class PipelineEndToEndTest {
         }
         seedMarketIndexes(AS_OF);
 
-        dailyUpdateJob.run(AS_OF, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+        dailyUpdateJob.run(AS_OF, BatchExecutionRecorder.TriggeredBy.SCHEDULER, DailyUpdateJob.Markets.DOMESTIC);
 
         long executionId = ((Number) latestExecution(DailyUpdateJob.JOB_NAME).get("id")).longValue();
         List<Map<String, Object>> phases = jdbcTemplate.queryForList("""
@@ -670,7 +670,7 @@ class PipelineEndToEndTest {
     void dailyUpdateFillsGapRunsSeparately() {
         GapFixture f = gapFixture();
         try {
-            BatchStatus status = dailyUpdateJob.run(AS_OF, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+            BatchStatus status = dailyUpdateJob.run(AS_OF, BatchExecutionRecorder.TriggeredBy.SCHEDULER, DailyUpdateJob.Markets.DOMESTIC);
 
             assertThat(status).isEqualTo(BatchStatus.SUCCESS);
             LocalDate windowStart = DailyUpdateJob.priceWindowStart(AS_OF);
@@ -711,7 +711,7 @@ class PipelineEndToEndTest {
                     WHERE stock_id = ? AND trade_date = ?
                     """, f.departed, provisional);
 
-            BatchStatus status = dailyUpdateJob.run(AS_OF, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+            BatchStatus status = dailyUpdateJob.run(AS_OF, BatchExecutionRecorder.TriggeredBy.SCHEDULER, DailyUpdateJob.Markets.DOMESTIC);
 
             assertThat(status).isEqualTo(BatchStatus.SUCCESS);
             assertThat(fakePriceSource.calls)
@@ -728,7 +728,7 @@ class PipelineEndToEndTest {
                     .contains("확정 재확인 1종목 · 1구간 중 1구간 받음 · 1일 · 받은 봉 1 · 거래량 바뀜 1");
 
             fakePriceSource.calls.clear();
-            dailyUpdateJob.run(AS_OF, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+            dailyUpdateJob.run(AS_OF, BatchExecutionRecorder.TriggeredBy.SCHEDULER, DailyUpdateJob.Markets.DOMESTIC);
 
             assertThat(fakePriceSource.calls)
                     .as("다시 받은 봉은 updated_at이 오늘이라 술어에서 빠진다")
@@ -746,7 +746,7 @@ class PipelineEndToEndTest {
             fakePriceSource.failingBefore(f.readmitted, DailyUpdateJob.priceWindowStart(AS_OF),
                     new DataSourceException(DataSourceException.Kind.TRANSIENT, "fake-price", "일시적 오류"));
 
-            BatchStatus status = dailyUpdateJob.run(AS_OF, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+            BatchStatus status = dailyUpdateJob.run(AS_OF, BatchExecutionRecorder.TriggeredBy.SCHEDULER, DailyUpdateJob.Markets.DOMESTIC);
 
             assertThat(status).isEqualTo(BatchStatus.PARTIAL_SUCCESS);
             assertThat(jdbcTemplate.queryForList("""
@@ -773,7 +773,7 @@ class PipelineEndToEndTest {
             batchExecutions.recorder().recordFailure(previous, f.complete, CollectionPhase.PRICE_GAP,
                     new DataSourceException(DataSourceException.Kind.TRANSIENT, "fake-price", "옛 구간 실패"));
 
-            dailyUpdateJob.run(AS_OF, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+            dailyUpdateJob.run(AS_OF, BatchExecutionRecorder.TriggeredBy.SCHEDULER, DailyUpdateJob.Markets.DOMESTIC);
 
             assertThat(jdbcTemplate.queryForObject("""
                     SELECT resolved FROM batch_execution_failure WHERE execution_id = ? AND stock_id = ?
@@ -795,7 +795,7 @@ class PipelineEndToEndTest {
         doThrow(new DataIntegrityViolationException("꾸민 실패")).when(derivedDayCalculator).calculate(eq(AS_OF), isNull());
         alertPort.events.clear();
 
-        dailyUpdateJob.run(AS_OF, BatchExecutionRecorder.TriggeredBy.SCHEDULER);
+        dailyUpdateJob.run(AS_OF, BatchExecutionRecorder.TriggeredBy.SCHEDULER, DailyUpdateJob.Markets.DOMESTIC);
 
         assertThat(alertPort.events).filteredOn(event -> event.title().contains("파생층 계산 실패"))
                 .as("기준일마다가 아니라 한 건이다 — 같은 키의 둘째는 억제기가 삼킨다")

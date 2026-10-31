@@ -117,7 +117,7 @@ public class AdminBatchController {
                     "재실행할 미해결 실패가 없다.");
         }
 
-        if (!launcher.relaunchFailures(id, execution.targetDate())) {
+        if (!launcher.relaunchFailures(id, execution.jobName(), execution.targetDate())) {
             throw new ApiExceptions.JobAlreadyRunningException(execution.jobName());
         }
         return new JobLaunchResponse(execution.jobName(), execution.targetDate());

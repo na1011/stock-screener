@@ -22,6 +22,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.awaitility.Awaitility.await;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -192,9 +193,8 @@ class AdminJobLauncherTest {
                         GovernanceDeriveJob.JOB_NAME,
                         // 거래소당 1콜, 전부 2콜이다(창과 무관하다 — 11년치가 한 응답이다).
                         // Alpaca는 일일 총량을 공표하지 않고 분당 한도만 있어 사실상 0에 가깝다.
-                        // 화면에 두는 이유는 **스케줄러에 못 걸기 때문**이다: 미국 장이 한국
-                        // 시각 새벽에 닫아 13시 30분 크론이 뜻을 갖지 않는다. 사람이 눌러야
-                        // 적재 창이 안 낡고, 낡으면 봉 결측 판정이 조용히 판정불가로 퇴화한다.
+                        // 평일 21:00 미국 사슬 맨 앞에서 돌고, 화면에 두는 이유는 그 크론이 못 돈 날
+                        // 사람이 메우게 하려는 것이다 — 낡으면 미국 일일 갱신이 대상 세션을 못 정해 FAILED로 선다.
                         //
                         // 짝인 bar-gap-review는 여기 없다. 실행 행을 안 만들어 화면이 202를
                         // 받고 아무것도 안 뜬다 — corporate-action-review와 같은 이유다.
@@ -210,15 +210,66 @@ class AdminJobLauncherTest {
     }
 
     @Test
-    @DisplayName("부분 재실행은 실패 단위가 종목인 잡만 지원한다")
+    @DisplayName("부분 재실행은 실패 단위가 종목인 잡만 지원한다 — 일일 갱신 두 잡(국내 · 미국)")
     void onlyDailyUpdateSupportsRetry() {
         assertThat(AdminJobLauncher.supportsRetry(DailyUpdateJob.JOB_NAME)).isTrue();
+        assertThat(AdminJobLauncher.supportsRetry(DailyUpdateJob.US_JOB_NAME)).isTrue();
         assertThat(AdminJobLauncher.supportsRetry(UniverseRebalanceJob.JOB_NAME)).isFalse();
         assertThat(AdminJobLauncher.supportsRetry(IndicatorBackfillJob.JOB_NAME)).isFalse();
-        // 기업 행위 수집의 실패 단위는 종목이지만 재실행 경로는 daily-update만 지원한다.
-        // 여기가 참으로 바뀌면 relaunchFailures가 엉뚱한 잡을 띄운다 — 그 메서드는 잡 이름을
-        // 안 보고 dailyUpdateJob을 부른다.
+        // 기업 행위 수집의 실패 단위는 종목이지만 재실행 경로는 일일 갱신만 지원한다 — relaunchFailures가
+        // dailyUpdateJob.retryFailures만 부르므로 여기가 참이면 그 잡의 실패를 시세 재수집으로 돌린다.
         assertThat(AdminJobLauncher.supportsRetry(CorporateActionJob.JOB_NAME)).isFalse();
+        assertThatThrownBy(() -> launcher.relaunchFailures(1L, CorporateActionJob.JOB_NAME, LocalDate.now()))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("재실행은 실패한 실행의 잡 이름(시장)을 따른다 — 미국 실패를 국내 잡으로 다시 돌리지 않는다")
+    void retryFollowsTheFailedJobsMarkets() {
+        AtomicReference<DailyUpdateJob.Markets> retried = new AtomicReference<>();
+        when(dailyUpdateJob.retryFailures(eq(7L), any(), any())).thenAnswer(invocation -> {
+            retried.set(invocation.getArgument(2));
+            return BatchStatus.SUCCESS;
+        });
+
+        assertThat(launcher.relaunchFailures(7L, DailyUpdateJob.US_JOB_NAME, LocalDate.of(2026, 10, 30))).isTrue();
+
+        await().atMost(2, TimeUnit.SECONDS).until(() -> retried.get() != null);
+        assertThat(retried.get()).isEqualTo(DailyUpdateJob.Markets.US);
+    }
+
+    @Test
+    @DisplayName("「일일 갱신」 버튼은 국내 → 미국 두 잡을 차례로 띄우고, 날짜를 주면 두 잡이 그 날짜를 쓴다")
+    void dailyUpdateButtonRunsBothMarkets() {
+        java.util.List<String> order = new java.util.concurrent.CopyOnWriteArrayList<>();
+        LocalDate given = LocalDate.of(2026, 10, 29);
+        when(dailyUpdateJob.run(any(), any(), any())).thenAnswer(invocation -> {
+            DailyUpdateJob.Markets markets = invocation.getArgument(2);
+            order.add(markets + "@" + invocation.getArgument(0));
+            return BatchStatus.SUCCESS;
+        });
+
+        launcher.launch(DailyUpdateJob.JOB_NAME, new AdminJobLauncher.JobRequest(given, null, null));
+
+        await().atMost(2, TimeUnit.SECONDS).until(() -> order.size() == 2);
+        assertThat(order).containsExactly("DOMESTIC@" + given, "US@" + given);
+    }
+
+    @Test
+    @DisplayName("국내가 던져도 미국은 돈다 — 한 시장의 실패가 다른 시장의 시세를 막지 않는다")
+    void domesticFailureStillRunsUs() {
+        AtomicInteger usRuns = new AtomicInteger();
+        when(dailyUpdateJob.run(any(), any(), eq(DailyUpdateJob.Markets.DOMESTIC)))
+                .thenThrow(new IllegalStateException("국내 고장"));
+        when(dailyUpdateJob.runUs(any(), any())).thenAnswer(invocation -> {
+            usRuns.incrementAndGet();
+            return new DailyUpdateJob.UsRun(BatchStatus.SUCCESS, LocalDate.of(2026, 10, 29));
+        });
+
+        launcher.launch(DailyUpdateJob.JOB_NAME, AdminJobLauncher.JobRequest.empty());
+
+        await().atMost(2, TimeUnit.SECONDS).until(() -> usRuns.get() == 1);
+        await().atMost(2, TimeUnit.SECONDS).until(() -> !launcher.isRunning(DailyUpdateJob.JOB_NAME));
     }
 
     @Test
@@ -246,9 +297,15 @@ class AdminJobLauncherTest {
         // 화면에 흔적이 없어 무증상이므로 단언이 없으면 아무도 모른다.
         AtomicReference<LocalDate> daily = new AtomicReference<>();
         AtomicReference<LocalDate> universe = new AtomicReference<>();
-        when(dailyUpdateJob.run(any(), any())).thenAnswer(invocation -> {
+        AtomicInteger usBySession = new AtomicInteger();
+        when(dailyUpdateJob.run(any(), any(), eq(DailyUpdateJob.Markets.DOMESTIC))).thenAnswer(invocation -> {
             daily.set(invocation.getArgument(0));
             return BatchStatus.SUCCESS;
+        });
+        // 미국은 날짜를 비우면 국내 규칙(직전 평일)이 아니라 세션 판정 경로(runUs)를 탄다 — 직전 평일을 주면 뉴욕 장중 잠정 봉을 받는다.
+        when(dailyUpdateJob.runUs(any(), any())).thenAnswer(invocation -> {
+            usBySession.incrementAndGet();
+            return new DailyUpdateJob.UsRun(BatchStatus.SUCCESS, LocalDate.of(2026, 10, 29));
         });
         when(universeRebalanceJob.run(any(), any())).thenAnswer(invocation -> {
             universe.set(invocation.getArgument(0));
@@ -259,7 +316,9 @@ class AdminJobLauncherTest {
         launcher.launch(UniverseRebalanceJob.JOB_NAME, AdminJobLauncher.JobRequest.empty());
 
         await().atMost(2, TimeUnit.SECONDS)
-                .until(() -> daily.get() != null && universe.get() != null);
+                .until(() -> daily.get() != null && universe.get() != null && usBySession.get() == 1);
+        org.mockito.Mockito.verify(dailyUpdateJob, org.mockito.Mockito.never())
+                .run(any(), any(), eq(DailyUpdateJob.Markets.US));
 
         // MUST: 요일로 단언한다. "오늘−1"로 적으면 그것이 곧 옛 구현이라 항등식이 된다.
         assertThat(daily.get().getDayOfWeek()).isNotIn(DayOfWeek.SATURDAY, DayOfWeek.SUNDAY);
@@ -272,10 +331,11 @@ class AdminJobLauncherTest {
     /** 일일 갱신을 잡아 둔다. 반환된 래치를 내려야 끝난다. */
     private CountDownLatch blockDailyUpdate() {
         CountDownLatch hold = new CountDownLatch(1);
-        when(dailyUpdateJob.run(any(), any())).thenAnswer(invocation -> {
+        when(dailyUpdateJob.run(any(), any(), any())).thenAnswer(invocation -> {
             hold.await(2, TimeUnit.SECONDS);
             return BatchStatus.SUCCESS;
         });
+        when(dailyUpdateJob.runUs(any(), any())).thenReturn(new DailyUpdateJob.UsRun(BatchStatus.SUCCESS, LocalDate.of(2026, 10, 29)));
         return hold;
     }
 }

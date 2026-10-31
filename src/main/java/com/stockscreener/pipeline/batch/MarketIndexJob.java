@@ -96,9 +96,13 @@ public class MarketIndexJob {
      * 이미 열린 실행 안에서 지수를 받는다. 일일 갱신이 <b>종목 루프에 들어가기 전에</b> 부른다.
      *
      * <p>단계를 신고하는 것도 여기서 한다 — 호출부가 잊으면 화면에 분모 없이 뜬다.
+     *
+     * @param markets 그 실행이 맡는 시장. 지수 코드는 시장 코드와 같은 문자열이라({@code MarketIndexCodes}) 그대로 거른다 —
+     *                국내 실행이 미국 지수를, 미국 실행이 국내 지수를 받지 않는다
      */
-    public void collectInto(BatchExecutionContext execution, LocalDate from, LocalDate to) {
-        List<String> codes = targetIndexCodes();
+    public void collectInto(BatchExecutionContext execution, LocalDate from, LocalDate to,
+                            java.util.Set<String> markets) {
+        List<String> codes = targetIndexCodes().stream().filter(markets::contains).toList();
         execution.plan(CollectionPhase.MARKET_INDEX, codes.size());
         if (codes.isEmpty()) {
             // MUST NOT: 여기서 알리지 않는다. 어댑터가 없는 것은 <b>구성의 상태</b>이지 그날의

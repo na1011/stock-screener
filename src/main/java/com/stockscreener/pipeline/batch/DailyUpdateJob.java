@@ -16,6 +16,7 @@ import com.stockscreener.pipeline.collector.StockRegistrar;
 import com.stockscreener.pipeline.datasource.DataSourceException;
 import com.stockscreener.pipeline.datasource.MarketIndexCodes;
 import com.stockscreener.pipeline.datasource.SecurityRef;
+import com.stockscreener.pipeline.datasource.us.UsMarket;
 import com.stockscreener.watchlist.WatchlistAlertRunner;
 
 import org.slf4j.Logger;
@@ -24,6 +25,7 @@ import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.time.DayOfWeek;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -66,7 +68,74 @@ import java.util.stream.Collectors;
 @Component
 public class DailyUpdateJob {
 
+    /** 국내(KOSPI · KOSDAQ) 일일 갱신. 평일 13:30 사슬이 돈다. */
     public static final String JOB_NAME = "daily-update";
+
+    /** 미국 일일 갱신. 평일 21:00 사슬이 돈다 — 대상 세션은 {@link UsSessionTarget}이 정한다. */
+    public static final String US_JOB_NAME = "us-daily-update";
+
+    /**
+     * 일일 갱신 한 실행이 맡는 시장 묶음. 잡 이름이 시장을 가른다 — 실행 행 · 신선도 예산 · 재시도 · 재무 기준 판독기가 그 이름으로 시장을
+     * 안다(사용자 결정 「시장별 분리」 2026-10-21 — 국내는 13:30 사슬, 미국은 저녁 사슬).
+     *
+     * <p>대상 종목 · 구멍 구간 · 지수 · 구멍 실패 닫기를 이 묶음으로 거른다. 알림 · 기준일 · 파생층 · 워치리스트는 대상 종목의
+     * 시장에서 유도되므로 따로 거르지 않아도 그 묶음 안에 머문다.
+     *
+     * <p>MUST: 묶음의 합집합이 {@code CollectedMarkets.ALL}과 같아야 한다 — 시장을 모으기로 하고 여기 안 더하면 그 시장은 어느 일일
+     * 갱신도 안 받는데 두 실행 다 초록이다({@code DailyUpdateMarketsTest}가 묻는다).
+     */
+    public enum Markets {
+        DOMESTIC(JOB_NAME, Set.of("KOSPI", "KOSDAQ")),
+        US(US_JOB_NAME, Set.of(UsMarket.CODE));
+
+        private final String jobName;
+        private final Set<String> codes;
+
+        Markets(String jobName, Set<String> codes) {
+            this.jobName = jobName;
+            this.codes = codes;
+        }
+
+        public String jobName() {
+            return jobName;
+        }
+
+        public Set<String> codes() {
+            return codes;
+        }
+
+        public boolean covers(String marketCode) {
+            return codes.contains(marketCode);
+        }
+
+        /** 그 잡 이름의 묶음. 일일 갱신 잡이 아니면 비어 있음. */
+        public static Optional<Markets> ofJobName(String jobName) {
+            for (Markets markets : values()) {
+                if (markets.jobName.equals(jobName)) {
+                    return Optional.of(markets);
+                }
+            }
+            return Optional.empty();
+        }
+
+        /** 그 시장을 맡는 묶음. 모으지 않는 시장이면 비어 있음. */
+        public static Optional<Markets> ofMarket(String marketCode) {
+            for (Markets markets : values()) {
+                if (markets.covers(marketCode)) {
+                    return Optional.of(markets);
+                }
+            }
+            return Optional.empty();
+        }
+    }
+
+    /**
+     * 미국 일일 갱신 한 판의 결과.
+     *
+     * @param targetDate 정한 대상 세션. 세션을 못 정해 수집하지 않았으면 {@code null}
+     */
+    public record UsRun(BatchStatus status, LocalDate targetDate) {
+    }
 
     /**
      * 시세 조회 창의 폭(일). 대상일 하나가 아니라 이만큼 거슬러 올라가 함께 받는다.
@@ -104,6 +173,7 @@ public class DailyUpdateJob {
     private final WatchlistAlertRunner watchlistAlertRunner;
     private final IndicatorRegistry indicatorRegistry;
     private final DerivedDayCalculator derivedDayCalculator;
+    private final UsSessionTarget usSessionTarget;
 
     public DailyUpdateJob(PriceCollector priceCollector, StockRegistrar stockRegistrar,
                           MarketCalendar marketCalendar, PriceCalendar priceCalendar,
@@ -115,7 +185,9 @@ public class DailyUpdateJob {
                           IndicatorTradeDateIndex tradeDateIndex,
                           WatchlistAlertRunner watchlistAlertRunner,
                           IndicatorRegistry indicatorRegistry,
-                          DerivedDayCalculator derivedDayCalculator) {
+                          DerivedDayCalculator derivedDayCalculator,
+                          UsSessionTarget usSessionTarget) {
+        this.usSessionTarget = usSessionTarget;
         this.priceCollector = priceCollector;
         this.stockRegistrar = stockRegistrar;
         this.marketCalendar = marketCalendar;
@@ -146,7 +218,7 @@ public class DailyUpdateJob {
     }
 
     /**
-     * 실행 일자로부터 수집 대상일을 정한다 — <b>직전 평일</b>이다.
+     * 실행 일자로부터 <b>국내</b> 수집 대상일을 정한다 — <b>직전 평일</b>이다. 미국은 이 규칙을 안 쓴다({@link UsSessionTarget}).
      *
      * <p>메서드로 빼 둔 이유는 <b>크론과 짝을 이뤄야만 의미가 있기 때문</b>이다. 어느 거래일이
      * 덮이는가는 크론만으로도, 이 규칙만으로도 알 수 없고 둘을 합쳐야 나온다. 실제로 금요일
@@ -178,7 +250,27 @@ public class DailyUpdateJob {
     }
 
     /**
-     * 대상 일자의 시세를 수집한다.
+     * 미국 일일 갱신 — 대상 세션을 세션 달력이 정한다({@link UsSessionTarget}).
+     *
+     * <p>정하지 못하면(달력이 비었거나 낡았다) <b>수집하지 않고</b> {@code us-daily-update} 실행 행을 FAILED로 남긴다 — 그 마감이
+     * 운영자에게 ERROR로 알린다. 0건 성공으로 끝내면 미국 봉이 멈춘 채 신선도 시계까지 초록이 된다.
+     */
+    public UsRun runUs(Instant now, BatchExecutionRecorder.TriggeredBy triggeredBy) {
+        UsSessionTarget.Resolution resolution = usSessionTarget.resolve(now);
+        if (resolution instanceof UsSessionTarget.Resolved resolved) {
+            log.info("미국 대상 세션을 정했다. session={} — 장 마감 + {}시간이 지난 마지막 세션이다.",
+                    resolved.session(), UsSessionTarget.SETTLE_AFTER_CLOSE.toHours());
+            return new UsRun(run(resolved.session(), triggeredBy, Markets.US), resolved.session());
+        }
+        UsSessionTarget.Unresolved unresolved = (UsSessionTarget.Unresolved) resolution;
+        BatchExecutionContext execution = batchExecutions.start(US_JOB_NAME, unresolved.expected(), triggeredBy, 0,
+                BatchExecutionRecorder.DeclaredScope.FULL);
+        execution.failUnexpectedly("대상 세션 판정", new IllegalStateException(unresolved.reason()));
+        return new UsRun(BatchStatus.FAILED, null);
+    }
+
+    /**
+     * 대상 일자의 시세를 수집한다 — 그 묶음의 시장만.
      *
      * <p>실제 조회는 {@link #priceWindowStart}부터 대상일까지의 <b>창</b>이다. 대상일은
      * 그 창의 끝이자 결손 판정·지표 계산의 기준이지, 조회 범위 전체가 아니다.
@@ -189,34 +281,39 @@ public class DailyUpdateJob {
      *
      * @param targetDate 수집 대상 거래일. 실행 시각이 아니다 — 소스가 거래일 T를 T의 다음
      *                   영업일에 내므로 대상은 언제나 실행일보다 앞이다.
+     * @param markets    이 실행이 맡는 시장 묶음 — 잡 이름도 그것이 정한다
      */
-    public BatchStatus run(LocalDate targetDate, BatchExecutionRecorder.TriggeredBy triggeredBy) {
+    public BatchStatus run(LocalDate targetDate, BatchExecutionRecorder.TriggeredBy triggeredBy, Markets markets) {
         if (marketCalendar.isWeekend(targetDate)) {
-            log.info("주말이므로 일일 갱신을 건너뛴다. targetDate={}", targetDate);
+            log.info("주말이므로 일일 갱신을 건너뛴다. job={} targetDate={}", markets.jobName(), targetDate);
             return BatchStatus.SUCCESS;
         }
 
-        List<SecurityRef> targets =
-                stockRegistrar.toSecurityRefs(stockRegistrar.activeUniverseMemberIds());
+        List<SecurityRef> targets = stockRegistrar.toSecurityRefs(stockRegistrar.activeUniverseMemberIds()).stream()
+                .filter(target -> markets.covers(target.marketCode()))
+                .toList();
         LocalDate from = priceWindowStart(targetDate);
         // 창 밖 구멍 구간(지금 편입 · 보존 창 과거 편입). 질의가 던지면 실행 행 없이 끝나지 않게
         // start 뒤 try 안에서 잰다.
         BatchExecutionContext execution =
-                batchExecutions.start(JOB_NAME, targetDate, triggeredBy, targets.size(),
+                batchExecutions.start(markets.jobName(), targetDate, triggeredBy, targets.size(),
                         // 인자로 좁힐 길이 없다 — 기준일과 꼬리는 기록 계층이 본다.
                         BatchExecutionRecorder.DeclaredScope.FULL);
         List<PriceGapRun> gapRuns;
         try {
-            gapRuns = stockRegistrar.priceGapRuns(targetDate, from, indicatorRegistry.readWindowBars());
+            // 구간 질의의 달력 · 편입 수는 시장마다 따로 세므로(PARTITION BY market_code) 결과를 시장으로 걸러도 같은 답이다.
+            gapRuns = stockRegistrar.priceGapRuns(targetDate, from, indicatorRegistry.readWindowBars()).stream()
+                    .filter(run -> markets.covers(run.marketCode()))
+                    .toList();
             // MUST: 구간을 도출한 이 경로에서만 닫는다. 재시도 경로는 구간을 안 도출하므로(빈 목록)
             // 거기서 부르면 진짜 남은 구멍의 실패까지 닫힌다.
             closeVanishedGapFailures(gapRuns.stream().map(PriceGapRun::stockId)
-                    .collect(Collectors.toSet()));
+                    .collect(Collectors.toSet()), markets);
         } catch (RuntimeException e) {
             execution.failUnexpectedly(e);
             throw e;
         }
-        return collect(execution, targets, gapRuns, from, targetDate);
+        return collect(execution, targets, gapRuns, from, targetDate, markets);
     }
 
     /**
@@ -225,7 +322,10 @@ public class DailyUpdateJob {
      * <p>초기 적재 분기가 아니다 — 대상 목록만 좁아질 뿐 처리 로직은 같다. 그것이
      * 재실행과 초기 적재를 가르는 기준이다.
      */
-    public BatchStatus retryFailures(long previousExecutionId, LocalDate targetDate) {
+    /**
+     * @param markets 실패한 실행의 잡이 맡은 묶음 — 재실행은 그 잡 이름으로 남고 그 시장 종목만 다시 받는다
+     */
+    public BatchStatus retryFailures(long previousExecutionId, LocalDate targetDate, Markets markets) {
         List<StockFailure> failures =
                 batchExecutions.recorder().unresolvedFailures(previousExecutionId);
         List<Long> stockIds = failures.stream()
@@ -233,14 +333,20 @@ public class DailyUpdateJob {
                 .map(StockFailure::stockId)
                 .toList();
 
-        List<SecurityRef> targets = stockRegistrar.toSecurityRefs(stockIds);
+        List<SecurityRef> all = stockRegistrar.toSecurityRefs(stockIds);
+        List<SecurityRef> targets = all.stream().filter(target -> markets.covers(target.marketCode())).toList();
+        if (targets.size() < all.size()) {
+            // 시장 분리 전 daily-update 실행은 두 시장의 실패를 함께 든다 — 다른 시장 몫은 그 시장의 다음 정기 실행 창이 다시 받는다.
+            log.warn("재실행 {}에서 다른 시장 종목 {}개를 뺐다 — 그 시장의 일일 갱신이 받는다. 이전 실행={}",
+                    markets.jobName(), all.size() - targets.size(), previousExecutionId);
+        }
         BatchExecutionContext execution = batchExecutions.startRetry(
-                JOB_NAME, targetDate, targets.size(), previousExecutionId);
+                markets.jobName(), targetDate, targets.size(), previousExecutionId);
 
         // MUST NOT: 구멍 구간({@code PRICE_GAP}) 실패를 여기서 옛 범위로 재생하지 않는다. 구멍은
         // 다음 정기 실행이 그날의 정의로 다시 도출한다 — 과거 편입 종목에 창 콜과 지표 단계를
         // 돌리는 것도 이 경로가 아니다.
-        return collect(execution, targets, List.of(), priceWindowStart(targetDate), targetDate);
+        return collect(execution, targets, List.of(), priceWindowStart(targetDate), targetDate, markets);
     }
 
     /**
@@ -256,7 +362,7 @@ public class DailyUpdateJob {
      * 이 지점에서 깨진다. 성공 여부로 가르는 것이 그 전제를 지킨다.
      */
     private BatchStatus collect(BatchExecutionContext execution, List<SecurityRef> targets,
-                                List<PriceGapRun> gapRuns, LocalDate from, LocalDate to) {
+                                List<PriceGapRun> gapRuns, LocalDate from, LocalDate to, Markets scope) {
         // 종목당 두 단계를 돌므로 작업 단위는 종목 수의 두 배다. 종목 수만 신고하면 화면이
         // 700/350으로 뜬다 — 지표 백필이 43400/350으로 뜨던 것과 같은 어긋남이다.
         //
@@ -278,7 +384,7 @@ public class DailyUpdateJob {
         // 쓰므로 뒤에 두면 그날 그 지표가 안 써지고, 그 사실은 화면에서 "조건에 안 맞았다"와
         // 같아 보인다. 실패해도 여기서 예외를 올리지 않는다 — 지수 하나 때문에 시세 수집과
         // 나머지 지표를 함께 잃는 편이 손해가 크다(MarketIndexJob의 판단).
-        marketIndexJob.collectInto(execution, from, to);
+        marketIndexJob.collectInto(execution, from, to, scope.codes());
 
         execution.stage("종목별 수집·계산");
 
@@ -483,18 +589,22 @@ public class DailyUpdateJob {
     }
 
     /**
-     * 구멍이 더는 없는 종목의 미해결 {@code PRICE_GAP} 실패를 닫는다.
+     * 구멍이 더는 없는 종목의 미해결 {@code PRICE_GAP} 실패를 닫는다 — <b>이 실행의 시장 종목만</b>.
      *
      * <p>실패는 같은 (종목, 단계)가 뒤에 성공해야 닫히는데 구멍은 성공 없이도 사라진다 — 보존 창을
      * 떠나거나, 읽기 창이 미끄러지거나, 다른 잡(초기 적재)이 채운다. 그대로 두면 관리자 화면의
      * 미해결 수가 영구히 쌓인다.
+     *
+     * <p>MUST: 다른 시장의 실패를 닫지 않는다. {@code stocksWithGaps}는 이 실행의 시장으로 거른 구간이라 다른 시장 종목은 언제나
+     * 「구멍 없음」으로 보인다 — 거르지 않으면 국내 실행이 미국의 진짜 남은 구멍 실패를 매일 닫는다.
      */
-    private void closeVanishedGapFailures(Set<Long> stocksWithGaps) {
+    private void closeVanishedGapFailures(Set<Long> stocksWithGaps, Markets markets) {
         Set<Long> unresolved = batchExecutions.recorder().unresolvedStockPhases()
                 .getOrDefault(CollectionPhase.PRICE_GAP, Set.of());
-        for (Long stockId : unresolved) {
-            if (!stocksWithGaps.contains(stockId)) {
-                batchExecutions.recorder().resolveFailures(stockId, CollectionPhase.PRICE_GAP);
+        List<Long> vanished = unresolved.stream().filter(stockId -> !stocksWithGaps.contains(stockId)).sorted().toList();
+        for (SecurityRef ref : stockRegistrar.toSecurityRefs(vanished)) {
+            if (markets.covers(ref.marketCode())) {
+                batchExecutions.recorder().resolveFailures(ref.stockId(), CollectionPhase.PRICE_GAP);
             }
         }
     }

@@ -40,8 +40,19 @@ import java.util.Set;
 @Component
 public class FinancialBasisReader {
 
-    /** 지표 기준일을 덮는 지표 쓰기 실행 — 일일 갱신(원본층 창 · 최신일)과 화해 ①(원본층 창 전체). */
-    private static final List<String> INDICATOR_WRITERS = List.of(DailyUpdateJob.JOB_NAME, IndicatorBackfillJob.ORIGIN_JOB_NAME);
+    /**
+     * 지표 기준일을 덮는 지표 쓰기 실행 — 그 종목 시장의 일일 갱신(원본층 창 · 최신일)과 화해 ①(원본층 창 전체 · 두 시장).
+     *
+     * <p>MUST: 시장마다 묻는다. 일일 갱신이 시장별 잡으로 갈려(국내 13:30 {@code daily-update} · 미국 21:00 {@code us-daily-update})
+     * 두 이름을 함께 보면 국내 13:30 실행이 미국 종목의 「지표를 쓴 시각」이 된다 — 그 실행은 미국 지표를 안 썼으므로 그 사이 들어온
+     * 미국 재무 행이 라벨에 먼저 실린다.
+     */
+    private static List<String> indicatorWriters(String marketCode) {
+        return DailyUpdateJob.Markets.ofMarket(marketCode)
+                .map(markets -> List.of(markets.jobName(), IndicatorBackfillJob.ORIGIN_JOB_NAME))
+                // 모으지 않는 시장 — 일일 갱신이 그 시장 지표를 쓰지 않으므로 화해 ①만 덮는다.
+                .orElse(List.of(IndicatorBackfillJob.ORIGIN_JOB_NAME));
+    }
     /** 외국 발행사의 정기 공시 양식 — 실적 발표가 6-K라 항목 구조가 없다(미국 편입 1,000 중 21종목 · 2026-10-30). */
     private static final Set<String> FOREIGN_ISSUER_FORMS = Set.of("20-F", "20-F/A", "40-F", "40-F/A", "6-K", "6-K/A");
     private static final DateTimeFormatter DAY = DateTimeFormatter.ofPattern("M월 d일");
@@ -96,10 +107,22 @@ public class FinancialBasisReader {
         if (stockIds.isEmpty()) {
             return Map.of();
         }
-        Instant writtenBy = indicatorsWrittenBy(asOf);
-        Map<Long, KnownFigures> known = indicatorDataReader.readKnownFigures(stockIds, asOf, writtenBy);
         Map<Long, StockFacts> facts = stockFacts(stockIds);
-        Map<Long, List<LocalDate>> releaseDates = releaseDates(stockIds, asOf, writtenBy);
+        // 시장마다 지표를 쓴 실행이 다르다(indicatorWriters) — 그 시각으로 재무 행 · 실적 발표를 자른다.
+        Map<String, List<Long>> idsByMarket = new HashMap<>();
+        for (Long stockId : stockIds) {
+            StockFacts stock = facts.get(stockId);
+            if (stock != null) {
+                idsByMarket.computeIfAbsent(stock.marketCode(), k -> new ArrayList<>()).add(stockId);
+            }
+        }
+        Map<Long, KnownFigures> known = new HashMap<>();
+        Map<Long, List<LocalDate>> releaseDates = new HashMap<>();
+        idsByMarket.forEach((market, ids) -> {
+            Instant writtenBy = indicatorsWrittenBy(asOf, indicatorWriters(market));
+            known.putAll(indicatorDataReader.readKnownFigures(ids, asOf, writtenBy));
+            releaseDates.putAll(releaseDates(ids, asOf, writtenBy));
+        });
         Map<String, LocalDate> cursors = listingCursors();
         Map<Long, IndicatorContext> contexts = new HashMap<>();
         Map<Long, ReportingBasis.Basis> bases = new HashMap<>();
@@ -227,7 +250,11 @@ public class FinancialBasisReader {
         return out;
     }
 
-    private record StockFacts(long stockId, boolean us, Integer accountingMonth, LocalDate sweptThrough) {
+    private record StockFacts(long stockId, String marketCode, Integer accountingMonth, LocalDate sweptThrough) {
+
+        boolean us() {
+            return "US".equals(marketCode);
+        }
     }
 
     private Map<Long, StockFacts> stockFacts(Collection<Long> stockIds) {
@@ -242,8 +269,9 @@ public class FinancialBasisReader {
             return ps;
         }, rs -> {
             int month = rs.getInt("accounting_month");
-            out.put(rs.getLong("id"), new StockFacts(rs.getLong("id"), "US".equals(rs.getString("market_code")),
-                    rs.wasNull() ? null : month, rs.getObject("swept_through", LocalDate.class)));
+            Integer accountingMonth = rs.wasNull() ? null : month;
+            out.put(rs.getLong("id"), new StockFacts(rs.getLong("id"), rs.getString("market_code"),
+                    accountingMonth, rs.getObject("swept_through", LocalDate.class)));
         });
         return out;
     }
@@ -261,15 +289,17 @@ public class FinancialBasisReader {
     /**
      * 그 기준일 지표를 쓴 마지막 정기 범위 실행의 시작 시각. 그 뒤 생긴 재무 행은 그 지표가 못 봤다. 덮는 실행이 없으면 {@code null}
      * (빼지 않는다).
+     *
+     * @param writers 그 종목 시장의 지표 쓰기 잡({@link #indicatorWriters})
      */
-    private Instant indicatorsWrittenBy(LocalDate asOf) {
+    private Instant indicatorsWrittenBy(LocalDate asOf, List<String> writers) {
         Timestamp started = jdbc.query(con -> {
             var ps = con.prepareStatement("""
                     SELECT max(started_at) FROM batch_execution
                     WHERE job_name = ANY(?) AND target_date >= ? AND status IN ('SUCCESS', 'PARTIAL_SUCCESS')
                       AND (scope IS NULL OR scope = 'FULL')
                     """);
-            ps.setArray(1, con.createArrayOf("varchar", INDICATOR_WRITERS.toArray()));
+            ps.setArray(1, con.createArrayOf("varchar", writers.toArray()));
             ps.setObject(2, asOf);
             return ps;
         }, rs -> rs.next() ? rs.getTimestamp(1) : null);

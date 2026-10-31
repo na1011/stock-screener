@@ -6,7 +6,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 /**
- * 미국 순위 후보를 정기 경로로 먹이는가(ADR-0178) — 평일 14:16 후보 공시 소비 · 14:00 후보 분할 다리 · 토요일 후보 풀 화해와 새 행 인입.
+ * 미국 순위 후보를 정기 경로로 먹이는가(ADR-0178) — 평일 14:16 후보 공시 소비 · 21:00 후보 분할 다리 · 토요일 후보 풀 화해와 새 행 인입.
  *
  * <p>이 셋은 후보 종목의 재무 행과 기업행위 원장을 쓰고, 그것이 순위 재료(주식수 · {@code JdbcStoredShareCounts})라 명부를 바꾼다.
  * 그래서 작은 DB 드라이런(D4)을 지날 때까지 꺼 둔 채 main에 쌓았고, 2026-10-15 D4 통과 뒤 기본값을 뒤집었다 — 끄면 정기 경로의

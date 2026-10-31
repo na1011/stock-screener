@@ -85,6 +85,19 @@ public class MarketSessionCalendar {
         return boundary("max", exchangeCode);
     }
 
+    /**
+     * 정규장이 {@code cutoff} 이전에 끝난 가장 늦은 세션. 하나도 없으면 비어 있음.
+     *
+     * <p>{@code core_end}는 절대 시각이라 시간대 환산 없이 비교한다 — 조기폐장일은 앞당겨진 종료가 그대로 쓰인다.
+     */
+    @Transactional(readOnly = true)
+    public Optional<LocalDate> latestSessionEndedBy(String exchangeCode, java.time.Instant cutoff) {
+        List<LocalDate> rows = jdbcTemplate.queryForList(
+                "SELECT max(session_date) FROM market_calendar WHERE exchange_code = ? AND core_end <= ?",
+                LocalDate.class, exchangeCode, java.sql.Timestamp.from(cutoff));
+        return rows.isEmpty() ? Optional.empty() : Optional.ofNullable(rows.get(0));
+    }
+
     private Optional<LocalDate> boundary(String aggregate, String exchangeCode) {
         List<LocalDate> rows = jdbcTemplate.queryForList(
                 "SELECT " + aggregate + "(session_date) FROM market_calendar WHERE exchange_code = ?",

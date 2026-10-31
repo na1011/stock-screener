@@ -65,7 +65,10 @@ public class CorporateActionJob {
         this.batchExecutions = batchExecutions;
     }
 
-    /** 정기 실행(14:00 사슬)은 창·티커·유니버스를 안 준다. 기준일과 꼬리는 기록 계층이 본다. */
+    /**
+     * 정기 실행(국내 14:00 · 미국 21:00 사슬)은 창·티커·유니버스를 안 준다. 기준일과 꼬리는 기록 계층이 본다. 시장은 범위를 안 좁힌다 —
+     * 사슬이 시장마다 한 번씩 그 시장 전량을 돈다.
+     */
     public static BatchExecutionRecorder.DeclaredScope scopeOf(LocalDate from, List<String> tickers, String universeCode) {
         return BatchExecutionRecorder.DeclaredScope.byArgs(from == null && (tickers == null || tickers.isEmpty())
                 && (universeCode == null || universeCode.isBlank()));
@@ -85,9 +88,21 @@ public class CorporateActionJob {
      */
     public BatchStatus run(LocalDate asOf, BatchExecutionRecorder.TriggeredBy triggeredBy,
                            LocalDate from, List<String> tickers, String universeCode) {
+        return run(asOf, triggeredBy, from, tickers, universeCode, null);
+    }
+
+    /**
+     * 위와 같되 대상을 그 시장 종목으로 거른다 — 정기 사슬이 시장마다 따로 돈다(국내 14:00 · 미국 21:00). 봉이 들어온 사슬이 그 봉의
+     * 기업 행위 계수까지 닫는다.
+     *
+     * @param markets {@code null}이면 전 시장(손·관리자 경로)
+     */
+    public BatchStatus run(LocalDate asOf, BatchExecutionRecorder.TriggeredBy triggeredBy,
+                           LocalDate from, List<String> tickers, String universeCode, java.util.Set<String> markets) {
         BatchExecutionRecorder.DeclaredScope scope = scopeOf(from, tickers, universeCode);
-        List<SecurityRef> targets =
-                stockRegistrar.toSecurityRefs(resolveTargets(tickers, universeCode));
+        List<SecurityRef> targets = stockRegistrar.toSecurityRefs(resolveTargets(tickers, universeCode)).stream()
+                .filter(target -> markets == null || markets.contains(target.marketCode()))
+                .toList();
 
         // 시세가 하나도 없으면 소스를 부를 근거가 없다. 어댑터가 우리 시계열에서 일자와 비율을
         // 유도하므로, 이 확인이 없으면 종목마다 콜을 태우고 전부 유도 실패로 끝난다.

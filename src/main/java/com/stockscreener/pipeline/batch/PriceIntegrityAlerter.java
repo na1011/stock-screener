@@ -30,7 +30,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 미국 시세 원장의 무결성 감시(ADR-0181) — 평일 15:30 · 읽기만 · 추가 콜 0 · 운영자 알림.
+ * 미국 시세 원장의 무결성 감시(ADR-0181) — 평일 21:00 미국 사슬 끝(그날 미국 봉이 들어온 뒤) · 읽기만 · 추가 콜 0 · 운영자 알림.
  *
  * <p>쓰기 술어({@link PriceObservationWindow})는 「이미 아는 경계」를 지킨다. 이 감시는 <b>모르는 새 꼴</b>과 <b>술어를 우회한 쓰기</b>를 본다:
  * <ul>

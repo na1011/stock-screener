@@ -93,7 +93,11 @@ public class JobFreshnessPolicy {
         Map<String, Budget> map = new LinkedHashMap<>();
         // 실측 최장 공백이 4일이다(공휴일이 낀 주에 두 번). 3일로 잡으면 평시에 붉는다.
         map.put(DailyUpdateJob.JOB_NAME, new Budget(5, null));
-        // 평일 14:00 크론. 금→월이 3일이라 그 위로 이틀 여유를 둔다.
+        // 미국 일일 갱신 — 평일 21:00 사슬. 국내와 같은 평일 주기라 같은 예산이다. 잡 이름을 가른 이유가 이 줄이다: 한 이름이면 한 시장의
+        // 성공이 다른 시장의 연체를 가린다. 버튼은 관리 화면 「일일 갱신」(두 잡을 차례로 띄운다)이라 CLI 명령이 없다.
+        map.put(DailyUpdateJob.US_JOB_NAME, new Budget(5, null));
+        // 평일 14:00 국내 · 21:00 미국 사슬이 같은 이름으로 돈다. 금→월이 3일이라 그 위로 이틀 여유를 둔다. 사정거리: 한 시장의 사슬만
+        // 며칠 안 돌면 다른 시장의 성공이 이 시계를 민다 — 한 사슬이 실패로 끝난 날은 그 실행이 FAILED와 알림을 낸다.
         map.put(CorporateActionJob.JOB_NAME, new Budget(5, null));
         // 위와 한 사슬이라 같은 예산이다. 갈리면 사슬이 끊긴 것이다.
         map.put(AdjustmentRebuildJob.JOB_NAME, new Budget(5, null));
@@ -122,7 +126,7 @@ public class JobFreshnessPolicy {
         // 잡 자신이 평일 2일 넘게 늦으면 먼저 알린다. 이 예산은 크론이 아예 안 돈 날을 센다.
         map.put(FilingListingJob.JOB_NAME, new Budget(5, "--job=filing-listing"));
         map.put(FilingConsumptionJob.JOB_NAME, new Budget(5, "--job=filing-consumption"));
-        // 미국 순위 후보(ADR-0178) — 평일 14:16 넷째 단계 · 14:00 사슬. UsCandidateFeed가 켜진 jar에서만 돈다.
+        // 미국 순위 후보(ADR-0178) — 평일 14:16 넷째 단계 · 21:00 미국 사슬. UsCandidateFeed가 켜진 jar에서만 돈다.
         map.put(FilingConsumptionJob.CANDIDATE_JOB_NAME, new Budget(5, "--job=candidate-consumption"));
         map.put(CandidateSplitJob.JOB_NAME, new Budget(5, "--job=candidate-splits"));
         map.put(FreshnessCatchUpJob.JOB_NAME, new Budget(5, "--job=refresh-behind"));
@@ -131,7 +135,7 @@ public class JobFreshnessPolicy {
         // 실적 발표 감지(ADR-0195) — 평일 13:30 일일 갱신 앞 · 14:16 사슬 끝. 공시 목록과 같은 주기다. 과거 훑기가 남은 실행은 시장
         // 미완료라 시계를 안 민다 — 첫 백필(손 실행)이 끝나기 전에는 이 예산이 붉는 것이 맞다.
         map.put(EarningsReleaseJob.JOB_NAME, new Budget(5, "--job=earnings-release"));
-        // 세션 달력 — 평일 13:30 사슬(2026-10-31). 손 실행 시절 60일이었고, 그 예산이 달력이 두 달 멈춘 것을 못 알렸다.
+        // 세션 달력 — 평일 21:00 미국 사슬 맨 앞. 손 실행 시절 60일이었고, 그 예산이 달력이 두 달 멈춘 것을 못 알렸다.
         map.put(MarketCalendarJob.JOB_NAME, new Budget(5, "--job=market-calendar"));
         return Map.copyOf(map);
     }

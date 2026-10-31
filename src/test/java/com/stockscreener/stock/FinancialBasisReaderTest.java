@@ -153,7 +153,7 @@ class FinancialBasisReaderTest {
         LocalDate asOf = LocalDate.of(2031, 10, 29);
         jdbc.update("""
                 INSERT INTO batch_execution (job_name, target_date, status, triggered_by, scope, started_at, finished_at)
-                VALUES ('daily-update', ?, 'SUCCESS', 'SCHEDULER', 'FULL', now() - interval '1 hour', now() - interval '50 minutes')
+                VALUES ('us-daily-update', ?, 'SUCCESS', 'SCHEDULER', 'FULL', now() - interval '1 hour', now() - interval '50 minutes')
                 """, asOf);
         quarter(id, 2031, "Q3", Q3_END, asOf, null);
         jdbc.update("UPDATE financial_statement SET created_at = now() WHERE stock_id = ? AND fiscal_period = 'Q3' AND fiscal_year = 2031", id);
@@ -168,13 +168,33 @@ class FinancialBasisReaderTest {
     }
 
     @Test
+    @DisplayName("IMPORTANT — 지표를 쓴 실행은 그 종목 시장의 일일 갱신이다 — 국내 13:30 실행은 미국 종목의 지표를 안 썼다")
+    void indicatorWriterIsThatMarketsDailyUpdate() {
+        long id = usStockWithFourQuarters("MKTX");
+        LocalDate asOf = LocalDate.of(2031, 10, 29);
+        // 국내 일일 갱신만 돌았다 — 그 실행 뒤 들어온 미국 Q3 행을 「못 봤다」고 자르면 미국 지표를 쓰지도 않은 실행으로 라벨을 고정한다.
+        jdbc.update("""
+                INSERT INTO batch_execution (job_name, target_date, status, triggered_by, scope, started_at, finished_at)
+                VALUES ('daily-update', ?, 'SUCCESS', 'SCHEDULER', 'FULL', now() - interval '1 hour', now() - interval '50 minutes')
+                """, asOf);
+        quarter(id, 2031, "Q3", Q3_END, asOf, null);
+        jdbc.update("UPDATE financial_statement SET created_at = now() WHERE stock_id = ? AND fiscal_period = 'Q3' AND fiscal_year = 2031", id);
+        jdbc.update("UPDATE financial_statement SET created_at = now() - interval '2 hours' WHERE stock_id = ? AND NOT (fiscal_period = 'Q3' AND fiscal_year = 2031)", id);
+        sweep(id, asOf);
+
+        assertThat(reader.read(List.of(id), asOf).get(id).flowLabel())
+                .as("미국 쓰기 실행(us-daily-update · 화해 ①)이 없으니 자르지 않는다 — 대조군 rowsCreatedAfterTheIndicatorWriteAreNotTheBasis는 Q2")
+                .isEqualTo("2031 Q3");
+    }
+
+    @Test
     @DisplayName("지표를 쓴 실행 뒤에 알게 된 발표는 아직 지표를 막지 않았다 — 대기라 말하지 않는다")
     void releasesLearnedAfterTheIndicatorWriteAreNotPendingYet() {
         long id = usStockWithFourQuarters("LATR");
         LocalDate asOf = LocalDate.of(2031, 10, 29);
         jdbc.update("""
                 INSERT INTO batch_execution (job_name, target_date, status, triggered_by, scope, started_at, finished_at)
-                VALUES ('daily-update', ?, 'SUCCESS', 'SCHEDULER', 'FULL', now() - interval '1 hour', now() - interval '50 minutes')
+                VALUES ('us-daily-update', ?, 'SUCCESS', 'SCHEDULER', 'FULL', now() - interval '1 hour', now() - interval '50 minutes')
                 """, asOf);
         jdbc.update("UPDATE financial_statement SET created_at = now() - interval '2 hours' WHERE stock_id = ?", id);
         release(id, "US", "0000000001-31-000090", "8-K", null, "2.02,9.01", LocalDate.of(2031, 10, 28));

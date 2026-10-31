@@ -180,6 +180,24 @@ class JobFreshnessPolicyTest {
     }
 
     @Test
+    @DisplayName("일일 갱신은 시장마다 예산을 갖고, 한 시장의 성공이 다른 시장의 시계를 밀지 않는다")
+    void eachMarketsDailyUpdateHasItsOwnClock() {
+        for (DailyUpdateJob.Markets markets : DailyUpdateJob.Markets.values()) {
+            assertThat(JobFreshnessPolicy.BUDGETS).as(markets.jobName()).containsKey(markets.jobName());
+            assertThat(JobFreshnessPolicy.BUDGETS.get(markets.jobName()).days())
+                    .as("같은 평일 주기라 같은 예산이다").isEqualTo(5);
+        }
+        Instant now = Instant.parse("2026-09-01T05:00:00Z");
+        // 국내는 예산을 넘겼고 미국만 어제 돌았다 — 한 이름이던 때는 이 미국 성공이 국내 연체를 가렸다.
+        insert(DailyUpdateJob.JOB_NAME, "SUCCESS", "SCHEDULER", now.minus(Duration.ofDays(8)));
+        insert(DailyUpdateJob.US_JOB_NAME, "SUCCESS", "SCHEDULER", now.minus(Duration.ofDays(1)));
+
+        assertThat(names(policy.stale(now)))
+                .contains(DailyUpdateJob.JOB_NAME)
+                .doesNotContain(DailyUpdateJob.US_JOB_NAME);
+    }
+
+    @Test
     @DisplayName("무거운 잡의 재실행 간격이 연체 예산보다 짧다 — 뒤집히면 정상 운영에서 알림이 뜬다")
     void heavyJobIntervalIsShorterThanItsBudget() {
         // 스케줄러가 25일마다 돌리므로, 예산이 그보다 짧거나 같으면 **매달 반드시** 연체가 뜬다.

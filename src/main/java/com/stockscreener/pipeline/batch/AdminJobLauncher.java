@@ -92,11 +92,10 @@ public class AdminJobLauncher {
                 // (minusDays(1))을 들고 있었을 때 **월요일에 날짜를 비우면 대상이 일요일**이 되어,
                 // DailyUpdateJob의 주말 분기가 batch_execution 행조차 안 만들고 SUCCESS를
                 // 돌려줬다 — 화면에 아무 흔적이 없다. 스케줄러와 같은 규칙을 쓴다(ADR-0042).
-                DailyUpdateJob.JOB_NAME,
-                request -> dailyUpdateJob.run(
-                        request.orDefault(request.targetDate(),
-                                DailyUpdateJob.targetDateFor(LocalDate.now())),
-                        BatchExecutionRecorder.TriggeredBy.ADMIN),
+                //
+                // 「일일 갱신」 버튼 하나가 두 잡을 차례로 띄운다(국내 daily-update → 미국 us-daily-update · 각자 실행 행). 날짜를 비우면
+                // 미국은 정기 사슬과 같은 세션 판정(UsSessionTarget)을 쓴다 — 국내의 직전 평일을 주면 뉴욕 장중에 그날 잠정 봉을 받는다.
+                DailyUpdateJob.JOB_NAME, this::runBothDailyUpdates,
 
                 // 같은 규칙을 쓰는 이유가 여기서는 더 급하다 — 이 잡에는 주말 가드가 **없다.**
                 // 토요일에 당일을 물으면 소스에 없어 어댑터가 하루씩 거슬러 올라가고 그 소급이
@@ -163,7 +162,7 @@ public class AdminJobLauncher {
                 request -> governanceDeriveJob.run(
                         request.orDefault(request.targetDate(), LocalDate.now()),
                         BatchExecutionRecorder.TriggeredBy.ADMIN, List.of()),
-                // 거래소당 1콜(둘)이고 되돌릴 수 있다. 평일 13:30 사슬이 매일 돌리고(2026-10-31), 화면에 두는 이유는
+                // 거래소당 1콜(둘)이고 되돌릴 수 있다. 평일 21:00 미국 사슬이 매일 맨 앞에서 돌리고, 화면에 두는 이유는
                 // 그 크론이 못 돈 날 사람이 메우게 하려는 것이다 — 적재 창이 낡으면 판정이 조용히 판정불가로 퇴화한다.
                 //
                 // MUST NOT: bar-gap-review는 여기 올리지 않는다. 그 잡은 실행 행을 안 만들어
@@ -181,8 +180,10 @@ public class AdminJobLauncher {
         this.catalog = List.of(
                 // 종목당 1콜이고 대상이 `activeUniverseMemberIds()`다 — 실측 1,350(KR 350 + US 1,000).
                 // 350은 미국이 켜지기 전 수였다(ADR-0107).
+                // 국내 350 + 미국 1,000을 두 잡(daily-update · us-daily-update)이 나눠 받는다 — 버튼 하나가 둘을 차례로 띄운다.
                 new Descriptor(DailyUpdateJob.JOB_NAME, "일일 갱신",
-                        "대상 일자의 시세를 모으고 지표를 계산한 뒤 워치리스트를 판정한다.",
+                        "국내와 미국을 차례로(실행 행 둘) 대상 일자의 시세를 모으고 지표를 계산한 뒤 워치리스트를 판정한다. "
+                                + "날짜를 비우면 국내는 직전 평일, 미국은 거래량이 확정된 마지막 세션이다.",
                         Parameters.TARGET_DATE, 1350),
                 // 라벨은 화면에 그대로 뜬다. 한국어 표시어는 "유니버스"가 아니다 —
                 // `frontend/src/lib/universe.ts`가 그 판단의 정본이다.
@@ -256,21 +257,64 @@ public class AdminJobLauncher {
     }
 
     /**
-     * 실패한 부분만 다시 돌린다.
+     * 실패한 부분만 다시 돌린다 — 실패한 실행의 잡 이름(시장)을 그대로 따른다.
      *
-     * <p>{@code daily-update}만 지원한다. 나머지 잡의 실패는 종목 단위가 아니거나(유니버스)
+     * <p>일일 갱신 두 잡({@code daily-update} · {@code us-daily-update})만 지원한다. 나머지 잡의 실패는 종목 단위가 아니거나(유니버스)
      * 외부 호출이 없어(백필) 부분 재실행의 대상이 아니며, 호출부가 그것을 먼저 거른다.
      *
+     * @param jobName 실패한 실행의 잡 이름 — 재실행이 그 이름으로 남고 그 시장 종목만 받는다
      * @return 이미 도는 중이면 {@code false}.
+     * @throws IllegalArgumentException 일일 갱신 잡이 아니면
      */
-    public boolean relaunchFailures(long previousExecutionId, LocalDate targetDate) {
-        return submit(DailyUpdateJob.JOB_NAME,
-                () -> dailyUpdateJob.retryFailures(previousExecutionId, targetDate));
+    public boolean relaunchFailures(long previousExecutionId, String jobName, LocalDate targetDate) {
+        DailyUpdateJob.Markets markets = DailyUpdateJob.Markets.ofJobName(jobName)
+                .orElseThrow(() -> new IllegalArgumentException("부분 재실행을 지원하지 않는 잡이다: " + jobName));
+        return submit(jobName,
+                () -> dailyUpdateJob.retryFailures(previousExecutionId, targetDate, markets));
     }
 
     /** 부분 재실행을 지원하는 잡인가. 실패 단위가 종목인 잡만 해당한다. */
     public static boolean supportsRetry(String jobName) {
-        return DailyUpdateJob.JOB_NAME.equals(jobName);
+        return DailyUpdateJob.Markets.ofJobName(jobName).isPresent();
+    }
+
+    /**
+     * 「일일 갱신」 버튼 — 국내 → 미국을 차례로 돈다. 국내가 던져도 미국은 돌고, 처음 예외를 끝에 다시 던진다(스레드 경계가 로그로
+     * 남긴다). 종료 신호는 그 자리에서 끝낸다.
+     *
+     * @return 둘 중 성공이 아닌 쪽(둘 다 성공이면 성공)
+     */
+    private BatchStatus runBothDailyUpdates(JobRequest request) {
+        BatchExecutionRecorder.TriggeredBy admin = BatchExecutionRecorder.TriggeredBy.ADMIN;
+        RuntimeException held = null;
+        BatchStatus domestic = null;
+        try {
+            domestic = dailyUpdateJob.run(
+                    request.orDefault(request.targetDate(), DailyUpdateJob.targetDateFor(LocalDate.now())),
+                    admin, DailyUpdateJob.Markets.DOMESTIC);
+        } catch (BatchShutdownException e) {
+            throw e;
+        } catch (RuntimeException e) {
+            held = e;
+        }
+        BatchStatus us = null;
+        try {
+            us = request.targetDate() != null
+                    ? dailyUpdateJob.run(request.targetDate(), admin, DailyUpdateJob.Markets.US)
+                    : dailyUpdateJob.runUs(java.time.Instant.now(), admin).status();
+        } catch (BatchShutdownException e) {
+            throw e;
+        } catch (RuntimeException e) {
+            if (held == null) {
+                throw e;
+            }
+            held.addSuppressed(e);
+        }
+        if (held != null) {
+            throw held;
+        }
+        log.info("관리자 일일 갱신 두 잡이 끝났다. 국내={} 미국={}", domestic, us);
+        return domestic != BatchStatus.SUCCESS ? domestic : us;
     }
 
     /**

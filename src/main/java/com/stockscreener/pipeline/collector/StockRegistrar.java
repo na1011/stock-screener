@@ -255,7 +255,7 @@ public class StockRegistrar {
      * 재무도 없는 채 유니버스에 남아 <b>지표가 대부분 판정불가</b>가 되고, 프리셋에서 조용히
      * 빠진다 — 배치는 전부 SUCCESS다.
      *
-     * <p>창의 폭은 <b>리밸런싱(토 20:00)부터 다음 일일 갱신(월 13:30)까지 약 41시간</b>이다.
+     * <p>창의 폭은 <b>리밸런싱(토 20:00)부터 다음 일일 갱신(국내 월 13:30 · 미국 월 21:00)까지 약 41~49시간</b>이다.
      * 2026-08-30에 그 창 안에서 3종목을 잡았다(425420·033640·361610 — 봉 0·재무 0인 채
      * 이틀을 지났고, {@code company-profile}만 뒤따라 돌아 업종은 차 있었다).
      *
@@ -582,7 +582,7 @@ public class StockRegistrar {
                               AND c.trade_date BETWEEN r.lower_ AND r.upper_
                     JOIN price_daily p ON p.stock_id = r.stock_id AND p.trade_date = c.trade_date
                     WHERE NOT (r.current_member AND c.trade_date >= ?)
-                      -- 크론 시각대(KST)로 센 「거래일 다음 날」 — 평일 13:30 수집이 잠정값을 받는 날이다
+                      -- 크론 시각대(KST)로 센 「거래일 다음 날」 — 첫 수집일이다(국내 13:30 · 미국 21:00 — 미국은 그때 이미 확정값이라 한 번 더 받는 것은 같은 값이다)
                       AND CAST(p.updated_at AT TIME ZONE 'Asia/Seoul' AS date) <= c.trade_date + 1
                 ),
                 runs AS (

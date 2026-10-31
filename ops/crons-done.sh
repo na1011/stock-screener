@@ -50,6 +50,7 @@ CRONS=(
   "deriveReconcileInputs 1-5 14:18:00"
   "reconcileIndicators 1-5 14:20:00"
   "checkJobFreshness 1-5 15:30:00"
+  "runUsDailyUpdate 1-5 21:00:00"
   "runUniverseRebalance 6-6 20:00:00"
 )
 

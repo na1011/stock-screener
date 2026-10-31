@@ -12,7 +12,7 @@ final class ManualWriteDoor {
 
     /** 「…돌린다」 앞에 붙는 조건 구. */
     static final String WHEN = "ops/crons-done.sh가 0이고 적재 JVM이 없을 때 시작해 그 출력의 다음 명목 발화 전에 끝낼 수 있으면"
-            + "(평일 13:30~15:40은 그와 무관하게 피한다)";
+            + "(평일 13:30~15:40과 21:00 미국 사슬은 그와 무관하게 피한다)";
 
     private ManualWriteDoor() {
     }

@@ -113,7 +113,7 @@ class AdminBatchApiTest {
         when(launcher.isRunning(anyString())).thenReturn(false);
         when(launcher.isLaunchable(DailyUpdateJob.JOB_NAME)).thenReturn(true);
         when(launcher.launch(anyString(), any())).thenReturn(true);
-        when(launcher.relaunchFailures(anyLong(), any())).thenReturn(true);
+        when(launcher.relaunchFailures(anyLong(), any(), any())).thenReturn(true);
     }
 
     @Test
@@ -283,7 +283,7 @@ class AdminBatchApiTest {
                 .andExpect(jsonPath("$.jobName").value(DailyUpdateJob.JOB_NAME));
 
         // 재실행해도 대상 일자는 바뀌지 않는다. 실행 시각으로 돌리면 어제 것을 오늘 것으로 덮는다.
-        verify(launcher).relaunchFailures(executionId, TARGET);
+        verify(launcher).relaunchFailures(executionId, DailyUpdateJob.JOB_NAME, TARGET);
     }
 
     @Test
