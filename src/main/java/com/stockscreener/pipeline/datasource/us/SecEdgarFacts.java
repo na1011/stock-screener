@@ -520,11 +520,69 @@ final class SecEdgarFacts {
             byColumn.put(column, byTag);
         }
         if (usGate) {
+            preferNetRevenue(byColumn);
             keepPartnersEquityOnBalanceSheets(byColumn);
             dropInterimAnnualEqualToShorter(byColumn);
             dropCopiedQuarterContexts(byColumn);
         }
         return byColumn;
+    }
+
+    /**
+     * <b>같은 공시가 그 창에 이자비용을 뺀 순수익 총계를 냈으면 그것이 매출이다</b>(관문 켬 · P5) — 그 창의 다른 매출 후보 팩트를 뺀다(최댓값
+     * 경쟁이 아니다). 은행형 매출 유도(순이자손익 + 비이자수익 · {@link #revenue})와 같은 순수익 기저라, 유도가 서는 해와 안 서는 해의 개념이
+     * 안 갈린다(RJF가 해마다 총수익 · 순수익을 오가 FY2022 → 2023 성장률 +2.7% · IBKR 2015~2017 총수익). 최댓값 경쟁에 넣으면 총수익을 함께 내는
+     * 발행사는 해마다 총수익이 이기다가 10-K가 4분기 문맥에 순수익만 실은 해에 소스 4분기가 순수익으로 앉아 섞였다(JEF 2015 4분기 2,686 → 2,496).
+     * 순수익만 내는 발행사(RKT 매출 전 연도 빔 · PFSI 계약 매출 27M 대 순수익 1,594M · TROW)는 그것이 매출이 된다.
+     *
+     * <p>ADR-0157 §버린 대안의 「순수익 태그를 후보에 넣는 것으로 끝낸다」(HWC FY2011 979M 대 728M)는 은행형 유도가 먼저라 여기 안 닿는다(유도가
+     * 서는 창은 {@link #revenue}가 이 컬럼을 안 읽는다 · 0콜 스윕 HWC 변화 0).
+     */
+    private static void preferNetRevenue(Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn) {
+        Map<String, Map<Slot, Fact>> revenue = byColumn.get(SecEdgarColumn.REVENUE);
+        Map<Slot, Fact> net = revenue.get(SecEdgarColumn.NET_REVENUE_TAG);
+        if (net == null) {
+            return;
+        }
+        // 매출원가 줄을 실은 공시의 매출은 원가 위의 매출이다 — 그 공시의 순수익 팩트는 쓰지 않는다(SNEX 현물 상품 원가 98B 대 순영업수익
+        // 1.8B · 첫 판 실측 원가 > 매출 새 42행). 공시 단위로 가른다 — 창 단위로 가르면 같은 10-K의 FY(원가 있음)와 4분기 문맥(원가 없음)이
+        // 다른 기저가 된다(JEF 2015).
+        java.util.Set<String> costFilings = new java.util.HashSet<>();
+        byColumn.getOrDefault(SecEdgarColumn.COST_OF_SALES, Map.of()).values()
+                .forEach(slots -> slots.keySet().forEach(slot -> costFilings.add(slot.accn())));
+        net.keySet().removeIf(slot -> costFilings.contains(slot.accn()));
+        if (net.isEmpty()) {
+            revenue.remove(SecEdgarColumn.NET_REVENUE_TAG);
+            return;
+        }
+        for (Map.Entry<String, Map<Slot, Fact>> other : revenue.entrySet()) {
+            if (!other.getKey().equals(SecEdgarColumn.NET_REVENUE_TAG)) {
+                other.getValue().keySet().removeIf(net::containsKey);
+            }
+        }
+        revenue.values().removeIf(Map::isEmpty);
+    }
+
+    /** 이 판의 매출이 앞 판과 1% 넘게 다른데, 이 판이 다른 매출 후보 태그로 이 창에 앞 판 값(0.1% 안)을 실었는가. */
+    private static boolean retaggedRevenue(Map<SecEdgarColumn, BigDecimal> baseline, Map<SecEdgarColumn, BigDecimal> carried,
+                                           Anchor reporter, Window window,
+                                           Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn) {
+        BigDecimal before = baseline.get(SecEdgarColumn.REVENUE);
+        BigDecimal now = carried.get(SecEdgarColumn.REVENUE);
+        if (before == null || now == null || before.signum() == 0
+                || now.subtract(before).abs().compareTo(before.abs().multiply(new BigDecimal("0.01"))) <= 0) {
+            return false;
+        }
+        for (String tag : byColumn.get(SecEdgarColumn.REVENUE).keySet()) {
+            if (!SecEdgarColumn.REVENUE.competesForLargest(tag)) {
+                continue;
+            }
+            BigDecimal v = ownValue(reporter, SecEdgarColumn.REVENUE, window, tag, byColumn);
+            if (v != null && v.subtract(before).abs().compareTo(before.abs().multiply(new BigDecimal("0.001"))) <= 0) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -1550,6 +1608,21 @@ final class SecEdgarFacts {
                     byColumn.getOrDefault(SecEdgarColumn.DISCONTINUED_OPERATIONS, Map.of()).isEmpty(),
                     usGate, noNoncontrollingIncomeBy(lastNonzeroNoncontrolling, window),
                     usGate && pairsDiffer.contains(window.end()));
+            if (usGate && last != null && retaggedRevenue(baseline, carried, reporter, window, byColumn)) {
+                // 관문 켬(P5) — 이 판의 고정 태그 매출이 앞 판과 1% 넘게 달라도, 이 판이 다른 매출 후보 태그로 앞 판 값을 그대로 실었으면
+                // 재작성이 아니라 태그를 바꾼 것이다(계약 매출 + 계약 밖 매출로 다시 나눠 실음 — MARA FY2022 9.9 대 같은 공시 `Revenues`
+                // 117.8 · HRI · STT · CHRW · TRGP). 앞 판 값을 잇는다 — 안 이으면 부분값이 최신이 되고 판이 오간다.
+                Map<SecEdgarColumn, BigDecimal> kept = new EnumMap<>(SecEdgarColumn.class);
+                kept.putAll(carried);
+                kept.put(SecEdgarColumn.REVENUE, baseline.get(SecEdgarColumn.REVENUE));
+                carried = kept;
+                candidate = toReport(label, window, reporter, currency, carried,
+                        byColumn.getOrDefault(SecEdgarColumn.MINORITY_INTEREST, Map.of()).isEmpty(),
+                        noNoncontrollingIncomeBy(lastNoncontrolling, window),
+                        byColumn.getOrDefault(SecEdgarColumn.DISCONTINUED_OPERATIONS, Map.of()).isEmpty(),
+                        usGate, noNoncontrollingIncomeBy(lastNonzeroNoncontrolling, window),
+                        pairsDiffer.contains(window.end()));
+            }
             if (usGate && last != null && !standingBalance(candidate) && standingBalance(last) && partialBalance(values)) {
                 // 관문 켬([Z]) — 대차대조표는 블록이다. 이 판의 잔액을 받아 이은 결과가 서지 않고(어느 쪽으로든 1.5M 넘게 · AFL 2021 자본만 LDTI 재작성)
                 // 앞 판은 서 있었으면, 이 판은 잔액 칸을
@@ -1912,6 +1985,10 @@ final class SecEdgarFacts {
                 substituted.add(column);
             }
         }
+        if (substituted.isEmpty() && own.size() == line.size()) {
+            confirmedRevenue(anchor, window, byColumn, own, values);
+            return;
+        }
         if (substituted.isEmpty() || own.size() < line.size()) {
             return;
         }
@@ -1959,6 +2036,31 @@ final class SecEdgarFacts {
         }
         int scale = Math.max(rounded.stripTrailingZeros().scale(), -6);
         return scale < 0 && precise.setScale(scale, java.math.RoundingMode.HALF_UP).compareTo(rounded) == 0;
+    }
+
+    /**
+     * 관문 켬 · P5 — 이 판이 고정 태그로 낸 매출이 같은 판의 원가 + 총이익보다 1% 넘게 <b>작고</b>, 같은 판이 다른 매출 후보 태그로 그 줄을
+     * 1% 안에서 닫는 값을 냈으면 그 값을 쓴다. 증인이 둘이다(형제 태그 · 원가 + 총이익). 방향이 판정이다 — 매출이 원가 + 총이익보다 <b>큰</b>
+     * 것은 총매출에 기타 수익이 든 정당한 개념 차이라(ABT · AMGN — 총이익은 제품 매출 위에서 계산) 건드리지 않고, <b>작은</b> 것은 고른
+     * 태그가 부분이거나 단위가 틀렸다는 원장의 모순이다(PLXS 2024~2026 계약 매출 976,122 · 원가 875.4M — 천 단위 오태깅 · MELI 2021
+     * 5,710 대 7,069 · TRGP 2018 9,351 대 10,484 · ENS · MARA). 비율 임계는 안 둔다 — 3 · 10 · 100 · 1,000배에서 걸리는 집합이 달랐다.
+     */
+    private static void confirmedRevenue(Anchor anchor, Window window,
+                                         Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn,
+                                         Map<SecEdgarColumn, BigDecimal> own, Map<SecEdgarColumn, BigDecimal> values) {
+        BigDecimal revenue = own.get(SecEdgarColumn.REVENUE);
+        BigDecimal line = own.get(SecEdgarColumn.COST_OF_SALES).add(own.get(SecEdgarColumn.GROSS_PROFIT));
+        BigDecimal onePercent = new BigDecimal("0.01");
+        if (line.signum() <= 0 || line.subtract(revenue).compareTo(line.multiply(onePercent)) <= 0) {
+            return;
+        }
+        for (String tag : byColumn.get(SecEdgarColumn.REVENUE).keySet()) {
+            BigDecimal v = ownValue(anchor, SecEdgarColumn.REVENUE, window, tag, byColumn);
+            if (v != null && v.subtract(line).abs().compareTo(line.multiply(onePercent)) <= 0) {
+                values.put(SecEdgarColumn.REVENUE, v);
+                return;
+            }
+        }
     }
 
     /** 이 판이 그 태그로 이 창에 낸 값(유량). 없으면 null. */

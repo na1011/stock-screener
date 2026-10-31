@@ -604,13 +604,18 @@ enum SecEdgarColumn {
         if (usGate && this == SHARES_OUTSTANDING) {
             return GATED_SHARES_ORDER;
         }
-        if (usGate && this == REVENUE && sic != null) {
+        if (usGate && this == REVENUE) {
             List<String> all = new java.util.ArrayList<>(candidates());
-            INDUSTRY_REVENUE.forEach((tag, division) -> {
-                if (sic.startsWith(division)) {
-                    all.add(tag);
-                }
-            });
+            // 이자비용을 뺀 순수익 총계 — 금융 발행사의 매출 총계(RKT 매출 전 연도 빔 · PFSI 계약 매출 27M이 순수익 1,594M 자리에 앉음 · P5).
+            // 같은 공시가 그 창에 이것을 냈으면 다른 후보 팩트를 빼 이것이 매출이 된다(SecEdgarFacts.preferNetRevenue — 은행형 유도와 같은 기저).
+            all.add(NET_REVENUE_TAG);
+            if (sic != null) {
+                INDUSTRY_REVENUE.forEach((tag, division) -> {
+                    if (sic.startsWith(division)) {
+                        all.add(tag);
+                    }
+                });
+            }
             return List.copyOf(all);
         }
         return candidates();
@@ -633,6 +638,9 @@ enum SecEdgarColumn {
      * F1 손익 이어받기)와 함께 다시 잰다. {@code ElectricUtilityRevenue}도 넣지 않는다 — 다부문 유틸리티에서 전기 부문만이다(ETR 2015).
      */
     private static final java.util.SequencedMap<String, String> INDUSTRY_REVENUE = orderedIndustryRevenue();
+
+    /** 관문 켬 매출의 순수익 총계 후보({@link #candidates(boolean, String)}). */
+    static final String NET_REVENUE_TAG = "RevenuesNetOfInterestExpense";
 
     /** 순서를 못 박는다 — 같은 값으로 비기면 후보 순서가 이긴다({@code SecEdgarFacts.coveringTag}의 「엄격히 클 때만 바꾼다」). */
     private static java.util.SequencedMap<String, String> orderedIndustryRevenue() {
