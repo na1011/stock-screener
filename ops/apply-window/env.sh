@@ -26,7 +26,7 @@ abspath() { case "$1" in /*) echo "$1";; *) echo "$A/$1";; esac; }
 head_now() { (cd "$REPO" && git rev-parse HEAD); }
 # 그 DB의 쓰기 가드가 켜졌는가(ADR-0175 · guard_setting에 current_database() 행). 운영과 small-db.sh가 만든 작은 DB가 켜짐이다.
 guard_on() { local s; s=$(write_guard_switch "$1") || die "$1 가드 스위치를 묻지 못했다"; case "$s" in 켜짐*) return 0;; *) return 1;; esac; }
-# 앱이 떠 있으면 멈춘다 — 꺼진 jar의 크론(13:30 · 14:16 · 14:20)이 관문 도중에 옛 규칙으로 쓴다.
+# 앱이 떠 있으면 멈춘다 — 꺼진 jar의 크론(13:30 · 14:16 · 14:20 · 21:00)이 관문 도중에 옛 규칙으로 쓴다.
 # 운영 DB이거나 GATE_REQUIRE_APP_DOWN=1일 때만 본다(작은 DB 드라이런은 운영 앱과 DB가 달라 끼어들지 않는다 · 대조군은 이 변수로 태운다).
 app_down() {
   [ "$1" = "$LIVE" ] || [ "${GATE_REQUIRE_APP_DOWN:-0}" = 1 ] || return 0
