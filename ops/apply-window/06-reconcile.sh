@@ -30,5 +30,10 @@ one 1
 one 2
 w2=$(cat "$A/reconcile-2-wrote.txt")
 [ "$w2" = 0 ] || die "둘째 화해가 ①② 합 ${w2}행을 쓰거나 지웠다 — 화해가 수렴하지 않는다(그 행을 연다: $A/reconcile-$PROD.txt)"
-PGOPTIONS='-c statement_timeout=0' command psql -d "$PROD" -v ON_ERROR_STOP=1 -c 'VACUUM (ANALYZE) indicator_value, financial_statement' > /dev/null
-echo "OK 화해 두 판 — 첫 판 쓴·지운 $(cat "$A/reconcile-1-wrote.txt") · 둘째 판 0 · 실패 0 · VACUUM"
+# [B] 지표 표는 다시 쓴다(FULL) — 일반 VACUUM은 빈 공간을 재사용 표시만 해 표가 안 준다. 10-31 실측: 힙 5,004MB 중 빈 공간 29.7% ·
+# 살아 있는 힙은 ADR-0140 검증 당시(3,689MB)와 거의 같다 — 부피는 행이 아니라 대량 재작성(무효화 · 백필)의 블로트다. 관문의 전체 재적재 ·
+# 화해가 가장 큰 재작성이라 그 뒤 앱이 내려간 이 창에서 한 번 줄인다(ACCESS EXCLUSIVE · 임시 공간 ≈ 표 크기 · 소요는 재지 않았다).
+PGOPTIONS='-c statement_timeout=0' command psql -d "$PROD" -v ON_ERROR_STOP=1 -c 'VACUUM (FULL, ANALYZE) indicator_value' > /dev/null
+PGOPTIONS='-c statement_timeout=0' command psql -d "$PROD" -v ON_ERROR_STOP=1 -c 'VACUUM (ANALYZE) financial_statement' > /dev/null
+ratio=$(q "$PROD" "select round((pg_relation_size('indicator_value') + pg_indexes_size('indicator_value'))::numeric / pg_size_bytes(current_setting('shared_buffers')), 2)")
+echo "OK 화해 두 판 — 첫 판 쓴·지운 $(cat "$A/reconcile-1-wrote.txt") · 둘째 판 0 · 실패 0 · VACUUM FULL 뒤 지표 표 총/shared_buffers ${ratio}배(ADR-0140 검증 1.105배)"

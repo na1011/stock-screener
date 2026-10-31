@@ -22,7 +22,7 @@
 | `04-unresolved.sh` | 읽기 | 클래스 축 미해결 0 · 해석 실패·보충 실패·옛 판·회수정지 전원 판정(`verdicts.tsv`) · a2 미국 0 |
 | `04b-depositary.sh` | 세션 안 | 예탁 판 비율(ADR-0183): `depositary-splits` → `adjustment-rebuild` → `share-basis-derive` → DEPOSITARY 행 > 0 — 두 순위가 읽으므로 05 앞 |
 | `05-roster.sh` | 세션 안 | 순위 가드(훅을 그 DB로) → `market-calendar` → L = 미국 마지막 마감 세션 → `universe-restore --rebuild-observed=true --as-of=L --apply=true --replace=true`(관측 평면까지 켬 기저 · 같은 실행 안 L 리밸런싱 SUCCESS) → 관측 하한 = L · 지금 편입 1,000 → 창 결손 0(봉 · 거버넌스) |
-| `06-reconcile.sh` | 세션 안 | 화해 두 판 — 둘째 판 ①② 쓴·지운 0 · 두 판 실패 0 → VACUUM |
+| `06-reconcile.sh` | 세션 안 | 화해 두 판 — 둘째 판 ①② 쓴·지운 0 · 두 판 실패 0 → 지표 표 `VACUUM (FULL, ANALYZE)`([B] 블로트 · 표 총/shared_buffers 비를 찍는다) |
 | `02-snapshot.sh after <db> on` | 읽기 | 순위는 켠 판독기 |
 | `07-judge.sh after-<db> before-<db> [after-<작은 db>]` | 읽기 | 국내 불변 · ADJ_CLOSE 감소 0 · 표본 동일성 · 펜스 귀속 |
 | `09-flip.md` | 사람 | 세션 닫기 → 기본값 커밋 → 배포 → 켜면서 고칠 것 → 설정 걷기 |
