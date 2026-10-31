@@ -499,6 +499,16 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
         FLOW_COLUMNS.put("net_income", DartFullAccountMapper.ID_NET_INCOME);
     }
 
+    /**
+     * FY에만 싣는 유량(영업현금흐름 · capex · 법인세 · 세전이익) — 분기 칸이 없어 전기 FY 열(다음 해 사업보고서)로만 잰다(반증 안 렌즈 · 11-01:
+     * 연결 전환 · 사업 매각을 건너는 5년 영업현금흐름 합 · 세후 ROIC가 섞였다). 표준계정 ID만 — 이름 폴백 행은 안 잰다.
+     */
+    private static final Map<String, java.util.Set<String>> ANNUAL_ONLY = Map.of(
+            "operating_cash_flow", DartFullAccountMapper.ID_OPERATING_CASH_FLOW,
+            "capex", DartFullAccountMapper.ID_CAPEX,
+            "income_tax_expense", DartFullAccountMapper.ID_INCOME_TAX_EXPENSE,
+            "profit_before_tax", DartFullAccountMapper.ID_PROFIT_BEFORE_TAX);
+
     /** 중단영업 칸 — 손익 행이 온 보고서에 줄이 없으면 0으로 읽는다(F2b와 같은 판정 · 중단영업은 대개 0에서 생긴다). */
     private static final java.util.Set<String> ZERO_WHEN_ABSENT = java.util.Set.of("discontinued_income", "discontinued_income_controlling");
 
@@ -541,6 +551,12 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
                     amount(nq3, ids, "frmtrm_q_amount", zero), amount(nq3, ids, "frmtrm_add_amount", zero),
                     amount(nfy, ids, "frmtrm_amount", zero)));
         }
+        for (Map.Entry<String, java.util.Set<String>> e : ANNUAL_ONLY.entrySet()) {
+            boolean cash = !"income_tax_expense".equals(e.getKey()) && !"profit_before_tax".equals(e.getKey());
+            values.put(e.getKey(), new DartFlowBasis.Values(null, null, null, null, null,
+                    annualAmount(fy, e.getValue(), "thstrm_amount", cash), null, null, null, null, null,
+                    annualAmount(nfy, e.getValue(), "frmtrm_amount", cash)));
+        }
         DartFlowBasis.Dates dates = new DartFlowBasis.Dates(published(reports.get("Q1")), published(reports.get("Q2")),
                 published(reports.get("Q3")), published(reports.get("FY")), filed(nq1, year + 1), filed(nh1, year + 1),
                 filed(nq3, year + 1), filed(nfy, year + 1));
@@ -563,6 +579,7 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
             }
         });
         java.util.Set<String> judged = new java.util.LinkedHashSet<>(FLOW_COLUMNS.keySet());
+        judged.addAll(ANNUAL_ONLY.keySet());
         judged.remove("net_income");
         return DartFlowBasis.bases(year, reports, judged, owned);
     }
@@ -581,6 +598,14 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
 
     private static BigDecimal firstOf(BigDecimal a, BigDecimal b) {
         return a != null ? a : b;
+    }
+
+    private static BigDecimal annualAmount(Pending p, java.util.Set<String> ids, String field, boolean cashFlow) {
+        if (p == null) {
+            return null;
+        }
+        List<JsonNode> rows = cashFlow ? DartFullAccountMapper.sections(p.list(), DartFullAccountMapper.SJ_CASH_FLOW) : incomeOf(p.list());
+        return DartFullAccountMapper.findBy(rows, ids, "account_id", field);
     }
 
     private static java.time.LocalDate filed(Pending p, int year) {
