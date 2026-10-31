@@ -254,6 +254,38 @@ class DartFinancialAdapterTest {
         assertThat(q4.totalAssets()).as("잔액은 연말 잔액이라 참이다 — 그대로 낸다").isNotNull();
     }
 
+    @Test
+    @DisplayName("국내 관문 켬: 연결 FY와 별도 3분기 누계는 빼지 않는다 — 그 해 안에서 연결 대상이 생긴 회사")
+    void doesNotDeriveFourthQuarterAcrossStatementBases() throws Exception {
+        server.setDispatcher(new Dispatcher() {
+            @NotNull
+            @Override
+            public MockResponse dispatch(@NotNull RecordedRequest request) {
+                String path = request.getPath() == null ? "" : request.getPath();
+                if (path.contains("reprt_code=11011")) {
+                    return json(fixture("annual-2025.json"));
+                }
+                if (path.contains("reprt_code=11014")) {
+                    // 같은 값을 별도(OFS)로만 실은 3분기 — 연결 대상이 연말에 생긴 꼴.
+                    return json(fixture("q3-2025.json").replaceAll("\"fs_div\" *: *\"CFS\"", "\"fs_div\": \"OFS\""));
+                }
+                return json(fixture("error-no-data.json"));
+            }
+        });
+        DataSourceProperties properties = new DataSourceProperties();
+        properties.getDart().setBaseUrl(server.url("/").toString());
+        properties.getDart().setApiKey("test-key");
+        DartFinancialAdapter gated = new DartFinancialAdapter(new ExternalApiClientFactory(), properties,
+                new TokenBucketRateLimiter("dart", 0, 0), DartDailyQuota.unlimited(),
+                new StubCorpCodeCache(Optional.of("00126380")), true);
+
+        RawFinancialReport q4 = findReport(gated.fetchReports(SAMSUNG, 2025).reports(), 2025, "Q4");
+        assertThat(q4.revenue()).as("손익은 안 낸다").isNull();
+        assertThat(q4.totalAssets()).as("잔액은 연말 잔액이라 그대로").isNotNull();
+        assertThat(findReport(newAdapter().fetchReports(SAMSUNG, 2025).reports(), 2025, "Q4").revenue())
+                .as("관문 꺼짐은 옛 출력 그대로").isNotNull();
+    }
+
     /** reprt_code에 따라 연간·3분기 fixture를 나눠 준다. 나머지 기간은 데이터 없음. */
     private void respondByReportCode() {
         server.setDispatcher(new Dispatcher() {

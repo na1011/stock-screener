@@ -60,7 +60,7 @@ class DartRecordedSweepTest {
                 : new TokenBucketRateLimiter("dart", Integer.MAX_VALUE / 2, 0);
         DartDailyQuota quota = new DartDailyQuota(mode == DartRecordedHttp.Mode.RECORD ? 18_000 : 0, Clock.systemDefaultZone());
         DartCorpCodeCache corpCodes = new DartCorpCodeCache(http, properties, limiter, quota);
-        DartFinancialAdapter summary = new DartFinancialAdapter(http, properties, limiter, quota, corpCodes);
+        DartFinancialAdapter summary = new DartFinancialAdapter(http, properties, limiter, quota, corpCodes, krGate);
         DartFullStatementAdapter full = new DartFullStatementAdapter(http, properties, limiter, quota, corpCodes, krGate);
         int from = Integer.parseInt(System.getenv().getOrDefault("DART_FROM", "2019"));
         int to = java.time.LocalDate.now().getYear();
@@ -101,7 +101,11 @@ class DartRecordedSweepTest {
             StringBuilder line = new StringBuilder(ticker).append('\t').append(source);
             for (RecordComponent c : RawFinancialReport.class.getRecordComponents()) {
                 Object v = c.getAccessor().invoke(r);
-                line.append('\t').append(v == null ? "" : v instanceof java.math.BigDecimal b ? b.toPlainString() : v.toString());
+                // 집합은 정렬해 찍는다 — 출력 순서가 실행마다 달라 전/후 diff가 거짓 변화를 낸다.
+                String text = v == null ? "" : v instanceof java.math.BigDecimal b ? b.toPlainString()
+                        : v instanceof java.util.Set<?> set ? new java.util.TreeSet<>(set.stream().map(String::valueOf).toList()).toString()
+                        : v.toString();
+                line.append('\t').append(text);
             }
             out.println(line);
         }

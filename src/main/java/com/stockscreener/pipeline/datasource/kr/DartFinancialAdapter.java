@@ -58,12 +58,26 @@ public class DartFinancialAdapter implements FinancialDataSource {
     private final DartDailyQuota dailyQuota;
     private final DartCorpCodeCache corpCodes;
     private final String apiKey;
+    /** 국내 관문(`stockscreener.gate.kr`) — 켜면 4분기를 FY와 3분기 누계가 같은 재무제표 기저(연결 · 별도)일 때만 짓는다. */
+    private final boolean krGate;
 
+    /** 국내 관문 꺼짐 — 시험이 쓴다. */
+    public DartFinancialAdapter(ExternalApiClientFactory clientFactory,
+                                DataSourceProperties properties,
+                                RateLimiter rateLimiter,
+                                DartDailyQuota dailyQuota,
+                                DartCorpCodeCache corpCodes) {
+        this(clientFactory, properties, rateLimiter, dailyQuota, corpCodes, false);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
     public DartFinancialAdapter(ExternalApiClientFactory clientFactory,
                                 DataSourceProperties properties,
                                 @Qualifier("dartRateLimiter") RateLimiter rateLimiter,
                                 DartDailyQuota dailyQuota,
-                                DartCorpCodeCache corpCodes) {
+                                DartCorpCodeCache corpCodes,
+                                @org.springframework.beans.factory.annotation.Value("${stockscreener.gate.kr}") boolean krGate) {
+        this.krGate = krGate;
         DataSourceProperties.Source source = properties.getDart();
         this.client = clientFactory.create(source);
         this.rateLimiter = rateLimiter;
@@ -257,7 +271,10 @@ public class DartFinancialAdapter implements FinancialDataSource {
         String annualCurrency = singleCurrency(annual.rows());
         boolean subtractable = annualCurrency != null
                 && annualCurrency.equals(singleCurrency(thirdQuarter.rows()))
-                && samePeriodTerm(annual.rows(), thirdQuarter.rows());
+                && samePeriodTerm(annual.rows(), thirdQuarter.rows())
+                // 국내 관문 켬: 연결 FY − 별도 3분기 누계는 뜻이 없다 — 그 해 안에서 연결 대상이 생기거나 없어진 회사(편입 350 × 2019~ 녹화 26
+                // (종목, 연도) · 23종목 · 예 「별도 1~3분기 · 연결 FY」). 그 해의 연결 3분기 누계를 원장이 안 주므로 4분기 유량은 미표시다.
+                && (!krGate || annual.fsDiv().equals(thirdQuarter.fsDiv()));
 
         return Optional.of(new RawFinancialReport(
                 year, "Q4",
