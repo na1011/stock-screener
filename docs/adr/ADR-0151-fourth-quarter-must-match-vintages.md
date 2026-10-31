@@ -55,25 +55,33 @@ applies_to:
 둘째 시험은 **음수 매출을 그대로 내는 것**을 단언한다.
 
 ```premise 유도된 4분기가 FY 판의 공시일에 찍혀 있다
-psql -d stock_screener -At -c "SELECT CASE
-  WHEN count(*) = 0 THEN '잴 것이 없었다 — 미국 4분기 행이 없다'
-  WHEN count(*) FILTER (WHERE NOT EXISTS (
-    SELECT 1 FROM financial_statement y WHERE y.stock_id = q.stock_id
-      AND y.fiscal_year = q.fiscal_year AND y.fiscal_period = 'FY'
-      AND y.published_at = q.published_at)) <= 60 THEN 'OK 세대가 맞는 4분기 ' || count(*) || '행'
-  ELSE 'FY 판의 공시일과 맞지 않는 4분기가 ' || count(*) FILTER (WHERE NOT EXISTS (
-    SELECT 1 FROM financial_statement y WHERE y.stock_id = q.stock_id
-      AND y.fiscal_year = q.fiscal_year AND y.fiscal_period = 'FY'
-      AND y.published_at = q.published_at)) || '행 — 유도가 세대를 안 따라갔거나 소스 Q4가 늘었다'
-  END FROM financial_statement q
+psql -d stock_screener -At -c "WITH q4 AS (
+  SELECT q.stock_id, q.fiscal_year, q.published_at, q.report_code FROM financial_statement q
   WHERE q.fiscal_period = 'Q4' AND q.stock_id IN (
     SELECT stock_id FROM universe_membership
-    WHERE universe_code = 'US_TOP1000' AND effective_to IS NULL)"
+    WHERE universe_code = 'US_TOP1000' AND effective_to IS NULL)),
+bad AS (
+  SELECT s.ticker || ' ' || q4.fiscal_year AS k FROM q4 JOIN stock s ON s.id = q4.stock_id
+  WHERE NOT EXISTS (SELECT 1 FROM financial_statement y WHERE y.stock_id = q4.stock_id
+      AND y.fiscal_year = q4.fiscal_year AND y.fiscal_period = 'FY' AND y.published_at = q4.published_at)
+    AND NOT EXISTS (SELECT 1 FROM financial_statement o WHERE o.stock_id = q4.stock_id
+      AND o.report_code = q4.report_code AND o.fiscal_year > q4.fiscal_year))
+SELECT CASE
+  WHEN (SELECT count(*) FROM q4) = 0 THEN '잴 것이 없었다 — 미국 4분기 행이 없다'
+  WHEN (SELECT count(*) FROM bad) = 0 THEN 'OK 세대가 맞는 4분기 ' || (SELECT count(*) FROM q4) || '행'
+  ELSE 'FY 판의 공시일과 맞지 않는 유도 4분기가 ' || (SELECT count(*) FROM bad) || '행 — 유도가 세대를 안 따라갔거나 라벨이 틀렸다: '
+       || (SELECT string_agg(k, ' · ' ORDER BY k) FROM (SELECT k FROM bad LIMIT 10) t)
+  END"
 ```
 
 **MUST: 이 펜스는 음수를 안 본다.** 음수는 정당할 수 있고(위 `KKR`), 이 결정이 막는 것은
-**세대 불일치**다. 재는 것은 **유도 4분기가 어느 FY 판의 공시일에 찍혀 있는가**이며, 기준선
-**54행**은 소스가 Q4를 직접 준 자리다(유도가 아니라 그쪽이 원인이므로 여유를 60으로 둔다).
+**세대 불일치**다. 재는 것은 **유도 4분기가 어느 FY 판의 공시일에 찍혀 있는가**다.
+
+**소스가 Q4를 직접 준 자리는 뺀다 — 다음 해 공시의 비교 열이다**(2026-10-31). `derived`가 DB 컬럼이 아니라
+유도와 소스를 직접 못 가르지만, 소스 Q4는 **그 행의 `report_code`가 더 늦은 회계연도 행에도 실린 공시**라는 꼴로
+가려진다 — 실측으로 어긋난 116행 중 115행이 그 꼴이었다(`CAH` 2016·`MDLZ` 2015와 같은 비교 열 · K3의 `6-K`·`10-K` 11건도).
+그래서 여유를 두지 않는다. 남은 1행은 `FERG` 2026 — 회계연도를 7월에서 12월 결산으로 바꾼 전환기에 10-Q의 4~6월 분기가
+`Q4`로 붙은 라벨 결함이다(유도 세대가 아니라 결산월 변경 축 · progress [A29]).
 
 **MUST: 모집단을 유지 대상으로 좁힌다.** 처음에 `market_code = 'US'`로 썼더니 **재적재가 닿지
 않는 미국 상장 8,504종목**까지 세었다. 범위 밖은 고칠 기제가 없어 **영구 RED**가 되고, 영구
