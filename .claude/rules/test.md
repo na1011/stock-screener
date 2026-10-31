@@ -25,6 +25,9 @@ paths:
   만들었다**). **값의 의미를 바꾸는 변경 뒤에는 `./gradlew clean build`를 한 번 돌린다** —
   좁힌 실행 열 번이 이 둘을 대신하지 못한다.
 
+- **MUST NOT: 시험에서 클러스터 전역 계수기(`pg_current_wal_insert_lsn` · `pg_stat_*`)의 차이를 0으로 단언하지 않는다.** 같은 클러스터에
+  운영 앱과 autovacuum이 있어 여유가 0이고, 재실행 초록이 그것을 가린다. 그 시험이 쓴 행의 판(`RowVersions` — ctid · xmin · xmax)으로 잰다.
+
 - **MockMvc는 `with(csrf())`가 없으면 403이다.** CSRF 지연 로딩을 꺼둔 결과다(`.claude/rules/backend.md`).
 
 **증상이 설정 쪽이면 `.claude/rules/config.md`를 본다.** 커넥션 풀·`out-of-order`·Flyway 체크섬·`.env` 주입 금지가 거기 있다. 그 파일을 열면 자동으로 로드되지만, **진단은 대개 그 파일을 열기 전에 시작된다.**
