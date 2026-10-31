@@ -354,31 +354,50 @@ public class DartFinancialAdapter implements FinancialDataSource {
         if (rows == null || reports == null || reports.isEmpty()) {
             return List.of();
         }
-        PeriodRows first = rows.get("Q1");
-        PeriodRows half = rows.get("Q2");
-        PeriodRows third = rows.get("Q3");
-        PeriodRows nextFirst = next.get("Q1");
-        String basis = first != null ? first.fsDiv() : null;
-        java.util.function.Predicate<PeriodRows> same = r -> r != null && basis != null && basis.equals(r.fsDiv())
-                && singleCurrency(r.rows()) != null && singleCurrency(r.rows()).equals(singleCurrency(first.rows()));
+        PeriodRows reference = java.util.stream.Stream.of("Q1", "Q2", "Q3", "FY").map(rows::get).filter(java.util.Objects::nonNull)
+                .findFirst().orElse(null);
+        if (reference == null) {
+            return List.of();
+        }
+        String currency = singleCurrency(reference.rows());
+        // 같은 연결 기저(CFS/OFS) · 같은 통화의 보고서끼리만 잰다 — 기저 전환은 다른 축이다.
+        java.util.function.Function<PeriodRows, PeriodRows> same = r -> r != null && reference.fsDiv().equals(r.fsDiv())
+                && currency != null && currency.equals(singleCurrency(r.rows())) ? r : null;
+        PeriodRows q1 = same.apply(rows.get("Q1"));
+        PeriodRows h1 = same.apply(rows.get("Q2"));
+        PeriodRows q3 = same.apply(rows.get("Q3"));
+        PeriodRows fy = same.apply(rows.get("FY"));
+        PeriodRows nq1 = same.apply(next.get("Q1"));
+        PeriodRows nh1 = same.apply(next.get("Q2"));
+        PeriodRows nq3 = same.apply(next.get("Q3"));
+        PeriodRows nfy = same.apply(next.get("FY"));
         Map<String, DartFlowBasis.Values> values = new LinkedHashMap<>();
         for (Map.Entry<String, Set<String>> e : FLOW_COLUMNS.entrySet()) {
             Set<String> c = e.getValue();
             values.put(e.getKey(), new DartFlowBasis.Values(
-                    first == null ? null : field(first, c, "thstrm_amount"),
-                    same.test(half) ? field(half, c, "thstrm_amount") : null,
-                    same.test(half) ? field(half, c, "thstrm_add_amount") : null,
-                    same.test(third) ? field(third, c, "thstrm_amount") : null,
-                    same.test(third) ? field(third, c, "thstrm_add_amount") : null,
-                    same.test(nextFirst) ? field(nextFirst, c, "frmtrm_amount") : null));
+                    field(q1, c, "thstrm_amount"), field(h1, c, "thstrm_amount"), field(h1, c, "thstrm_add_amount"),
+                    field(q3, c, "thstrm_amount"), field(q3, c, "thstrm_add_amount"), field(fy, c, "thstrm_amount"),
+                    // 1분기 보고서는 3개월이 곧 누계다 — 전기 3개월 칸을 비우고 누계 칸에만 실은 보고서가 있다(같은 양).
+                    firstOf(field(nq1, c, "frmtrm_amount"), field(nq1, c, "frmtrm_add_amount")),
+                    field(nh1, c, "frmtrm_amount"), field(nh1, c, "frmtrm_add_amount"),
+                    field(nq3, c, "frmtrm_amount"), field(nq3, c, "frmtrm_add_amount"), field(nfy, c, "frmtrm_amount")));
         }
         DartFlowBasis.Dates dates = new DartFlowBasis.Dates(published(reports.get("Q1")), published(reports.get("Q2")),
-                published(reports.get("Q3")), nextFirst == null ? null : publishedAt(nextFirst.rows().get(0), year + 1));
+                published(reports.get("Q3")), published(reports.get("FY")), filed(nq1, year + 1), filed(nh1, year + 1),
+                filed(nq3, year + 1), filed(nfy, year + 1));
         return DartFlowBasis.bases(year, reports, FLOW_COLUMNS.keySet(), DartFlowBasis.judge(values, dates));
     }
 
+    private static BigDecimal firstOf(BigDecimal a, BigDecimal b) {
+        return a != null ? a : b;
+    }
+
+    private static LocalDate filed(PeriodRows rows, int year) {
+        return rows == null ? null : publishedAt(rows.rows().get(0), year);
+    }
+
     private static BigDecimal field(PeriodRows rows, Set<String> candidates, String field) {
-        return DartAccountMapper.findField(filterBy(rows.rows(), DartAccountMapper.SJ_INCOME), candidates, field);
+        return rows == null ? null : DartAccountMapper.findField(filterBy(rows.rows(), DartAccountMapper.SJ_INCOME), candidates, field);
     }
 
     private static LocalDate published(RawFinancialReport report) {

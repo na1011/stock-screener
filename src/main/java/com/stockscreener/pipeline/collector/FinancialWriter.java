@@ -202,8 +202,9 @@ public class FinancialWriter {
 
     /**
      * <b>손익 칸 기저 판정을 그 공시일의 행에 싣는다</b>(국내 관문 켬 · 재고 A6 · {@link com.stockscreener.pipeline.datasource.FlowBasis}).
-     * 쓰기 모드와 무관하다 — 값이 아니라 그 행의 칸이 언제부터 낡았는가라는 속성이고, 판정한 칸만 다시 지어 다음 판정이 대체를 안 내면
-     * 지운다(회수). 그 공시일의 행이 없으면 아무것도 안 한다(판정은 저장된 판에 붙는다).
+     * 쓰기 모드와 무관하다 — 값이 아니라 그 기간의 칸이 언제부터 낡았는가라는 속성이고, 판정한 칸만 다시 지어 다음 판정이 대체를 안 내면
+     * 지운다(회수). <b>그 기간의 판 전부</b>에 싣는다 — 대체는 판이 아니라 기간의 사실이고, 봉은 판 이력에서 그날의 판을 고르므로 한 판에만
+     * 실으면 대체일 ~ 그 판 공시일 사이 봉이 속성 없는 옛 판을 본다(반증 · 22기 · 전부 4분기).
      *
      * @return 고친 행 수
      */
@@ -222,10 +223,10 @@ public class FinancialWriter {
             changed += jdbcTemplate.update("""
                     UPDATE financial_statement
                        SET flow_superseded = nullif((coalesce(flow_superseded, '{}'::jsonb) - ?::text[]) || ?::jsonb, '{}'::jsonb)
-                     WHERE stock_id = ? AND fiscal_year = ? AND fiscal_period = ? AND published_at = ?
+                     WHERE stock_id = ? AND fiscal_year = ? AND fiscal_period = ?
                        AND flow_superseded IS DISTINCT FROM nullif((coalesce(flow_superseded, '{}'::jsonb) - ?::text[]) || ?::jsonb,
                                                                   '{}'::jsonb)
-                    """, judged, json.toString(), stockId, b.fiscalYear(), b.fiscalPeriod(), b.publishedAt(), judged, json.toString());
+                    """, judged, json.toString(), stockId, b.fiscalYear(), b.fiscalPeriod(), judged, json.toString());
         }
         return changed;
     }

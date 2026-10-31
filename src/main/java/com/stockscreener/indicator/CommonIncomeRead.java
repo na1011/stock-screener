@@ -51,6 +51,15 @@ public record CommonIncomeRead(BigDecimal value, String basis, String branch, Bi
         return equityBranch != null && nonCommon != null;
     }
 
+    /**
+     * 손익 몫을 비운 사본 — 그 기간 손익 칸의 기저가 대체된 봉({@code FinancialFigures.asSeenOn} · 재고 A6). 갈래는 「못 정함」으로 바꿔 지배 NI
+     * 갈래(배분 0)로 내려가지 않게 하고, 자본 재료는 잔액이라 그대로 둔다.
+     */
+    public CommonIncomeRead withoutIncome() {
+        return new CommonIncomeRead(null, basis, "none:superseded", null, payoutDeclared, nonCommon, ncavNonCommon, equityBranch,
+                equityRead, commonFraction);
+    }
+
     /** 보통주 몫 — 미국은 1(우선주는 {@link #nonCommon}이 장부가로 뺀다). */
     public BigDecimal fraction() {
         return commonFraction == null ? BigDecimal.ONE : commonFraction;

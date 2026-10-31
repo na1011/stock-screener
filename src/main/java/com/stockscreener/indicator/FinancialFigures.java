@@ -197,11 +197,11 @@ public record FinancialFigures(
             LocalDate since = flowsSupersededOn.get(column);
             return since != null && !since.isAfter(day);
         };
-        // 순이익과 지배주주 순이익은 같은 재작성을 탄다 — 한쪽만 비우면 창 단위 연결 폴백(FinancialMath.sumControllingContinuingIncome)이
-        // 지배 계열을 연결 계속영업으로 떨어뜨린다(F2b MUST NOT). 둘 중 하나가 낡으면 둘 다 모른다.
-        boolean income = stale.test("net_income") || stale.test("net_income_controlling");
-        java.util.function.Predicate<String> gone = column -> "net_income".equals(column) || "net_income_controlling".equals(column)
-                ? income : stale.test(column);
+        // 순이익 · 지배주주 순이익 · 중단영업 둘은 같은 재작성을 탄다 — 한쪽만 비우면 창 단위 연결 폴백(FinancialMath.sumControllingContinuingIncome)이
+        // 지배 계열을 연결 계속영업으로 떨어뜨리거나(F2b MUST NOT) 계속영업이 옛 중단 몫을 뺀다. 넷 중 하나가 낡으면 넷 다 모르고, 보통주 몫 엔진의
+        // 손익 몫(주당 지표 분자 · 배당성향 분모)도 같은 기간 손익이라 함께 모른다 — 자본 재료(신종자본증권 · 보통주 몫)는 잔액이라 그대로다.
+        boolean income = INCOME_GROUP.stream().anyMatch(stale);
+        java.util.function.Predicate<String> gone = column -> INCOME_GROUP.contains(column) ? income : stale.test(column);
         if (flowsSupersededOn.keySet().stream().noneMatch(stale)) {
             return this;
         }
@@ -213,9 +213,14 @@ public record FinancialFigures(
                 gone.test("net_income_controlling") ? null : netIncomeControlling, interestAndDividendIncome, noninterestIncome,
                 interestExpense, noninterestExpense, benefitsLossesAndExpenses, gone.test("gross_profit") ? null : grossProfit,
                 operatingExpenses, costsAndExpenses, incomeTaxExpense, profitBeforeTax, shareBasisMultiple, shareBasisStatus,
-                shareClassState, weightedShares, weightedSharesJudged, discontinuedIncome, discontinuedIncomeControlling,
-                discontinuedRule, common, flowsSupersededOn);
+                shareClassState, weightedShares, weightedSharesJudged, income ? null : discontinuedIncome,
+                income ? null : discontinuedIncomeControlling, discontinuedRule, income && common != null ? common.withoutIncome() : common,
+                flowsSupersededOn);
     }
+
+    /** 함께 낡는 손익 칸(DB 컬럼명) — {@link #asSeenOn}. */
+    private static final java.util.Set<String> INCOME_GROUP = java.util.Set.of(
+            "net_income", "net_income_controlling", "discontinued_income", "discontinued_income_controlling");
 
     /**
      * <b>계속영업 순이익(연결).</b> 순이익에서 중단영업을 뺀다 — 중단영업은 정의상(ASC 205-20 · K-IFRS 1105) 이어지지 않는

@@ -94,6 +94,14 @@ class CommonEquityBasisTest {
                 .asSeenOn(LocalDate.of(2026, 6, 1));
         assertThat(controlling.netIncomeControlling()).isNull();
         assertThat(controlling.netIncome()).as("한쪽만 비우면 연결 폴백이 기저를 바꾼다").isNull();
+
+        // 국내 관문 켬 행 — 주당 지표 분자는 보통주 몫 엔진의 값이다. 손익 칸이 낡으면 그 몫도 함께 모른다(자본 재료는 그대로).
+        FinancialFigures kr = FinancialFiguresFixture.annual(END).netIncome(new BigDecimal("10")).netIncomeControlling(new BigDecimal("8"))
+                .krCommon(new BigDecimal("8"), "T", "kr-ni", new BigDecimal("8"))
+                .flowsSupersededOn(java.util.Map.of("net_income", LocalDate.of(2026, 5, 15))).build()
+                .asSeenOn(LocalDate.of(2026, 6, 1));
+        assertThat(kr.commonContinuingIncome()).isNull();
+        assertThat(kr.common().payoutBase()).isNull();
     }
 
     @Test

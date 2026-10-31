@@ -485,19 +485,26 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
                 discontinuedAbsence(q4.assertedAbsent(), consolidated, controlling));
     }
 
-    /** 전체 재무제표 어댑터가 재는 손익 계정(재고 A6) — DB 컬럼명 → 표준계정 ID. 싣는 칸은 매출원가 · 지배주주 순이익(순이익 판정을 따른다)뿐이다. */
+    /**
+     * 전체 재무제표 어댑터가 싣는 손익 칸(재고 A6 · ADR-0200) — DB 컬럼명 → 표준계정 ID. 매출 · 영업이익 · 순이익은 주요계정 어댑터가 싣는다
+     * (칸마다 주인 하나). 지배주주 순이익은 표준 줄이 있으면 그 값으로, 없으면 이 소스의 순이익 판정을 따른다.
+     */
     private static final Map<String, java.util.Set<String>> FLOW_COLUMNS = new java.util.LinkedHashMap<>();
 
     static {
-        FLOW_COLUMNS.put("revenue", DartFullAccountMapper.ID_REVENUE);
-        FLOW_COLUMNS.put("operating_income", DartFullAccountMapper.ID_OPERATING_INCOME);
-        FLOW_COLUMNS.put("net_income", DartFullAccountMapper.ID_NET_INCOME);
         FLOW_COLUMNS.put("cost_of_sales", DartFullAccountMapper.ID_COST_OF_SALES);
+        FLOW_COLUMNS.put("net_income_controlling", DartFullAccountMapper.ID_NET_INCOME_CONTROLLING);
+        FLOW_COLUMNS.put("discontinued_income", DartFullAccountMapper.ID_DISCONTINUED);
+        FLOW_COLUMNS.put("discontinued_income_controlling", DartFullAccountMapper.ID_DISCONTINUED_CONTROLLING);
+        FLOW_COLUMNS.put("net_income", DartFullAccountMapper.ID_NET_INCOME);
     }
 
+    /** 중단영업 칸 — 손익 행이 온 보고서에 줄이 없으면 0으로 읽는다(F2b와 같은 판정 · 중단영업은 대개 0에서 생긴다). */
+    private static final java.util.Set<String> ZERO_WHEN_ABSENT = java.util.Set.of("discontinued_income", "discontinued_income_controlling");
+
     /**
-     * 국내 관문 켬(재고 A6): 그 해 분기 손익의 기저 판정 — 주요계정 어댑터와 같은 규칙({@link DartFlowBasis}). 같은 연결 기저(CFS/OFS)의
-     * 보고서끼리만 잰다. 지배주주 순이익은 순이익과 같은 재작성을 탄다(그 칸의 누계를 따로 지을 갈래가 넷이라 같은 재료로 다시 재지 않는다).
+     * 국내 관문 켬(재고 A6): 그 해 손익의 기저 판정 — 주요계정 어댑터와 같은 규칙({@link DartFlowBasis}). 같은 연결 기저(CFS/OFS)의
+     * 보고서끼리만 잰다.
      */
     static List<com.stockscreener.pipeline.datasource.FlowBasis> flowBases(int year, Map<StatementPeriod, Pending> pending,
                                                                            Map<StatementPeriod, Pending> next,
@@ -505,46 +512,78 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
         if (pending == null || reports == null || reports.isEmpty()) {
             return List.of();
         }
-        Pending first = pending.get(StatementPeriod.Q1);
-        Pending half = pending.get(StatementPeriod.Q2);
-        Pending third = pending.get(StatementPeriod.Q3);
-        Pending nextFirst = next.get(StatementPeriod.Q1);
-        java.util.function.Predicate<Pending> same = p -> p != null && first != null && p.consolidated() == first.consolidated();
+        Pending reference = java.util.stream.Stream.of(StatementPeriod.Q1, StatementPeriod.Q2, StatementPeriod.Q3, StatementPeriod.FY)
+                .map(pending::get).filter(java.util.Objects::nonNull).findFirst().orElse(null);
+        if (reference == null) {
+            return List.of();
+        }
+        java.util.function.Function<Pending, Pending> same = p -> p != null && p.consolidated() == reference.consolidated() ? p : null;
+        Pending q1 = same.apply(pending.get(StatementPeriod.Q1));
+        Pending h1 = same.apply(pending.get(StatementPeriod.Q2));
+        Pending q3 = same.apply(pending.get(StatementPeriod.Q3));
+        Pending fy = same.apply(pending.get(StatementPeriod.FY));
+        Pending nq1 = same.apply(next.get(StatementPeriod.Q1));
+        Pending nh1 = same.apply(next.get(StatementPeriod.Q2));
+        Pending nq3 = same.apply(next.get(StatementPeriod.Q3));
+        Pending nfy = same.apply(next.get(StatementPeriod.FY));
         Map<String, DartFlowBasis.Values> values = new java.util.LinkedHashMap<>();
         for (Map.Entry<String, java.util.Set<String>> e : FLOW_COLUMNS.entrySet()) {
             java.util.Set<String> ids = e.getValue();
+            boolean zero = ZERO_WHEN_ABSENT.contains(e.getKey());
             values.put(e.getKey(), new DartFlowBasis.Values(
-                    first == null ? null : amount(first, ids, "thstrm_amount"),
-                    same.test(half) ? amount(half, ids, "thstrm_amount") : null,
-                    same.test(half) ? amount(half, ids, "thstrm_add_amount") : null,
-                    same.test(third) ? amount(third, ids, "thstrm_amount") : null,
-                    same.test(third) ? amount(third, ids, "thstrm_add_amount") : null,
-                    // 전체 재무제표 분기 손익의 전기 3개월 칸은 frmtrm_q_amount다(frmtrm_amount는 비어 있다 — 주요계정과 다르다).
-                    same.test(nextFirst) ? amount(nextFirst, ids, "frmtrm_q_amount") : null));
+                    amount(q1, ids, "thstrm_amount", zero), amount(h1, ids, "thstrm_amount", zero),
+                    amount(h1, ids, "thstrm_add_amount", zero), amount(q3, ids, "thstrm_amount", zero),
+                    amount(q3, ids, "thstrm_add_amount", zero), amount(fy, ids, "thstrm_amount", zero),
+                    // 전체 재무제표 분기 손익의 전기 3개월 칸은 frmtrm_q_amount다(frmtrm_amount는 비어 있다 — 주요계정과 다르다). 1분기는 3개월 = 누계.
+                    firstOf(amount(nq1, ids, "frmtrm_q_amount", zero), amount(nq1, ids, "frmtrm_add_amount", zero)),
+                    amount(nh1, ids, "frmtrm_q_amount", zero), amount(nh1, ids, "frmtrm_add_amount", zero),
+                    amount(nq3, ids, "frmtrm_q_amount", zero), amount(nq3, ids, "frmtrm_add_amount", zero),
+                    amount(nfy, ids, "frmtrm_amount", zero)));
         }
         DartFlowBasis.Dates dates = new DartFlowBasis.Dates(published(reports.get("Q1")), published(reports.get("Q2")),
-                published(reports.get("Q3")), nextFirst == null ? null : DartReportPeriods.publishedAt(nextFirst.list().get(0), year + 1));
+                published(reports.get("Q3")), published(reports.get("FY")), filed(nq1, year + 1), filed(nh1, year + 1),
+                filed(nq3, year + 1), filed(nfy, year + 1));
         Map<String, Map<String, java.time.LocalDate>> verdict = DartFlowBasis.judge(values, dates);
-        // 칸마다 주인 하나 — 매출 · 영업이익 · 순이익은 주요계정 어댑터가 싣는다(두 잡이 같은 칸을 번갈아 덮지 않게). 여기는 이 소스에만 있는
-        // 매출원가와, 이 소스의 순이익 판정을 따르는 지배주주 순이익이다.
+        // 지배주주 순이익 표준 줄이 그 해 판에 없으면(지배 몫을 비표준 줄 · 계속 + 중단으로 지은 판) 이 소스의 순이익 판정을 따른다. 순이익 칸
+        // 자체는 주요계정 어댑터가 싣는다.
+        boolean ownControlling = values.get("net_income_controlling").q1() != null || values.get("net_income_controlling").fy() != null;
         Map<String, Map<String, java.time.LocalDate>> owned = new java.util.HashMap<>();
         verdict.forEach((label, byColumn) -> {
-            Map<String, java.time.LocalDate> mine = new java.util.HashMap<>();
-            if (byColumn.containsKey("cost_of_sales")) {
-                mine.put("cost_of_sales", byColumn.get("cost_of_sales"));
-            }
-            if (byColumn.containsKey("net_income")) {
-                mine.put("net_income_controlling", byColumn.get("net_income"));
+            Map<String, java.time.LocalDate> mine = new java.util.HashMap<>(byColumn);
+            java.time.LocalDate income = mine.remove("net_income");
+            if (!ownControlling) {
+                mine.remove("net_income_controlling");
+                if (income != null) {
+                    mine.put("net_income_controlling", income);
+                }
             }
             if (!mine.isEmpty()) {
                 owned.put(label, mine);
             }
         });
-        return DartFlowBasis.bases(year, reports, java.util.Set.of("cost_of_sales", "net_income_controlling"), owned);
+        java.util.Set<String> judged = new java.util.LinkedHashSet<>(FLOW_COLUMNS.keySet());
+        judged.remove("net_income");
+        return DartFlowBasis.bases(year, reports, judged, owned);
     }
 
-    private static BigDecimal amount(Pending p, java.util.Set<String> ids, String field) {
-        return DartFullAccountMapper.findBy(incomeOf(p.list()), ids, "account_id", field);
+    private static BigDecimal amount(Pending p, java.util.Set<String> ids, String field, boolean zeroWhenAbsent) {
+        if (p == null) {
+            return null;
+        }
+        List<JsonNode> income = incomeOf(p.list());
+        BigDecimal v = DartFullAccountMapper.findBy(income, ids, "account_id", field);
+        if (v == null && zeroWhenAbsent && !income.isEmpty() && income.stream().noneMatch(r -> ids.contains(r.path("account_id").asString("")))) {
+            return BigDecimal.ZERO;
+        }
+        return v;
+    }
+
+    private static BigDecimal firstOf(BigDecimal a, BigDecimal b) {
+        return a != null ? a : b;
+    }
+
+    private static java.time.LocalDate filed(Pending p, int year) {
+        return p == null ? null : DartReportPeriods.publishedAt(p.list().get(0), year);
     }
 
     private static List<JsonNode> incomeOf(JsonNode list) {
