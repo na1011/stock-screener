@@ -298,6 +298,7 @@ final class SecEdgarFacts {
         // 관문 켬: 수시보고서(8-K) 값은 정기 공시가 지은 라벨에 값만 댄다 — 구조 · 태그 선택은 정기 공시만으로 짓는다(CURRENT_FORMS).
         if (usGate) {
             keepRegistrantCurrentReports(byColumn);
+            impliedFirstQuarters(byColumn);
         }
         Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> periodic = usGate ? withForms(byColumn, false) : byColumn;
         Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> structure = withoutGated(periodic);
@@ -3068,9 +3069,11 @@ final class SecEdgarFacts {
                         ? sameGenerationAnnual(vintage, at, quarterEvent ? vintage.reportCode() : event.reportCode(),
                                 byLabel, label, quarterLabels, byColumn)
                         : vintage;
-                RawFinancialReport q4Report = mergeQ4(
-                        sourceQ4,
-                        buildQ4(label.fiscalYear(), vintageStart, annual, v1, v2, v3, byColumn, usGate), usGate);
+                RawFinancialReport residual = buildQ4(label.fiscalYear(), vintageStart, annual, v1, v2, v3, byColumn, usGate);
+                RawFinancialReport q4Report = mergeQ4(sourceQ4, residual, usGate);
+                if (usGate && sourceQ4 != null) {
+                    q4Report = withoutStaleSource(q4Report, residual, sourceQ4, byLabel, label, quarterLabels, at, byColumn);
+                }
                 // MUST: 값이 같은 4분기 판을 세대마다 다시 내지 않는다. FY 판이 늘면 잔차가
                 // 같아도 Q4 판이 그만큼 늘고, 저장은 그것을 **정정으로 읽어 지표를 지운다** —
                 // 쓰기는 0인데 무효화만 남는다. 실측: 접기를 고쳐 FY 판이 늘자 이 자리에서
@@ -3723,7 +3726,9 @@ final class SecEdgarFacts {
                         }
                         // 재작성 물결이 같아야 한다 — 대신된 판이 마지막으로 실린 날보다 앞서 다시 쓰인 값은 앞 물결이다(FMC 2016: 분기 셋은 2017 H&N
                         // 중단으로 다시 쓰였고 그 기준의 FY가 2019-02 10-K까지 실린 뒤 2019 8-K Livent 분리가 FY만 다시 써 Q4 원가 247.5).
-                        if (!m.original() && lastSuperseded != null && m.start().isBefore(lastSuperseded)) {
+                        // 같은 날도 앞 물결이다 — 분기 셋이 옛 FY가 마지막으로 실린 10-K 분기표에 섰으면 그 FY의 기준이다(AON 2015 · AES · SWK · HIG ·
+                        // VFC · BIO — 반증 2026-10-31).
+                        if (!m.original() && lastSuperseded != null && !m.start().isAfter(lastSuperseded)) {
                             return null;
                         }
                     }
@@ -3751,6 +3756,75 @@ final class SecEdgarFacts {
                 fy.incomeTaxExpense(), fy.profitBeforeTax(),
                 fy.derived(), fy.assertedAbsent(), fy.discontinuedIncome(), fy.discontinuedIncomeControlling(),
                 fy.discontinuedRule(), fy.sharesSuperseded());
+    }
+
+    /**
+     * 관문 켬 — <b>소스 4분기 값도 세대의 구성원이다.</b> 그 값을 실은 공시가 그 컬럼(FY와 분기 셋)의 마지막 재작성보다 앞서면 낡은 기준의 값이라 잔차가
+     * 대신한다 — 잔차가 새 세대로 섰을 때만(못 서면 소스 값을 둔다). 옛 10-K 분기표의 매출이 새 세대의 원가 · 총이익과 한 행에 앉던 꼴(ALV 2017 Q4 매출 2,729.2 · 함의 1분기로 새 기준이
+     * 선 뒤 · ALL 2017 · CPB · FLEX · KTOS · SLGN · TKR — 반증 2026-10-31)이다.
+     */
+    private static RawFinancialReport withoutStaleSource(RawFinancialReport merged, RawFinancialReport residual,
+                                                         RawFinancialReport source, Map<Label, List<RawFinancialReport>> byLabel,
+                                                         Label annualLabel, List<Label> quarterLabels, LocalDate at,
+                                                         Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn) {
+        List<Label> members = new ArrayList<>(quarterLabels);
+        members.add(annualLabel);
+        Map<String, List<SecEdgarColumn>> columnsByName = Map.of(
+                "revenue", List.of(SecEdgarColumn.REVENUE), "cost_of_sales", List.of(SecEdgarColumn.COST_OF_SALES),
+                "gross_profit", List.of(SecEdgarColumn.GROSS_PROFIT), "operating_income", List.of(SecEdgarColumn.OPERATING_INCOME));
+        Set<String> stale = new LinkedHashSet<>();
+        RawFinancialReport.RESIDUAL_FLOWS.forEach((column, value) -> {
+            if (value.apply(source) == null || !columnsByName.containsKey(column)) {
+                return;
+            }
+            LocalDate lastRewrite = null;
+            for (Label member : members) {
+                List<Run> runs = runs(byLabel.getOrDefault(member, List.of()), value, at, columnsByName.get(column), byColumn);
+                if (runs.size() > 1 && (lastRewrite == null || runs.getLast().start().isAfter(lastRewrite))) {
+                    lastRewrite = runs.getLast().start();
+                }
+            }
+            // 소스 판의 값은 이어받기로 앉은 것일 수 있다 — 그 값을 원 팩트가 마지막으로 실은 날로 잰다(ALV 2017 Q4 매출: 2019 10-K 판의 2,729.2는
+            // 2018 10-K에서 이어받은 값).
+            LocalDate presented = null;
+            Window q4 = new Window(source.periodStart(), source.periodEnd());
+            BigDecimal kept = value.apply(source);
+            for (SecEdgarColumn c : columnsByName.get(column)) {
+                for (Map<Slot, Fact> slots : byColumn.getOrDefault(c, Map.of()).values()) {
+                    for (Fact fact : slots.values()) {
+                        if (fact.value() != null && fact.end().equals(q4.end()) && startMatches(q4, fact.start(), fact.end())
+                                && !fact.filed().isAfter(at) && !rewritten(kept, fact.value())
+                                && (presented == null || fact.filed().isAfter(presented))) {
+                            presented = fact.filed();
+                        }
+                    }
+                }
+            }
+            LocalDate sourceDate = presented != null ? presented : source.publishedAt();
+            // 잔차가 새 세대로 섰을 때만 대신한다 — 아직 안 섰으면(분기 일부만 다시 쓰임) 낡은 소스 값은 그대로인 옛 FY와 짝이 맞는다(D 2019 · PNR
+            // 2017 — 비우면 TTM 창에서 매출 34,399라벨-일이 빈다).
+            if (lastRewrite != null && sourceDate.isBefore(lastRewrite) && value.apply(residual) != null) {
+                stale.add(column);
+            }
+        });
+        if (stale.isEmpty()) {
+            return merged;
+        }
+        java.util.function.Function<String, BigDecimal> pick = column ->
+                RawFinancialReport.RESIDUAL_FLOWS.get(column).apply(stale.contains(column) ? residual : merged);
+        Set<String> absent = merged.assertedAbsent();
+        return new RawFinancialReport(merged.fiscalYear(), merged.fiscalPeriod(), merged.periodStart(), merged.periodEnd(),
+                merged.publishedAt(), merged.reportCode(), merged.currencyCode(),
+                pick.apply("revenue"), pick.apply("operating_income"), merged.netIncome(),
+                merged.totalAssets(), merged.totalEquity(), merged.totalEquityControlling(), merged.totalLiabilities(),
+                merged.currentAssets(), merged.currentLiabilities(), merged.retainedEarnings(), merged.operatingCashFlow(),
+                merged.sharesOutstanding(), merged.eps(), merged.bps(), pick.apply("cost_of_sales"), merged.cashAndEquivalents(),
+                merged.capex(), merged.inventories(), merged.netIncomeControlling(),
+                merged.interestAndDividendIncome(), merged.noninterestIncome(), merged.interestExpense(),
+                merged.noninterestExpense(), merged.benefitsLossesAndExpenses(), pick.apply("gross_profit"),
+                merged.operatingExpenses(), merged.costsAndExpenses(), merged.incomeTaxExpense(), merged.profitBeforeTax(),
+                merged.derived(), absent.isEmpty() ? Set.of() : absent, merged.discontinuedIncome(),
+                merged.discontinuedIncomeControlling(), merged.discontinuedRule(), merged.sharesSuperseded());
     }
 
     /**
@@ -3811,6 +3885,133 @@ final class SecEdgarFacts {
             }
         }
         return true;
+    }
+
+    /**
+     * 관문 켬(P3b) — <b>10-Q가 같은 태그로 반기 누계와 2분기를 실으면 그 차가 그 공시가 말하는 1분기다.</b> 그 값이 그날까지 실린 같은 태그의 1분기와
+     * {@link #rewritten 1% 넘게 다르거나} 1분기가 없을 때만 그 공시의 1분기 팩트로 더한다(1% 안은 같은 세대 — 판을 안 늘린다).
+     *
+     * <p>뿌리: 다음 해 2분기 10-Q가 전년 반기 누계를 새 기준(매각 · 역합병)으로 다시 싣고 전년 1분기 3개월은 안 다시 실으면, 1분기가 옛 기준에 남아
+     * 그 해 4분기의 세대가 영영 안 선다(EW 2024 원가 385.6 대 함의 296.3 · BC 2019 매출 1,275.9 대 1,050.7 · KMB 2025 영업이익 769 대 631 · SMR ·
+     * SOUN 역합병). 0콜 실측(캐시 1,218 · 2015-06 뒤 반기 · 같은 태그): 1% 안 72,892 · 다름 729(219종목) · 1분기 없음 1,447(465종목).
+     * 3분기 누계는 앞 두 분기로 못 나누므로 쓰지 않는다. 주당 값은 더하지 않는다.
+     */
+    private static void impliedFirstQuarters(Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn) {
+        // 매출 · 원가 · 총이익은 그 공시의 함의 1분기 셋이 항등식(1%)을 닫을 때만 받는다 — 반기 누계에서 원가 개념만 바뀌면 함의 원가가 옛 매출 ·
+        // 총이익과 한 행에 앉는다(ALGM 2022 원가 94.0 → 75.9 · 매출 · 총이익 그대로).
+        Map<String, BigDecimal> lineImplied = new HashMap<>();
+        Map<SecEdgarColumn, Map<String, List<Fact>>> addedByColumn = new EnumMap<>(SecEdgarColumn.class);
+        byColumn.forEach((column, byTag) -> {
+            if (column.instant() || column.perShare() || column.annualOnly()) {
+                return;
+            }
+            byTag.forEach((tag, slots) -> {
+                if (tag.contains("AvailableToCommon")) {
+                    return;   // 보통주 몫은 2계급법 배분이라 기간끼리 더해지지 않는다(대조군 67행 중 53이 옛 값 확인 · MTSI · WSO.B · LUV).
+                }
+                Map<String, List<Fact>> byAccn = new LinkedHashMap<>();
+                List<Fact> firstQuarters = new ArrayList<>();
+                for (Fact fact : slots.values()) {
+                    if (fact.start() == null || fact.value() == null) {
+                        continue;
+                    }
+                    long days = ChronoUnit.DAYS.between(fact.start(), fact.end());
+                    if (isQuarterSpan(days)) {
+                        firstQuarters.add(fact);
+                    }
+                    if (fact.form().startsWith("10-Q")) {
+                        byAccn.computeIfAbsent(fact.accn(), a -> new ArrayList<>()).add(fact);
+                    }
+                }
+                List<Fact> added = new ArrayList<>();
+                byAccn.values().forEach(facts -> {
+                    for (Fact half : facts) {
+                        long days = ChronoUnit.DAYS.between(half.start(), half.end());
+                        if (days < 170 || days > 190) {
+                            continue;
+                        }
+                        Fact second = facts.stream().filter(q -> q.end().equals(half.end()) && q.start() != null
+                                && isQuarterSpan(ChronoUnit.DAYS.between(q.start(), q.end()))).findFirst().orElse(null);
+                        if (second == null) {
+                            continue;
+                        }
+                        LocalDate end = second.start().minusDays(1);
+                        if (facts.stream().anyMatch(q -> near(q.start(), half.start()) && near(q.end(), end))) {
+                            continue;   // 그 공시가 1분기를 직접 실었다 — 그 값이 이긴다.
+                        }
+                        BigDecimal implied = half.value().subtract(second.value());
+                        // 누계와 분기가 같은 부호인데 차가 반대 부호면 부분이 누계보다 크다 — 원장의 부호 오류다(BRKR · AXSM 이자비용 · TGTX 영업이익).
+                        if (half.value().signum() != 0 && half.value().signum() == second.value().signum()
+                                && implied.signum() == -half.value().signum()) {
+                            continue;
+                        }
+                        if (GROSS_MARGIN_LINE.contains(column)) {
+                            lineImplied.putIfAbsent(column + "|" + half.accn() + "|" + half.start() + "|" + end, implied);
+                        }
+                        Fact current = firstQuarters.stream()
+                                .filter(q -> near(q.start(), half.start()) && near(q.end(), end) && !q.filed().isAfter(half.filed()))
+                                .max(Comparator.comparing(Fact::filed)).orElse(null);
+                        // 반올림된 두 값의 차는 표기 단위만큼 흔들린다 — 그 안이면 같은 세대다(ALV 2022 지배순이익 83 대 함의 161 − 79 = 82가 판을 오갔다).
+                        if (current != null && (!rewritten(current.value(), implied)
+                                || current.value().subtract(implied).abs().compareTo(reportingUnit(half.value())
+                                        .max(reportingUnit(second.value())).max(reportingUnit(current.value()))) <= 0
+                                || implied.signum() != 0 && implied.signum() == -current.value().signum()
+                                        && !rewritten(current.value().abs(), implied.abs()))) {
+                            continue;
+                        }
+                        added.add(new Fact(half.accn(), half.start(), end, implied, half.filed(), half.form(),
+                                half.fiscalYear(), half.reportedPeriod(), half.unit()));
+                    }
+                });
+                addedByColumn.computeIfAbsent(column, c -> new LinkedHashMap<>()).put(tag, added);
+            });
+        });
+        addedByColumn.forEach((column, byTag) -> byTag.forEach((tag, added) -> {
+            Map<Slot, Fact> slots = byColumn.get(column).get(tag);
+            for (Fact fact : added) {
+                if (GROSS_MARGIN_LINE.contains(column)) {
+                    String suffix = "|" + fact.accn() + "|" + fact.start() + "|" + fact.end();
+                    // 그 발행사가 이 1분기 창에 실은 적 있는 매출 · 원가 · 총이익은 이 공시에서 모두 함의로 서야 한다 — 하나라도 안 서면 그 칸이 옛
+                    // 기준으로 이어받아져 한 행이 섞인다(BC 2018 Q1: 새 매출 967.0 · 원가 723.9 옆 옛 총이익 310.0).
+                    boolean complete = GROSS_MARGIN_LINE.stream().allMatch(c -> !reportedIn(byColumn, c, fact)
+                            || lineImplied.containsKey(c + suffix));
+                    BigDecimal rev = lineImplied.get(SecEdgarColumn.REVENUE + suffix);
+                    BigDecimal cost = lineImplied.get(SecEdgarColumn.COST_OF_SALES + suffix);
+                    BigDecimal gross = lineImplied.get(SecEdgarColumn.GROSS_PROFIT + suffix);
+                    boolean closes = rev == null || cost == null || gross == null || rev.signum() == 0
+                            || rev.subtract(cost).subtract(gross).abs().compareTo(rev.abs().multiply(new BigDecimal("0.01"))) <= 0;
+                    if (!complete || !closes) {
+                        continue;
+                    }
+                }
+                slots.put(new Slot(fact.accn(), fact.start(), fact.end()), fact);
+            }
+        }));
+    }
+
+    private static final Set<SecEdgarColumn> GROSS_MARGIN_LINE =
+            Set.of(SecEdgarColumn.REVENUE, SecEdgarColumn.COST_OF_SALES, SecEdgarColumn.GROSS_PROFIT);
+
+    /** 그 컬럼에 그 함의 팩트의 1분기 창(시작 · 끝 ±7일) 값이 어느 공시에든 실린 적 있는가. */
+    private static boolean reportedIn(Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn, SecEdgarColumn column, Fact window) {
+        for (Map<Slot, Fact> slots : byColumn.getOrDefault(column, Map.of()).values()) {
+            for (Fact fact : slots.values()) {
+                if (near(fact.start(), window.start()) && near(fact.end(), window.end())) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /** 값의 표기 단위 — 끝의 0으로 읽고 백만에서 자른다({@link #roundedFrom}과 같은 상한). */
+    private static BigDecimal reportingUnit(BigDecimal value) {
+        int scale = Math.max(value.stripTrailingZeros().scale(), -6);
+        return scale < 0 ? BigDecimal.ONE.movePointLeft(scale) : BigDecimal.ZERO;
+    }
+
+    private static boolean near(LocalDate a, LocalDate b) {
+        return a != null && b != null && Math.abs(ChronoUnit.DAYS.between(a, b)) <= START_TOLERANCE_DAYS;
     }
 
     /**
