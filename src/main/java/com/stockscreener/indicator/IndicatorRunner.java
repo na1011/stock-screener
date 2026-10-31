@@ -472,7 +472,7 @@ public class IndicatorRunner {
                 Map.of(),
                 // 실적 발표 공개일(ADR-0195). 빠뜨려도 컴파일되고, 빠지면 새 실적이 공개된 봉도 옛 분기 재무로 값이 나온다 —
                 // 그 값은 그럴듯해서 화면에서 안 드러난다.
-                reader.readEarningsReleaseDates(stockId, asOf)),
+                reader.readEarningsReleaseDates(stockId, asOf)).withGateOn(reader.gateOn(attributes.marketCode())),
                 attributes.financialCurrencyMismatched());
     }
 

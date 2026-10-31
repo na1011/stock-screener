@@ -683,6 +683,14 @@ public class IndicatorDataReader {
         };
     }
 
+    /** 그 시장의 재적재 관문이 켜졌는가 — 미국은 {@code stockscreener.gate.us}, 그 밖(국내)은 {@code gate.kr}. 시장을 모르면 꺼짐. */
+    public boolean gateOn(String marketCode) {
+        if (marketCode == null) {
+            return false;
+        }
+        return UsMarket.CODE.equals(marketCode) ? usGate : krGate;
+    }
+
     /** 종목의 시장 코드. 종목이 없으면 {@code null}이다. */
     private String marketOf(long stockId) {
         List<String> market = jdbcTemplate.queryForList("SELECT market_code FROM stock WHERE id = ?", String.class, stockId);

@@ -600,8 +600,9 @@ final class FinancialMath {
      * 재무는 옛 분기라, 값을 내면 그 봉의 재무 조건이 전부 어긋난 판정을 낸다. 비운 봉에는 행이 안 생기고 스크리닝은 「데이터 없음」이다.
      *
      * <p>MUST: 재무를 봉마다 읽는 루프({@link #byPublication} · {@link #bySegment} · {@code ValuationHistory})는 {@code visibleAt}을 직접
-     * 부르지 않고 이것을 부른다 — 하나라도 직접 부르면 그 계산기만 막힌 봉에 옛 분기 값을 낸다. 예외는 주식수만 읽는 계산기의 입구
-     * {@link #sharesBySegment} 하나다.
+     * 부르지 않고 이것을 부른다 — 하나라도 직접 부르면 그 계산기만 막힌 봉에 옛 분기 값을 낸다. 예외는 새 분기 발표로 낡지 않는 둘이다 —
+     * 주식수만 읽는 계산기의 입구 {@link #sharesBySegment}와, 거버넌스 값을 <b>연도를 명시해</b> 그해 FY 재무와 짝짓는
+     * {@code GovernanceMath.annualOf}(관문 켬).
      */
     static IndicatorContext financialsAt(IndicatorContext context, LocalDate barDate) {
         IndicatorContext visible = context.visibleAt(barDate);

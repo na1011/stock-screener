@@ -214,9 +214,15 @@ public final class GovernanceMath {
      *
      * <p>거버넌스 값을 재무로 나누는 지표가 <b>같은 해를 짝지어야</b> 하는 자리다 — 최신 재무를
      * 그냥 쓰면 배당성향의 분자가 FY2024인데 분모가 FY2025가 되고 값이 그럴듯하다.
+     *
+     * <p><b>관문 켬이면 그 봉 시점에 공시돼 있던 판을 짝짓는다</b>({@link IndicatorContext#visibleAt} — ADR-0128). 꺼짐은 실행 시점의
+     * 최신 판이라 과거 봉에 나중 정정 순이익이 실렸다(관문 재고 「`annualOf` 시점 위반」 — 미국 판마다 순이익이 다른 라벨 254·169 ·
+     * 국내 12·9). 값을 바꾸므로 관문 뒤에 둔다. 새 분기 발표로 막지 않는다 — 짝이 연도로 고정돼 새 분기가 그 해 FY를 낡게 하지 않는다
+     * ({@code FinancialMath.financialsAt}의 예외 · 주식수만 읽는 지표와 같은 근거).
      */
-    public static FinancialFigures annualOf(IndicatorContext context, int fiscalYear) {
-        for (FinancialFigures figures : context.annualFigures()) {
+    public static FinancialFigures annualOf(IndicatorContext context, int fiscalYear, LocalDate barDate) {
+        IndicatorContext source = context.gateOn() ? context.visibleAt(barDate) : context;
+        for (FinancialFigures figures : source.annualFigures()) {
             if (figures.fiscalYear() == fiscalYear
                     && figures.fiscalPeriod() == FinancialFigures.FiscalPeriod.FY) {
                 return figures;

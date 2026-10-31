@@ -31,6 +31,11 @@ public final class IndicatorContext {
     private final Map<String, NavigableMap<LocalDate, BigDecimal>> dependencies;
     /** 실적 발표가 공개된 날(오름차순 · ADR-0195) — 재무 기준보다 새 발표가 공개된 봉의 재무 지표를 막는 재료다. */
     private final List<LocalDate> earningsReleaseDates;
+    /**
+     * 이 종목 시장의 재적재 관문 설정(`stockscreener.gate.us`·`gate.kr`)이 켜졌는가 — 러너가 리더의 시장별 설정으로 채운다.
+     * 값을 바꾸는 계산기 변경을 관문 뒤에 두는 문이다(`CLAUDE.md` 「재적재·백필」). 기본은 꺼짐이고 사본이 그대로 잇는다.
+     */
+    private final boolean gateOn;
 
     public IndicatorContext(
             long stockId,
@@ -63,6 +68,24 @@ public final class IndicatorContext {
             List<GovernanceFigures> governanceFacts,
             Map<String, NavigableMap<LocalDate, BigDecimal>> dependencies,
             List<LocalDate> earningsReleaseDates) {
+        this(stockId, industryDivisionKey, priceBars, annualFigures, quarterlyFigures, shareAdjustments,
+                unadjustedActions, marketIndex, governanceFacts, dependencies, earningsReleaseDates, false);
+    }
+
+    private IndicatorContext(
+            long stockId,
+            String industryDivisionKey,
+            List<PriceBar> priceBars,
+            List<FinancialFigures> annualFigures,
+            List<FinancialFigures> quarterlyFigures,
+            List<ShareAdjustment> shareAdjustments,
+            List<LocalDate> unadjustedActions,
+            NavigableMap<LocalDate, BigDecimal> marketIndex,
+            List<GovernanceFigures> governanceFacts,
+            Map<String, NavigableMap<LocalDate, BigDecimal>> dependencies,
+            List<LocalDate> earningsReleaseDates,
+            boolean gateOn) {
+        this.gateOn = gateOn;
         this.earningsReleaseDates = earningsReleaseDates == null ? List.of()
                 : earningsReleaseDates.stream().distinct().sorted().toList();
         this.stockId = stockId;
@@ -119,7 +142,7 @@ public final class IndicatorContext {
             Map<String, NavigableMap<LocalDate, BigDecimal>> newDependencies) {
         return new IndicatorContext(stockId, industryDivisionKey, priceBars, annualRevisions,
                 quarterlyRevisions, shareAdjustments, unadjustedActions, marketIndex,
-                governanceFacts, newDependencies, earningsReleaseDates);
+                governanceFacts, newDependencies, earningsReleaseDates, gateOn);
     }
 
     public long stockId() {
@@ -163,7 +186,7 @@ public final class IndicatorContext {
                 publishedOnOrBefore(annualRevisions, tradeDate),
                 publishedOnOrBefore(quarterlyRevisions, tradeDate),
                 shareAdjustments, unadjustedActions, marketIndex, governanceFacts, dependencies,
-                earningsReleaseDates.stream().filter(d -> !d.isAfter(tradeDate)).toList());
+                earningsReleaseDates.stream().filter(d -> !d.isAfter(tradeDate)).toList(), gateOn);
     }
 
     /**
@@ -172,7 +195,19 @@ public final class IndicatorContext {
      */
     public IndicatorContext withoutFinancials() {
         return new IndicatorContext(stockId, industryDivisionKey, priceBars, List.of(), List.of(),
-                shareAdjustments, unadjustedActions, marketIndex, governanceFacts, dependencies, earningsReleaseDates);
+                shareAdjustments, unadjustedActions, marketIndex, governanceFacts, dependencies, earningsReleaseDates, gateOn);
+    }
+
+    /** 이 종목 시장의 재적재 관문이 켜졌는가({@link #gateOn} 필드). */
+    public boolean gateOn() {
+        return gateOn;
+    }
+
+    /** 관문 상태만 갈아끼운 사본. 러너가 종목의 시장으로 채우고, 시험이 켬 갈래를 돌릴 때 쓴다. */
+    public IndicatorContext withGateOn(boolean on) {
+        return new IndicatorContext(stockId, industryDivisionKey, priceBars, annualRevisions,
+                quarterlyRevisions, shareAdjustments, unadjustedActions, marketIndex,
+                governanceFacts, dependencies, earningsReleaseDates, on);
     }
 
     /** 실적 발표가 공개된 날(오름차순). */
@@ -184,7 +219,7 @@ public final class IndicatorContext {
     public IndicatorContext withEarningsReleaseDates(List<LocalDate> dates) {
         return new IndicatorContext(stockId, industryDivisionKey, priceBars, annualRevisions,
                 quarterlyRevisions, shareAdjustments, unadjustedActions, marketIndex,
-                governanceFacts, dependencies, dates);
+                governanceFacts, dependencies, dates, gateOn);
     }
 
     /**
@@ -404,7 +439,7 @@ public final class IndicatorContext {
     public IndicatorContext withGovernanceFacts(List<GovernanceFigures> newGovernanceFacts) {
         return new IndicatorContext(stockId, industryDivisionKey, priceBars, annualRevisions,
                 quarterlyRevisions, shareAdjustments, unadjustedActions, marketIndex,
-                newGovernanceFacts, dependencies, earningsReleaseDates);
+                newGovernanceFacts, dependencies, earningsReleaseDates, gateOn);
     }
 
     /** 계산 대상 날짜들(시세 기준, 오름차순). */
@@ -427,6 +462,6 @@ public final class IndicatorContext {
     public IndicatorContext withMarketIndex(NavigableMap<LocalDate, BigDecimal> newMarketIndex) {
         return new IndicatorContext(stockId, industryDivisionKey, priceBars, annualRevisions,
                 quarterlyRevisions, shareAdjustments, unadjustedActions, newMarketIndex,
-                governanceFacts, dependencies, earningsReleaseDates);
+                governanceFacts, dependencies, earningsReleaseDates, gateOn);
     }
 }

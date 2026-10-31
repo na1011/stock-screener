@@ -72,7 +72,7 @@ public class DividendPayoutCalculator implements IndicatorCalculator {
         return GovernanceMath.overBars(context, GovernanceMetric.CASH_DIVIDEND_TOTAL,
                 (figures, bar) -> {
                     FinancialFigures annual =
-                            GovernanceMath.annualOf(context, figures.fiscalYear());
+                            GovernanceMath.annualOf(context, figures.fiscalYear(), bar.tradeDate());
                     if (annual == null) {
                         return null;
                     }
