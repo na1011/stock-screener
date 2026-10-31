@@ -275,6 +275,8 @@ final class SecEdgarFacts {
             facts = frame.facts();
         }
         Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn = collect(facts, usGate, issuer.sic());
+        // K8 — 걸러진 (공시 · 기말)은 4분기 유도의 재작성 가드가 「그 공시가 분기를 냈다」로 다시 읽는다(deriveFourthQuarters).
+        Set<String> quarterContextDropped = usGate ? dropAnnualQuarterContextCarryingTheYear(byColumn) : Set.of();
         // 옛 추출 값(sharesSuperseded)은 판정 전 사실로 센다 — 옛 규칙이 실제로 고른 것은 단위가 틀린 그 표지다.
         Map<String, Map<Slot, Fact>> sharesAsFiled = new LinkedHashMap<>(byColumn.get(SecEdgarColumn.SHARES_OUTSTANDING));
         if (usGate) {
@@ -306,7 +308,7 @@ final class SecEdgarFacts {
                     byColumn, anchors, tags, withheld, usGate));
         }
         List<RawFinancialReport> fourthQuarters =
-                deriveFourthQuarters(reports, windows, fromFiscalYear, byColumn, usGate);
+                deriveFourthQuarters(reports, windows, fromFiscalYear, byColumn, usGate, quarterContextDropped);
         // MUST: 같은 (회계연도, 기간, 공시일)이면 **병합본이 소스 판을 대체한다.**
         // mergeQ4가 소스 값을 그대로 얹으므로 병합본은 소스 판의 상위집합이고, 둘을 함께 두면
         // 저장이 같은 키에 두 번 써서 **무효화만 남는다.**
@@ -473,7 +475,6 @@ final class SecEdgarFacts {
         if (usGate) {
             keepPartnersEquityOnBalanceSheets(byColumn);
             dropInterimAnnualEqualToShorter(byColumn);
-            dropAnnualQuarterContextCarryingTheYear(byColumn);
         }
         return byColumn;
     }
@@ -1020,65 +1021,116 @@ final class SecEdgarFacts {
     }
 
     /**
-     * 관문 켬(P2 v2 · K8) — 연차보고서가 <b>3개월 문맥에 그 해 12개월 값</b>을 실으면 그 공시의 그 분기 문맥을 <b>행 단위로</b> 읽지 않는다.
-     * 그러면 Q4는 FY − 9개월 누계로 유도된다(유도할 재료가 없으면 빈다 — 미표시).
+     * 관문 켬(P2 v2 · K8 · R2) — 연차보고서가 <b>3개월 문맥에 그 해 12개월 값</b>을 실은 칸을 <b>컬럼 단위로</b> 바로잡는다. 증인은 그 해 9개월 누계(같은
+     * 컬럼의 어느 후보 태그든 · 그 공시 앞에 제출)다 — 9개월 동안 실적이 있었는데 4분기 하나가 한 해 전체일 수 없다.
+     * <ul>
+     *   <li><b>그 공시가 그 컬럼의 FY를 냈다</b>: 3개월 값이 FY와 0.1% 같고 9개월 누계가 FY의 1%를 넘으면 그 3개월 값을 안 읽는다 — 4분기는 FY − 분기
+     *       셋으로 유도된다(ORCL 2020 Q4 매출 39,068 대 분기 10,440 · NI · TSCO 2025 순이익 1,096 대 227 · LHX FY2025 영업이익 2,110 대 393).</li>
+     *   <li><b>그 공시가 그 컬럼의 FY를 안 냈다(R2)</b>: 3개월 값이 그 해 9개월 누계 이상이면(양의 유량에서 한 분기가 9개월 합보다 클 수 없다) 그 값을
+     *       FY 자리로 옮긴다 — LHX FY2025 매출 21,865(9개월 16,217 · 4분기 5,648) · 원가 16,240(12,038 · 4,202). 9개월보다 작으면 진짜 분기다(TDY 매출총이익
+     *       158.8).</li>
+     * </ul>
+     * 같은 공시 · 같은 컬럼의 표준 팩트끼리의 산수라 원장이 준 값을 고르는 일반 조합이다(2026-10-25 사용자 기준).
      *
-     * <p>증거: 같은 공시 · 같은 태그의 3개월 값(끝 = FY 끝)이 FY 값과 0.1% 안이고, 그 해 9개월 누계(같은 태그 · 그 공시 앞에 제출)가 FY의 1%를 넘는다 —
-     * 9개월 동안 실적이 있었는데 4분기 하나가 한 해 전체일 수 없다. 주당 컬럼은 증거로 안 쓴다(반올림 · 한 분기 이익이 연간과 같을 수 있다 — EPS 정밀도
-     * 3/37). 실측: ORCL 2020 Q4 매출 39,068(분기 10,440) · NI 2024 · 2025 · TSCO 2025 Q4 지배 순이익 1,096(분기 227) · LHX FY2025 · SGI(탐색 {@code P2-PLAN.md}).
+     * <p><b>왜 컬럼 단위인가</b>(반증 2026-10-31): 행 단위로 그 공시의 4분기 문맥을 통째로 버리면 연간 전용 컬럼(세금 · 세전 · 지분법) 한 줄로 걸린 공시가
+     * 맞는 3개월 값까지 잃고(LBTYB 2020 Q4 매출 3,311.7 → 세대 혼합 3,101.3 · LH · DXCM EPS) 그 공시의 분기 보고서가 사라져 4분기 재작성 가드가 풀린다
+     * (LHX 2020 Q4 원가 4,681 > 매출 4,660). 연간 전용 · 주당 컬럼은 증거로 안 쓴다 — Q4 행이 안 싣거나 분기와 연간이 같을 수 있다.
      *
-     * <p><b>왜 행 단위인가</b>(P2 v1 반증 판정 2): 컬럼만 버리면 LHX FY2025 Q4가 영업이익 3개월 값과 매출 · 원가 12개월 값(FY 문맥에 매출이 없어
-     * 그 공시가 12개월 값을 Q4 문맥에만 실었다)이 한 행에 섞여 영업이익률이 10.05% → 5.54%(진실 9.65%)가 된다. 그 공시의 Q4 문맥은 원장이 스스로 어긋난
-     * 것이고, 12개월 값을 FY 자리로 옮겨 쓰는 것은 두 증인의 산수가 필요한 복원이라 하지 않는다(2026-10-25 사용자 기준 — 뒤틀린 원장은 미표시).
+     * @return 4분기 문맥 값을 하나라도 바로잡은 (공시 · 기말) — 4분기 유도의 재작성 가드가 「그 공시가 분기를 냈다」로 다시 읽는다
      */
-    private static void dropAnnualQuarterContextCarryingTheYear(Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn) {
+    private static Set<String> dropAnnualQuarterContextCarryingTheYear(Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn) {
         BigDecimal same = new BigDecimal("0.001");
         BigDecimal floor = new BigDecimal("0.01");
-        Set<String> suspect = new HashSet<>();
+        Map<SecEdgarColumn, List<Fact>> columns = new LinkedHashMap<>();
         for (Map.Entry<SecEdgarColumn, Map<String, Map<Slot, Fact>>> e : byColumn.entrySet()) {
-            if (e.getKey().instant() || e.getKey().perShare()) {
+            if (e.getKey().instant() || e.getKey().perShare() || e.getKey().annualOnly()) {
                 continue;
             }
-            for (Map<Slot, Fact> slots : e.getValue().values()) {
-                List<Fact> tag = slots.values().stream().filter(f -> f.start() != null && f.value() != null).toList();
-                for (Fact q : tag) {
-                    if (!ANNUAL_FORMS.contains(q.form()) || q.value().signum() == 0
-                            || !isQuarterSpan(ChronoUnit.DAYS.between(q.start(), q.end()))) {
-                        continue;
-                    }
-                    for (Fact fy : tag) {
-                        long d = ChronoUnit.DAYS.between(fy.start(), fy.end());
-                        if (!fy.accn().equals(q.accn()) || !fy.end().equals(q.end()) || d < ANNUAL_MIN || d > ANNUAL_MAX
-                                || fy.value().subtract(q.value()).abs().compareTo(fy.value().abs().multiply(same)) > 0) {
-                            continue;
-                        }
-                        BigDecimal minimum = fy.value().abs().multiply(floor);
-                        boolean yearHadQuarters = tag.stream().anyMatch(n -> {
-                            long nd = ChronoUnit.DAYS.between(n.start(), n.end());
-                            return Math.abs(ChronoUnit.DAYS.between(fy.start(), n.start())) <= 7 && n.end().isBefore(q.start())
-                                    && nd >= 255 && nd <= 285 && n.filed().isBefore(q.filed())
-                                    && n.value().abs().compareTo(minimum) > 0;
-                        });
-                        if (yearHadQuarters) {
-                            suspect.add(q.accn() + "|" + q.end());
-                        }
-                    }
+            List<Fact> column = new ArrayList<>();
+            allFacts(e.getValue()).forEach(f -> {
+                if (f.start() != null && f.value() != null) {
+                    column.add(f);
+                }
+            });
+            columns.put(e.getKey(), column);
+        }
+        // 1차 — FY를 낸 컬럼에서 「3개월 값 = FY」인 칸. 그 (공시 · 기말)이 「4분기 문맥에 연간 값을 실은 공시」라는 공시 단위 증거다.
+        Map<SecEdgarColumn, Set<Fact>> drop = new LinkedHashMap<>();
+        Set<String> carriers = new HashSet<>();
+        Map<SecEdgarColumn, List<Fact>> orphans = new LinkedHashMap<>();
+        for (Map.Entry<SecEdgarColumn, List<Fact>> e : columns.entrySet()) {
+            List<Fact> column = e.getValue();
+            for (Fact q : column) {
+                if (!ANNUAL_FORMS.contains(q.form()) || q.value().signum() == 0
+                        || !isQuarterSpan(ChronoUnit.DAYS.between(q.start(), q.end()))) {
+                    continue;
+                }
+                List<Fact> years = column.stream().filter(fy -> fy.accn().equals(q.accn()) && fy.end().equals(q.end())
+                        && ChronoUnit.DAYS.between(fy.start(), fy.end()) >= ANNUAL_MIN
+                        && ChronoUnit.DAYS.between(fy.start(), fy.end()) <= ANNUAL_MAX).toList();
+                if (years.isEmpty()) {
+                    orphans.computeIfAbsent(e.getKey(), k -> new ArrayList<>()).add(q);
+                    continue;
+                }
+                java.util.Optional<Fact> nine = nineMonths(column, years.get(0).start(), q);
+                boolean carriesYear = nine.isPresent() && years.stream().anyMatch(fy ->
+                        fy.value().subtract(q.value()).abs().compareTo(fy.value().abs().multiply(same)) <= 0
+                                && nine.get().value().abs().compareTo(fy.value().abs().multiply(floor)) > 0);
+                if (carriesYear) {
+                    drop.computeIfAbsent(e.getKey(), k -> new HashSet<>()).add(q);
+                    carriers.add(q.accn() + "|" + q.end());
                 }
             }
         }
-        if (suspect.isEmpty()) {
-            return;
-        }
-        for (Map.Entry<SecEdgarColumn, Map<String, Map<Slot, Fact>>> e : byColumn.entrySet()) {
-            if (e.getKey().instant()) {
-                continue;
+        // 2차(R2) — 그 공시가 그 컬럼의 FY를 안 냈고 1차 증거가 선 공시다: 3개월 값이 그 해 9개월 누계(후보 태그 중 가장 큰 값 — 부분 태그를 증인으로
+        // 안 쓴다 · INVH 계약 매출) 이상이면 FY 자리로 옮긴다. 공시 단위 증거를 요구하는 이유: 일회성 항목이 큰 분기는 순이익 계열의 한 분기가 9개월 합을
+        // 정당하게 넘는다(2017 4분기 세제 개편 — WEX · CAR · CNX · HPP).
+        Map<SecEdgarColumn, Map<String, Fact>> promote = new LinkedHashMap<>();
+        orphans.forEach((col, qs) -> {
+            for (Fact q : qs) {
+                if (!carriers.contains(q.accn() + "|" + q.end()) || q.value().signum() <= 0) {
+                    continue;
+                }
+                LocalDate yearStart = q.end().minusYears(1).plusDays(1);
+                java.util.Optional<Fact> nine = nineMonths(columns.get(col), yearStart, q);
+                if (nine.isPresent() && nine.get().value().signum() > 0 && q.value().compareTo(nine.get().value()) >= 0) {
+                    drop.computeIfAbsent(col, k -> new HashSet<>()).add(q);
+                    promote.computeIfAbsent(col, k -> new LinkedHashMap<>()).putIfAbsent(q.accn() + "|" + q.end(),
+                            new Fact(q.accn(), nine.get().start(), q.end(), q.value(), q.filed(), q.form(), q.fiscalYear(), "FY", q.unit()));
+                }
             }
-            for (Map<Slot, Fact> slots : e.getValue().values()) {
-                slots.values().removeIf(f -> f.start() != null && ANNUAL_FORMS.contains(f.form())
-                        && isQuarterSpan(ChronoUnit.DAYS.between(f.start(), f.end()))
-                        && suspect.contains(f.accn() + "|" + f.end()));
+        });
+        Set<String> touched = new HashSet<>();
+        drop.forEach((col, facts) -> {
+            Map<String, Fact> moving = promote.getOrDefault(col, new LinkedHashMap<>());
+            for (Map<Slot, Fact> slots : byColumn.get(col).values()) {
+                List<Fact> moved = new ArrayList<>();
+                slots.entrySet().removeIf(en -> {
+                    if (!facts.contains(en.getValue())) {
+                        return false;
+                    }
+                    Fact q = en.getValue();
+                    touched.add(q.accn() + "|" + q.end());
+                    Fact fy = moving.remove(q.accn() + "|" + q.end());
+                    if (fy != null) {
+                        moved.add(fy);
+                    }
+                    return true;
+                });
+                // 그 태그 자리에 FY 창으로 옮긴다 — 같은 공시가 그 컬럼에 FY를 안 냈으므로 부딪히는 슬롯이 없다.
+                moved.forEach(fy -> slots.put(new Slot(fy.accn(), fy.start(), fy.end()), fy));
             }
-        }
+        });
+        return Set.copyOf(touched);
+    }
+
+    /** 그 해 9개월 누계 — 같은 컬럼의 후보 태그 중 그 공시 앞에 제출된 것에서 가장 큰 값(같은 값이면 늦게 제출된 것). */
+    private static java.util.Optional<Fact> nineMonths(List<Fact> column, LocalDate yearStart, Fact q) {
+        return column.stream().filter(n -> {
+            long nd = ChronoUnit.DAYS.between(n.start(), n.end());
+            return Math.abs(ChronoUnit.DAYS.between(yearStart, n.start())) <= 7 && n.end().isBefore(q.start())
+                    && nd >= 255 && nd <= 285 && n.filed().isBefore(q.filed());
+        }).max(Comparator.comparing(Fact::value).thenComparing(Fact::filed));
     }
 
     /** {@code from}에서 {@code to}까지를 빈틈없이(사흘 안) 잇는 둘 이상의 창의 합이 {@code target}과 {@code band} 안인가. */
@@ -2572,7 +2624,8 @@ final class SecEdgarFacts {
      */
     private static List<RawFinancialReport> deriveFourthQuarters(
             List<RawFinancialReport> existing, Map<Label, Window> windows, int fromFiscalYear,
-            Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn, boolean usGate) {
+            Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn, boolean usGate,
+            Set<String> quarterContextDropped) {
         Map<Label, RawFinancialReport> latest = new LinkedHashMap<>();
         Map<Label, List<RawFinancialReport>> byLabel = new LinkedHashMap<>();
         for (RawFinancialReport report : existing) {
@@ -2585,6 +2638,11 @@ final class SecEdgarFacts {
         Map<String, Set<Integer>> quarterYears = new HashMap<>();
         for (RawFinancialReport report : existing) {
             if (!"FY".equals(report.fiscalPeriod())) {
+                quarterYears.computeIfAbsent(report.reportCode(), key -> new HashSet<>())
+                        .add(report.fiscalYear());
+            } else if (quarterContextDropped.contains(accnOf(report.reportCode()) + "|" + report.periodEnd())) {
+                // K8이 그 공시의 4분기 문맥 값을 안 읽었을 뿐 공시는 그 해 분기를 냈다 — 빼면 재작성 가드가 풀려 그 공시가 재작성한 옛 FY에서 옛
+                // 분기를 뺀다(LHX 2020 Q4 원가 4,681 > 매출 4,660 · 반증 2026-10-31).
                 quarterYears.computeIfAbsent(report.reportCode(), key -> new HashSet<>())
                         .add(report.fiscalYear());
             }
