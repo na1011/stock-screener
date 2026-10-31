@@ -124,7 +124,8 @@ class PriceObservationWindowTest {
     void boundaryFileContract() {
         Map<PriceObservationWindow.AnchorKey, PriceObservationWindow.Boundary> real = PriceObservationWindow.load(
                 PriceObservationWindow.BOUNDARY_FILE);
-        assertThat(real).hasSize(14);
+        // 줄 수를 박지 않는다 — 경계는 원장 입력이라 근거와 함께 는다(WOLF 파산 재편 2026-10-31). 파일의 데이터 줄이 하나도 빠짐없이 읽혔는가를 묻는다.
+        assertThat(real).isNotEmpty().hasSize(dataLines(PriceObservationWindow.BOUNDARY_FILE));
         assertThat(real.values()).allSatisfy(b -> {
             assertThat(b.evidence()).isNotBlank();
             assertThat(b.date()).isBefore(b.key().anchorDate());
@@ -146,5 +147,14 @@ class PriceObservationWindowTest {
     private static RawPriceBar flat(String date, String close) {
         BigDecimal c = new BigDecimal(close);
         return new RawPriceBar(LocalDate.parse(date), c, c, c, c, 0L, null, null, false);
+    }
+
+    private static int dataLines(String resource) {
+        try (java.io.InputStream in = new org.springframework.core.io.ClassPathResource(resource).getInputStream()) {
+            return (int) new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8).lines()
+                    .filter(l -> !l.isBlank() && !l.startsWith("#")).count();
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        }
     }
 }
