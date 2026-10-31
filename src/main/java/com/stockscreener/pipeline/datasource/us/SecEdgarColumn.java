@@ -593,10 +593,53 @@ enum SecEdgarColumn {
      * 희석은 반희석 판정이 기간마다 바뀌어 Up-C에서 교환 단위를 넣고 뺀다(TKO 2026 Q2 3개월 75.9M · 누계 193.3M · 기본 74.8M).
      */
     List<String> candidates(boolean usGate) {
+        return candidates(usGate, null);
+    }
+
+    /**
+     * @param sic 제출인 정보의 업종 SIC({@code stock.sic_code}) — 관문 켬 매출의 업종 총매출 후보({@link #INDUSTRY_REVENUE})가 그 업종
+     *            발행사에서만 선다. 없으면 그 후보를 안 쓴다
+     */
+    List<String> candidates(boolean usGate, String sic) {
         if (usGate && this == SHARES_OUTSTANDING) {
             return GATED_SHARES_ORDER;
         }
+        if (usGate && this == REVENUE && sic != null) {
+            List<String> all = new java.util.ArrayList<>(candidates());
+            INDUSTRY_REVENUE.forEach((tag, division) -> {
+                if (sic.startsWith(division)) {
+                    all.add(tag);
+                }
+            });
+            return List.copyOf(all);
+        }
         return candidates();
+    }
+
+    /**
+     * 관문 켬 매출의 <b>업종 총매출 후보</b>(탐색 {@code P2-NOTES.md} 「P2-R 매출 폴백 층」 · 2026-10-31 다시 잼) — 값 = 그 태그가 총매출인 SIC
+     * 중분류 앞자리. 유틸리티(49)는 총매출을 {@code RegulatedAndUnregulatedOperatingRevenue} · {@code RegulatedOperatingRevenue}로 싣고 계약 매출 태그
+     * ({@code RevenueFromContractWithCustomer…} — ASC 606의 부분집합)는 그 일부만 담는다(NJR FY2019 782M 대 2,592M · NI FY2024 5,282.9M + 기타 규제
+     * 매출 172.2M = 5,455.1M). 그래서 <b>최댓값 경쟁에 든다</b> — 마지막 수단으로만 두면 계약 매출이 덮는 창은 부분값이고 계약 매출 없는 Q4만 총액이라
+     * TTM이 두 개념을 섞는다(NJR Q4 479M · Q1~Q3 부분값). 경쟁 후보가 창을 하나도 못 덮어 매출이 비던 창도 채운다(DTE · XEL · SWX 2025-09-26 뒤
+     * {@code PSR} · 마진 · 성장률 0행).
+     *
+     * <p><b>그 업종 발행사에서만 선다</b> — 업종 태그는 다른 회사에서는 한 부문이다(KKR 6282 · TRGP 4922가 석유가스 태그로 그렇게 틀린다).
+     *
+     * <p><b>석유가스(13) · 의료(80) 업종 태그는 넣지 않는다</b>(2026-10-31 반증 두 렌즈 · 0콜 스윕) — {@code OilAndGasRevenue}는 파생 손실을 뺀 총계
+     * {@code Revenues}보다 커 최댓값이 부분을 고르고(RRC 2018 Q1 756.6 대 742.6) · {@code HealthCareOrganizationRevenue}는 2017년 이전 대손충당금
+     * 차감 전 총액이라 맞던 순액을 덮는다(UHS 22칸 · THC · EHC — 같은 공시가 순액을 {@code …NetOfPatientServiceRevenueProvisions}로 따로 준다).
+     * 둘 다 앵커가 고정한 태그를 재작성 판이 이어받아 낡은 값이 앉는 꼴(CHRD · EQT · OPCH)을 깨워, 「자기 공시가 낸 값이 이월보다 이긴다」(묶음 1
+     * F1 손익 이어받기)와 함께 다시 잰다. {@code ElectricUtilityRevenue}도 넣지 않는다 — 다부문 유틸리티에서 전기 부문만이다(ETR 2015).
+     */
+    private static final java.util.SequencedMap<String, String> INDUSTRY_REVENUE = orderedIndustryRevenue();
+
+    /** 순서를 못 박는다 — 같은 값으로 비기면 후보 순서가 이긴다({@code SecEdgarFacts.coveringTag}의 「엄격히 클 때만 바꾼다」). */
+    private static java.util.SequencedMap<String, String> orderedIndustryRevenue() {
+        java.util.LinkedHashMap<String, String> m = new java.util.LinkedHashMap<>();
+        m.put("RegulatedAndUnregulatedOperatingRevenue", "49");
+        m.put("RegulatedOperatingRevenue", "49");
+        return java.util.Collections.unmodifiableSequencedMap(m);
     }
 
     private static final List<String> GATED_SHARES_ORDER = List.of(

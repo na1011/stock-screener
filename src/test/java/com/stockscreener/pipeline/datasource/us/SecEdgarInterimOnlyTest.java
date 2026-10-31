@@ -31,7 +31,8 @@ class SecEdgarInterimOnlyTest {
 
     private static List<RawFinancialReport> build(String json, boolean usGate, Integer fiscalYearEndMonth) throws Exception {
         JsonNode facts = new ObjectMapper().readTree(json).path("facts");
-        return SecEdgarFacts.build(facts, 2018, usGate, CoverUnitJudge.Result.NONE, fiscalYearEndMonth).reports();
+        return SecEdgarFacts.build(facts, 2018, usGate, CoverUnitJudge.Result.NONE,
+                new IssuerProfile.Profile(fiscalYearEndMonth, null)).reports();
     }
 
     private static String fixture() throws Exception {

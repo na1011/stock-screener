@@ -4,7 +4,7 @@ status: 채택됨
 date: 2026-10-31
 applies_to:
   - "src/main/java/**/pipeline/datasource/us/SecEdgarFacts.java"
-  - "src/main/java/**/pipeline/datasource/us/FiscalYearEnd.java"
+  - "src/main/java/**/pipeline/datasource/us/IssuerProfile.java"
 ---
 
 # ADR-0198. 연차 보고서 전의 미국 등록인은 10-Q 누계와 선언 결산월로 회계연도를 세운다
@@ -13,7 +13,7 @@ applies_to:
 
 `SecEdgarFacts`가 회계연도 창을 10-K · 20-F · 40-F의 12개월 팩트에서 하나도 못 세우면, **가장 늦은 중간보고서의 누계 기간 시작**을 회계연도
 시작으로 하는 창 하나를 세운다(끝 = 시작 + 1년 − 1일). **그 끝 앞뒤 7일 안에 제출인 정보가 선언한 결산월**(`submissions.fiscalYearEnd` →
-`stock.accounting_month`)**이 있을 때만** 받는다. 결산월이 없거나 안 맞으면 지금처럼 창이 없다(보고서 0건 — 미표시).
+`stock.accounting_month` · `IssuerProfile`)**이 있을 때만** 받는다. 결산월이 없거나 안 맞으면 지금처럼 창이 없다(보고서 0건 — 미표시).
 
 **관문 설정(`stockscreener.gate.us`) 밖이다**(에이전트 결정). 이 갈래는 연차 창이 0인 등록인에서만 발화하는데, 그 등록인은 이 어댑터가 보고서를
 0건 내던 종목이라 저장 행이 없다 — 「한 종목 안에 두 규칙이 섞인다 · 부분 재적재가 옛 규칙 값을 남긴다」는 설정 뒤에 두는 사유가 안 선다

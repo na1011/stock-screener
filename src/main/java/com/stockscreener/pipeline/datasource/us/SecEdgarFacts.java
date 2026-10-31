@@ -259,22 +259,22 @@ final class SecEdgarFacts {
      */
     static Result build(JsonNode facts, int fromFiscalYear, boolean usGate, CoverUnitJudge.Result coverUnit)
             throws DataSourceException {
-        return build(facts, fromFiscalYear, usGate, coverUnit, null);
+        return build(facts, fromFiscalYear, usGate, coverUnit, IssuerProfile.Profile.UNKNOWN);
     }
 
     /**
-     * @param fiscalYearEndMonth 제출인 정보가 선언한 결산월({@code submissions.fiscalYearEnd} → {@code stock.accounting_month}). 연차 보고서를
-     *                           아직 안 낸 등록인의 회계연도 창({@link #interimSeed})을 확인하는 데만 쓴다 — 없으면 그 창을 안 세운다
+     * @param issuer 제출인 정보가 선언한 발행사 속성 — 결산월은 연차 보고서를 아직 안 낸 등록인의 회계연도 창({@link #interimSeed})을,
+     *               SIC는 관문 켬 업종 총매출 폴백의 적용 범위({@code SecEdgarColumn.candidates})를 확인하는 데만 쓴다 — 없으면 그 해석을 안 한다
      */
     static Result build(JsonNode facts, int fromFiscalYear, boolean usGate, CoverUnitJudge.Result coverUnit,
-                        Integer fiscalYearEndMonth)
+                        IssuerProfile.Profile issuer)
             throws DataSourceException {
         // 관문 켬: 공시마다 택소노미·표시 통화를 하나로 정하고 IFRS 개념을 같은 뜻의 us-gaap 열쇠에 싣는다(ADR-0182).
         TaxonomyFrame.Result frame = usGate ? TaxonomyFrame.of(facts) : null;
         if (frame != null) {
             facts = frame.facts();
         }
-        Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn = collect(facts, usGate);
+        Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn = collect(facts, usGate, issuer.sic());
         // 옛 추출 값(sharesSuperseded)은 판정 전 사실로 센다 — 옛 규칙이 실제로 고른 것은 단위가 틀린 그 표지다.
         Map<String, Map<Slot, Fact>> sharesAsFiled = new LinkedHashMap<>(byColumn.get(SecEdgarColumn.SHARES_OUTSTANDING));
         if (usGate) {
@@ -286,7 +286,7 @@ final class SecEdgarFacts {
         Map<String, Anchor> anchors = anchorsOf(structure);
         NavigableMap<LocalDate, Window> fiscalYears = annualWindows(structure, anchors);
         if (fiscalYears.isEmpty()) {
-            fiscalYears = interimSeed(structure, anchors, fiscalYearEndMonth);
+            fiscalYears = interimSeed(structure, anchors, issuer.fiscalYearEndMonth());
         }
         Map<Label, Window> windows = new TreeMap<>();
         Map<Label, Anchor> labelAnchors = new LinkedHashMap<>();
@@ -447,7 +447,7 @@ final class SecEdgarFacts {
         return structure;
     }
 
-    private static Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> collect(JsonNode facts, boolean usGate) {
+    private static Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> collect(JsonNode facts, boolean usGate, String sic) {
         Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn =
                 new EnumMap<>(SecEdgarColumn.class);
         for (SecEdgarColumn column : SecEdgarColumn.values()) {
@@ -458,7 +458,7 @@ final class SecEdgarFacts {
                 byColumn.put(column, byTag);
                 continue;
             }
-            for (String candidate : column.candidates(usGate)) {
+            for (String candidate : column.candidates(usGate, sic)) {
                 boolean dei = candidate.startsWith("dei:");
                 JsonNode tag = facts.path(dei ? "dei" : "us-gaap")
                         .path(dei ? candidate.substring(4) : candidate);

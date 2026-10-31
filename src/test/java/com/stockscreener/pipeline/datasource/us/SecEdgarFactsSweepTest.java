@@ -92,6 +92,20 @@ class SecEdgarFactsSweepTest {
         // TSV 밖의 출력(버린 팩트 수 · 컬럼 부재 · 행별 assertedAbsent). 「꺼진 출력이 같다」를 이것까지 대조한다 —
         // TSV만 같아도 Writer가 읽는 부재 판정이 갈리면 저장이 갈린다.
         Optional<Path> extra = Optional.ofNullable(System.getenv("REPLAY_SWEEP_EXTRA")).map(Path::of);
+        // 발행사 속성(티커 · 결산월 · SIC — 운영 stock 표에서 뜬 TSV). 어댑터가 IssuerProfile로 묻는 증인이다 — 안 주면 모름(UNKNOWN)이라
+        // 그 증인이 필요한 해석(연차 보고서 전 회계연도 창 · 관문 켬 업종 총매출 폴백)이 안 선다.
+        java.util.Map<String, IssuerProfile.Profile> issuers = new java.util.HashMap<>();
+        Optional.ofNullable(System.getenv("REPLAY_ISSUERS")).map(Path::of).ifPresent(p -> {
+            try {
+                for (String line : Files.readAllLines(p)) {
+                    String[] c = line.split("\t", -1);
+                    issuers.put(c[0], new IssuerProfile.Profile(c[1].isBlank() ? null : Integer.valueOf(c[1]),
+                            c[2].isBlank() ? null : c[2]));
+                }
+            } catch (java.io.IOException e) {
+                throw new java.io.UncheckedIOException(e);
+            }
+        });
         Files.createDirectories(out.toAbsolutePath().getParent());
 
         ObjectMapper mapper = new ObjectMapper();
@@ -143,10 +157,12 @@ class SecEdgarFactsSweepTest {
                                     .append(outcome.vintagesUncertain()).append('\n');
                         }
                     }
+                    IssuerProfile.Profile issuer = issuers.getOrDefault(ticker, IssuerProfile.Profile.UNKNOWN);
                     result = usGate && splits != null
                             ? SecEdgarFacts.build(facts, from, true,
-                                    ShareClassCollector.judgeCovers(facts, splits.getOrDefault(ticker, List.of())))
-                            : SecEdgarFacts.build(facts, from, usGate);
+                                    ShareClassCollector.judgeCovers(facts, splits.getOrDefault(ticker, List.of())), issuer)
+                            : SecEdgarFacts.build(facts, from, usGate,
+                                    com.stockscreener.pipeline.datasource.us.shareclass.CoverUnitJudge.Result.NONE, issuer);
                 } catch (RuntimeException | java.io.IOException
                         | com.stockscreener.pipeline.datasource.DataSourceException e) {
                     // MUST: DataSourceException도 잡는다. checked라 목록에 없던 탓에 한 종목의
