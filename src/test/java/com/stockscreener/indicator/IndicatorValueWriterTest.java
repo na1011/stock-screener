@@ -1,6 +1,7 @@
 package com.stockscreener.indicator;
 
 import com.stockscreener.indicator.calculator.PerCalculator;
+import com.stockscreener.support.RowVersions;
 import com.stockscreener.support.TestDatabaseGuard;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -102,12 +103,13 @@ class IndicatorValueWriterTest {
         }
         assertThat(writer.write(stockId, PerCalculator.CODE, points)).isEqualTo(300);
 
-        long before = walInsertLsn();
+        List<String> before = RowVersions.of(jdbcTemplate, "indicator_value");
+        assertThat(before).as("전제: 첫 쓰기 뒤 잠긴 행이 없다").hasSize(300).allMatch(RowVersions::unlocked);
         assertThat(writer.write(stockId, PerCalculator.CODE, points)).isZero();
-        long wal = walInsertLsn() - before;
 
         assertThat(valueOn(AS_OF)).isEqualByComparingTo("0.33333333");
-        assertThat(wal).as("같은 값 300행을 다시 쓴 WAL 바이트").isZero();
+        assertThat(RowVersions.of(jdbcTemplate, "indicator_value")).as("같은 값 300행을 다시 쓴 뒤의 행 판 — 새 판도 잠금도 없다")
+                .isEqualTo(before);
     }
 
     @Test
@@ -118,10 +120,6 @@ class IndicatorValueWriterTest {
                 new IndicatorPoint(AS_OF, new BigDecimal("2"))));
 
         assertThat(valueOn(AS_OF)).isEqualByComparingTo("2");
-    }
-
-    private long walInsertLsn() {
-        return jdbcTemplate.queryForObject("SELECT pg_wal_lsn_diff(pg_current_wal_insert_lsn(), '0/0')::bigint", Long.class);
     }
 
     private BigDecimal valueOn(LocalDate tradeDate) {

@@ -1,6 +1,7 @@
 package com.stockscreener.indicator;
 
 import com.stockscreener.support.JpaSliceTest;
+import com.stockscreener.support.RowVersions;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -174,17 +175,14 @@ class SectorRelativeCalculatorTest {
         SectorMetricSpec[] specs = {medianRatio(), percentile(), median()};
         assertThat(calculate(specs)).isPositive();
 
-        long before = walInsertLsn();
+        List<String> before = RowVersions.of(jdbcTemplate, "indicator_value");
+        assertThat(before).as("전제: 첫 계산 뒤 잠긴 행이 없다").allMatch(RowVersions::unlocked);
         assertThat(calculate(specs)).isZero();
-        long wal = walInsertLsn() - before;
 
         assertThat(value(low, "DEBT_RATIO_SECTOR_REL")).isEqualByComparingTo("0.28571429");
         assertThat(value(low, "DEBT_RATIO_SECTOR_MEDIAN")).isEqualByComparingTo("35");
-        assertThat(wal).as("같은 업종 상대값 일곱 종목 × 넷을 다시 쓴 WAL 바이트").isZero();
-    }
-
-    private long walInsertLsn() {
-        return jdbcTemplate.queryForObject("SELECT pg_wal_lsn_diff(pg_current_wal_insert_lsn(), '0/0')::bigint", Long.class);
+        assertThat(RowVersions.of(jdbcTemplate, "indicator_value")).as("같은 업종 상대값을 다시 쓴 뒤의 행 판 — 새 판도 잠금도 없다")
+                .isEqualTo(before);
     }
 
     private long calculate(SectorMetricSpec... specs) {
