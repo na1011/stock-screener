@@ -152,6 +152,10 @@ public class IndicatorDataReader {
             , (SELECT ci.basis FROM financial_common_income ci WHERE %1$s) AS common_basis
             , (SELECT ci.branch FROM financial_common_income ci WHERE %1$s) AS common_branch
             , (SELECT ci.payout_base FROM financial_common_income ci WHERE %1$s) AS common_payout
+            , (SELECT ci.non_common FROM financial_common_income ci WHERE %1$s) AS equity_non_common
+            , (SELECT ci.ncav_non_common FROM financial_common_income ci WHERE %1$s) AS equity_ncav_non_common
+            , (SELECT ci.equity_branch FROM financial_common_income ci WHERE %1$s) AS equity_branch
+            , (SELECT ci.common_fraction FROM financial_common_income ci WHERE %1$s) AS equity_common_fraction
             """.formatted(COMMON_KR_MATCH);
 
     /**
@@ -815,7 +819,9 @@ public class IndicatorDataReader {
                 discontinued ? rs.getBigDecimal("discontinued_income_controlling") : null,
                 discontinued ? rs.getBigDecimal("discontinued_rule") : null,
                 krCommon ? new CommonIncomeRead(rs.getBigDecimal("common_income"), rs.getString("common_basis"),
-                        rs.getString("common_branch"), rs.getBigDecimal("common_payout"), true)
+                        rs.getString("common_branch"), rs.getBigDecimal("common_payout"), true,
+                        rs.getBigDecimal("equity_non_common"), rs.getBigDecimal("equity_ncav_non_common"), rs.getString("equity_branch"),
+                        true, rs.getBigDecimal("equity_common_fraction"))
                         : line == null ? null : new CommonIncomeRead(rs.getBigDecimal("common_income"), rs.getString("common_basis"),
                         rs.getString("common_branch"), rs.getBigDecimal("equity_non_common"), rs.getBigDecimal("equity_ncav_non_common"),
                         rs.getString("equity_branch")));

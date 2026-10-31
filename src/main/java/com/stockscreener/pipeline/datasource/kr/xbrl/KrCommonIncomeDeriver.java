@@ -98,7 +98,12 @@ public class KrCommonIncomeDeriver {
                     rs.getBigDecimal("net_income"), f));
             reportCodes.put(id, rs.getString("report_code"));
         }, stockId);
-        List<Resolved> resolved = KrCommonIncomeRows.resolve(rows, registers(stockId), multiple(stockId));
+        List<Map.Entry<Integer, List<DartXbrlFactReader.Fact>>> issuerFilings = new ArrayList<>();
+        for (Filing filing : filings) {
+            issuerFilings.add(new java.util.AbstractMap.SimpleEntry<>(filing.bsnsYear(), facts.get(filing.rceptNo())));
+        }
+        List<Resolved> resolved = KrCommonIncomeRows.resolve(rows, registers(stockId), multiple(stockId),
+                KrCommonEquity.Issuer.of(issuerFilings));
         jdbc.update("""
                 DELETE FROM financial_common_income
                  WHERE financial_statement_id IN (SELECT id FROM financial_statement WHERE stock_id = ?)
@@ -109,14 +114,16 @@ public class KrCommonIncomeDeriver {
             if (r.common() != null) {
                 decided++;
             }
+            KrCommonEquity.Equity e = r.equity();
             batch.add(new Object[]{r.row().id(), reportCodes.get(r.row().id()), r.common(), String.valueOf(r.basis()), r.branch(),
                     KrCommonIncome.ENGINE_VERSION, String.valueOf(r.statement()), r.payoutBase(), r.incomeSnapshot(),
-                    r.row().published()});
+                    r.row().published(), e.hybrid(), e.hybrid(), e.branch(), e.fraction()});
         }
         jdbc.batchUpdate("""
                 INSERT INTO financial_common_income (financial_statement_id, report_code, common, basis, branch, engine_version,
-                                                     statement_basis, payout_base, income_snapshot, published_snapshot)
-                VALUES (?, coalesce(?, ''), ?, ?, ?, ?, ?, ?, ?, ?)
+                                                     statement_basis, payout_base, income_snapshot, published_snapshot,
+                                                     non_common, ncav_non_common, equity_branch, common_fraction)
+                VALUES (?, coalesce(?, ''), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, batch);
         return new int[]{resolved.size(), decided};
     }

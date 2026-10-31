@@ -194,11 +194,13 @@ public class StockReader {
                 + (withCommon ? ", (SELECT ci.common FROM financial_common_income ci WHERE ci.financial_statement_id = "
                         + "financial_statement.id AND " + commonMatch + " AND ci.basis = 'T') AS common_income"
                         : "")
-                // 미국 관문 켬 — 보통주 자본(지배 자본 − 우선주 · GP 자본 · 탐색 PERSHARE-DEN-PLAN-1026.md v1.1). 뺄 것이 있는 행만 그린다.
-                + (withCommon && us ? ", total_equity_controlling, (SELECT ci.non_common FROM financial_common_income ci WHERE "
-                        + "ci.financial_statement_id = financial_statement.id AND " + commonMatch + ") AS equity_non_common"
+                // 관문 켬 — 보통주 자본(미국: 지배 자본 − 우선주 · GP 자본 · 탐색 PERSHARE-DEN-PLAN-1026.md v1.1 · 국내: (지배 자본 − 신종자본증권)
+                // × 보통주 몫 · ADR-0199). 뺄 것이 있는 행만 그린다. 국내 낡음 열쇠는 배분 0(kr-ni) 행도 받는다 — 자본 판정은 손익 갈래와 따로다.
+                + (withCommon ? ", total_equity_controlling" + equityColumn("non_common", "equity_non_common", us, commonMatch)
+                        + equityColumn("common_fraction", "equity_common_fraction", us, commonMatch)
+                        + equityColumn("equity_branch", "equity_branch", us, commonMatch)
                         : "");
-        boolean withEquity = withCommon && us;
+        boolean withEquity = withCommon;
         return jdbcTemplate.query("""
                 SELECT fiscal_year, fiscal_period, published_at, revision_no, report_code,
                        currency_code,
@@ -227,13 +229,37 @@ public class StockReader {
                         withDiscontinued && rs.getObject("discontinued_rule") != null
                                 ? rs.getBigDecimal("discontinued_income") : null,
                         withCommon ? rs.getBigDecimal("common_income") : null,
-                        withEquity ? commonEquity(rs.getBigDecimal("total_equity_controlling"), rs.getBigDecimal("equity_non_common")) : null),
+                        withEquity ? commonEquity(rs.getBigDecimal("total_equity_controlling"), rs.getBigDecimal("total_equity"),
+                                rs.getBigDecimal("equity_non_common"), rs.getBigDecimal("equity_common_fraction"),
+                                rs.getString("equity_branch")) : null),
                 stockId, limit);
     }
 
-    /** 보통주 자본 — 뺄 것이 0이 아니고 지배 자본이 있을 때만(지표 {@code FinancialMath.commonEquity}와 같은 갈래 · 못 정함 · 0은 안 그린다). */
-    private static BigDecimal commonEquity(BigDecimal controlling, BigDecimal nonCommon) {
-        return controlling == null || nonCommon == null || nonCommon.signum() == 0 ? null : controlling.subtract(nonCommon);
+    private static String equityColumn(String column, String alias, boolean us, String commonMatch) {
+        String match = us ? commonMatch
+                : "ci.published_snapshot = financial_statement.published_at AND ci.income_snapshot IS NOT DISTINCT FROM "
+                        + "coalesce(financial_statement.net_income_controlling, financial_statement.net_income)";
+        return ", (SELECT ci." + column + " FROM financial_common_income ci WHERE ci.financial_statement_id = financial_statement.id AND "
+                + match + ") AS " + alias;
+    }
+
+    /**
+     * 보통주 자본 — 뺄 것이 있고(청구권 ≠ 0 또는 보통주 몫 ≠ 1) 지배 자본이 있을 때만(지표 {@code FinancialMath.commonEquity}와 같은 갈래 ·
+     * 못 정함 · 0은 안 그린다). 국내 별도 기저 행({@code kr-s})은 총자본이 곧 지배 자본이다.
+     */
+    private static BigDecimal commonEquity(BigDecimal controlling, BigDecimal total, BigDecimal nonCommon, BigDecimal fraction,
+                                           String branch) {
+        BigDecimal f = fraction == null ? BigDecimal.ONE : fraction;
+        if (nonCommon == null || (nonCommon.signum() == 0 && f.compareTo(BigDecimal.ONE) == 0)) {
+            return null;
+        }
+        BigDecimal base = controlling != null ? controlling
+                : com.stockscreener.indicator.CommonIncomeRead.KR_SEPARATE.equals(branch) ? total : null;
+        if (base == null) {
+            return null;
+        }
+        BigDecimal common = base.subtract(nonCommon);
+        return f.compareTo(BigDecimal.ONE) == 0 ? common : common.multiply(f).setScale(0, java.math.RoundingMode.HALF_UP);
     }
 
     /**

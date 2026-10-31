@@ -25,7 +25,7 @@ import java.util.Set;
 public final class KrCommonIncome {
 
     /** 판정 엔진 판. 저장 행({@code financial_common_income.engine_version})이 이 값과 다르면 다음 유도가 다시 붙인다. */
-    public static final int ENGINE_VERSION = 2;
+    public static final int ENGINE_VERSION = 3;
 
     /** 보통주 EPS · 가중평균 사실이 달 수 있는 표준 구성원(연결 축 밖). 회사 구성원은 이름이 같아도 받지 않는다. */
     static final Set<String> COMMON_MEMBERS = Set.of(
@@ -47,8 +47,8 @@ public final class KrCommonIncome {
     private static final String OWNERS = "ProfitLossAttributableToOwnersOfParent";
     private static final String PROFIT = "ProfitLoss";
     private static final String OUTSTANDING = "NumberOfSharesOutstanding";
-    private static final String PREF_EPS_DART = "BasicEarningsLossPerSharePreferredStock";
-    private static final String PREF_EPS_IFRS = "BasicEarningsLossPerInstrumentParticipatingEquityInstrumentsOtherThanOrdinaryShares";
+    static final String PREF_EPS_DART = "BasicEarningsLossPerSharePreferredStock";
+    static final String PREF_EPS_IFRS = "BasicEarningsLossPerInstrumentParticipatingEquityInstrumentsOtherThanOrdinaryShares";
     private static final String PREF_WEIGHTED =
             "WeightedAverageNumberOfInstrumentsUsedInCalculatingBasicEarningsLossPerInstrumentParticipatingEquityInstrumentsOtherThanOrdinaryShares";
     private static final String CLASS_AXIS = "ClassesOfShareCapitalAxis";
@@ -83,7 +83,7 @@ public final class KrCommonIncome {
      * (상법 제344조의3 — 의결권 없는 · 제한 주식은 발행 총수의 1/4 이하 · ADR-0192). {@code asOf}는 명부의 기준일(결산일)이다.
      */
     public record Register(LocalDate asOf, boolean multiClass, BigDecimal totalOutstanding, BigDecimal commonOutstanding,
-                           BigDecimal nonCommonShare) {
+                           BigDecimal nonCommonShare, int classCount) {
 
         /** 줄들에서 요약을 짓는다. 합계 줄이 없거나 종류 행이 하나도 없으면 {@code null}(명부를 못 읽음). */
         public static Register of(LocalDate asOf, List<ShareRow> rows) {
@@ -109,7 +109,7 @@ public final class KrCommonIncome {
             BigDecimal totalOut = total.issued().subtract(orZero(total.treasury()));
             BigDecimal commonOut = common.issued().subtract(orZero(common.treasury()));
             BigDecimal nonCommon = BigDecimal.ONE.subtract(common.issued().divide(total.issued(), MathContext.DECIMAL64));
-            return new Register(asOf, classes.size() >= 2, totalOut, commonOut, nonCommon);
+            return new Register(asOf, classes.size() >= 2, totalOut, commonOut, nonCommon, classes.size());
         }
     }
 
@@ -491,31 +491,36 @@ public final class KrCommonIncome {
 
         /** 표준 우선 개념의 0 아닌 값 — 보통주 밖 주식의 증거(기간 무관). */
         boolean preferenceConcepts() {
-            for (Fact f : facts) {
-                if (f.value().signum() == 0) {
-                    continue;
-                }
-                if (f.source() == Source.DART && (f.concept().startsWith(PREF_EPS_DART)
-                        || f.concept().startsWith("DilutedEarningsLossPerSharePreferredStock")
-                        || "IssuedCapitalOfPreferredStock".equals(f.concept()))) {
-                    return true;
-                }
-                if (f.source() == Source.IFRS && f.concept().contains("OtherThanOrdinaryShares")
-                        && (f.concept().contains("EarningsLossPerInstrument")
-                        || f.concept().startsWith("WeightedAverageNumberOfInstruments"))) {
-                    return true;
-                }
-            }
-            return false;
+            return KrCommonIncome.preferenceConcepts(facts);
         }
+    }
 
-        private static boolean standardMembers(Fact f, Set<String> allowed) {
-            for (Member member : f.members()) {
-                if (member.source() == Source.ENTITY || !allowed.contains(member.member())) {
-                    return false;
-                }
+    /** 표준 우선 개념의 0 아닌 값 — 보통주 밖 주식의 증거(기간 무관 · 판정 엔진과 자본 판정이 같은 술어를 쓴다). */
+    static boolean preferenceConcepts(List<Fact> facts) {
+        for (Fact f : facts) {
+            if (f.value().signum() == 0) {
+                continue;
             }
-            return true;
+            if (f.source() == Source.DART && (f.concept().startsWith(PREF_EPS_DART)
+                    || f.concept().startsWith("DilutedEarningsLossPerSharePreferredStock")
+                    || "IssuedCapitalOfPreferredStock".equals(f.concept()))) {
+                return true;
+            }
+            if (f.source() == Source.IFRS && f.concept().contains("OtherThanOrdinaryShares")
+                    && (f.concept().contains("EarningsLossPerInstrument")
+                    || f.concept().startsWith("WeightedAverageNumberOfInstruments"))) {
+                return true;
+            }
         }
+        return false;
+    }
+
+    private static boolean standardMembers(Fact f, Set<String> allowed) {
+        for (Member member : f.members()) {
+            if (member.source() == Source.ENTITY || !allowed.contains(member.member())) {
+                return false;
+            }
+        }
+        return true;
     }
 }

@@ -33,6 +33,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  *   <li>{@code KR_ROWS} — TSV {@code key ticker id fy fp start end pub nic ni}(빈 칸은 NULL · {@code key}가 비면 그 판 재료 없음)</li>
  *   <li>{@code KR_REGISTER} — TSV {@code ticker year asof label issued treasury}(명부 11011의 줄)</li>
  *   <li>{@code KR_CA} — TSV {@code ticker effective ratio}(APPLIED 기업행위)</li>
+ *   <li>{@code KR_FILINGS}(선택) — TSV {@code ticker year key}(그 종목 OK 판 전부 — 보통주 자본의 발행사 재료 · 없으면 행에 묶인 판만)</li>
  * </ul>
  */
 @EnabledIfEnvironmentVariable(named = "KR_XBRL_DIR", matches = ".+")
@@ -63,7 +64,13 @@ class DartCommonIncomeSweepTest {
         }
 
         List<String> lines = new ArrayList<>();
-        lines.add("key\tticker\tfy\tfp\tpub\tbranch\tcommon\tbasis\tstatement\tpayout\tunreadable");
+        Map<String, List<String[]>> filingsByTicker = new LinkedHashMap<>();
+        if (System.getenv("KR_FILINGS") != null) {
+            for (String[] p : tsv(System.getenv("KR_FILINGS"))) {
+                filingsByTicker.computeIfAbsent(p[0], k -> new ArrayList<>()).add(p);
+            }
+        }
+        lines.add("key\tticker\tfy\tfp\tpub\tbranch\tcommon\tbasis\tstatement\tpayout\tunreadable\tequity\thybrid\tfraction");
         int unreadableTotal = 0;
         for (Map.Entry<String, List<String[]>> e : rowsByTicker.entrySet()) {
             String ticker = e.getKey();
@@ -114,19 +121,40 @@ class DartCommonIncomeSweepTest {
                 }
                 return m;
             };
-            for (Resolved r : KrCommonIncomeRows.resolve(rows, registers, multiple)) {
+            List<Map.Entry<Integer, List<DartXbrlFactReader.Fact>>> issuerFilings = new ArrayList<>();
+            for (String[] p : filingsByTicker.getOrDefault(ticker, List.of())) {
+                issuerFilings.add(new java.util.AbstractMap.SimpleEntry<>(Integer.parseInt(p[1]), load(dir, p[2], ticker)));
+            }
+            if (issuerFilings.isEmpty()) {
+                rows.forEach(r -> issuerFilings.add(new java.util.AbstractMap.SimpleEntry<>(r.fiscalYear(), r.facts())));
+            }
+            for (Resolved r : KrCommonIncomeRows.resolve(rows, registers, multiple, KrCommonEquity.Issuer.of(issuerFilings))) {
                 String key = keyOf.get(r.row().id());
                 int bad = unreadable.getOrDefault(key, 0);
                 unreadableTotal += bad;
                 lines.add(String.join("\t", key, ticker, String.valueOf(r.row().fiscalYear()), r.row().fiscalPeriod(),
                         r.row().published().toString(), r.branch(), plain(r.common()), String.valueOf(r.basis()),
-                        String.valueOf(r.statement()), plain(r.payoutBase()), String.valueOf(bad)));
+                        String.valueOf(r.statement()), plain(r.payoutBase()), String.valueOf(bad), r.equity().branch(),
+                        plain(r.equity().hybrid()), plain(r.equity().fraction())));
             }
         }
         Files.createDirectories(out.toAbsolutePath().getParent());
         Files.write(out, lines);
         System.out.println("rows=" + (lines.size() - 1) + " unreadable=" + unreadableTotal + " out=" + out);
         assertThat(lines).hasSizeGreaterThan(1);
+    }
+
+    private static List<DartXbrlFactReader.Fact> load(Path dir, String key, String ticker) throws java.io.IOException {
+        Path plain = dir.resolve(key + ".xbrl");
+        Path gz = dir.resolve(key + ".xbrl.gz");
+        if (!Files.exists(plain) && !Files.exists(gz)) {
+            return null;
+        }
+        try (InputStream in = Files.exists(plain) ? Files.newInputStream(plain) : new GZIPInputStream(Files.newInputStream(gz))) {
+            return DartXbrlFactReader.read(in, ticker + " " + key).facts();
+        } catch (com.stockscreener.pipeline.datasource.DataSourceException e) {
+            throw new IllegalStateException("판을 못 읽는다: " + ticker + " " + key, e);
+        }
     }
 
     private static List<String[]> tsv(String path) throws java.io.IOException {

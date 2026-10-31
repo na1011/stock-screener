@@ -16,11 +16,20 @@ import java.math.BigDecimal;
  *                       지배 자본 − 이 값. {@link #equityBranch}가 있는데 null이면 못 정함
  * @param ncavNonCommon  NCAV가 더 빼는 영구자본 청구권(우선주 · 우선 단위 — GP 자본 제외)
  * @param equityBranch   자본 판정 갈래 — {@link #equityRead}인데 null이면 유도가 그 판에 안 돈 행(못 정함)
- * @param equityRead     질의가 자본 열을 실었는가(미국 관문 켬). 거짓이면 보통주 자본은 이 규칙으로 안 읽는다 — 국내 관문 켬 행도 이 줄을
- *                       싣는데(배당성향 분모 · ADR-0192) 그 행의 PBR을 「못 정함」으로 비우면 안 된다
+ * @param equityRead     질의가 자본 열을 실었는가(미국 · 국내 관문 켬). 거짓이면 보통주 자본은 이 규칙으로 안 읽는다
+ * @param commonFraction 보통주와 나란한 잔여 청구권 중 보통주 몫(국내 — 보통주 유통 ÷ 전 종류 유통 · ADR-0199). null이면 1(미국)
  */
 public record CommonIncomeRead(BigDecimal value, String basis, String branch, BigDecimal payoutBase, boolean payoutDeclared,
-                               BigDecimal nonCommon, BigDecimal ncavNonCommon, String equityBranch, boolean equityRead) {
+                               BigDecimal nonCommon, BigDecimal ncavNonCommon, String equityBranch, boolean equityRead,
+                               BigDecimal commonFraction) {
+
+    /** 국내 자본 갈래 — 별도 기저로 정함(별도재무제표만 내는 회사 · 총자본이 곧 지배 자본이다). */
+    public static final String KR_SEPARATE = "kr-s";
+
+    public CommonIncomeRead(BigDecimal value, String basis, String branch, BigDecimal payoutBase, boolean payoutDeclared,
+                            BigDecimal nonCommon, BigDecimal ncavNonCommon, String equityBranch, boolean equityRead) {
+        this(value, basis, branch, payoutBase, payoutDeclared, nonCommon, ncavNonCommon, equityBranch, equityRead, null);
+    }
 
     public CommonIncomeRead(BigDecimal value, String basis, String branch, BigDecimal payoutBase, boolean payoutDeclared) {
         this(value, basis, branch, payoutBase, payoutDeclared, null, null, null, false);
@@ -40,6 +49,16 @@ public record CommonIncomeRead(BigDecimal value, String basis, String branch, Bi
     /** 자본 판정이 비보통 청구권을 정했는가 — {@link #equityRead}인데 거짓이면 그 행의 보통주 자본은 못 정함이다(미표시). */
     public boolean equityDecided() {
         return equityBranch != null && nonCommon != null;
+    }
+
+    /** 보통주 몫 — 미국은 1(우선주는 {@link #nonCommon}이 장부가로 뺀다). */
+    public BigDecimal fraction() {
+        return commonFraction == null ? BigDecimal.ONE : commonFraction;
+    }
+
+    /** 국내 별도 기저로 정한 행인가 — 지배 자본 칸이 비어도 총자본이 곧 지배 자본이다(비지배가 없다). */
+    public boolean separateEntity() {
+        return KR_SEPARATE.equals(equityBranch);
     }
 
     public boolean sameAsControlling() {

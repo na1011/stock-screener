@@ -147,18 +147,29 @@ final class FinancialMath {
         if (!c.equityDecided()) {
             return null;
         }
-        if (c.nonCommon().signum() == 0) {
+        BigDecimal fraction = c.fraction();
+        if (c.nonCommon().signum() == 0 && fraction.compareTo(BigDecimal.ONE) == 0) {
             return base;
         }
-        if (!controllingBasis || base == null) {
+        // 국내 별도 기저 행(별도재무제표만 내는 회사)은 총자본이 곧 지배 자본이다 — 「총자본은 비지배를 섞는다」가 안 선다(ADR-0199).
+        if (!(controllingBasis || c.separateEntity()) || base == null) {
             return null;
         }
-        return base.subtract(c.nonCommon());
+        return base.subtract(c.nonCommon()).multiply(fraction);
     }
 
     /** {@link #commonEquity(FinancialFigures, BigDecimal, boolean)}의 PBR 기저 — 지배 자본, 없으면 총자본. */
     static BigDecimal commonEquity(FinancialFigures figures) {
         return commonEquity(figures, equityAttributableToShareholders(figures), figures.totalEquityControlling() != null);
+    }
+
+    /**
+     * <b>보통주와 나란한 잔여 청구권 중 보통주 몫</b>(국내 관문 켬 · ADR-0199) — 보통주 유통 ÷ 전 종류 유통. 이 규칙으로 안 읽은 행 · 미국은 1이다.
+     * 못 정한 행은 {@link #claimsAheadOfCommon}이 이미 {@code null}을 낸다.
+     */
+    static BigDecimal commonFraction(FinancialFigures figures) {
+        CommonIncomeRead c = figures.common();
+        return c == null || !c.equityRead() ? BigDecimal.ONE : c.fraction();
     }
 
     /**
@@ -176,7 +187,9 @@ final class FinancialMath {
             return null;
         }
         BigDecimal claims = liabilities.add(c.ncavNonCommon());
-        if (figures.totalLiabilities() != null && figures.totalAssets() != null && figures.totalEquity() != null) {
+        // 메자닌(자산 − 부채 − 자본 간극)은 미국 개념이다 — 국내 행의 양수 간극은 데이터 간극이라 더하지 않는다(ADR-0199).
+        if (c.commonFraction() == null
+                && figures.totalLiabilities() != null && figures.totalAssets() != null && figures.totalEquity() != null) {
             BigDecimal mezzanine = figures.totalAssets().subtract(figures.totalLiabilities()).subtract(figures.totalEquity());
             if (mezzanine.signum() > 0) {
                 claims = claims.add(mezzanine);
@@ -204,11 +217,23 @@ final class FinancialMath {
             return false;
         }
         for (FinancialFigures figures : quarters) {
-            if (figures.totalEquityControlling() == null) {
+            if (controllingEquityOf(figures) == null) {
                 return false;
             }
         }
         return true;
+    }
+
+    /**
+     * 그 행의 지배 자본 — 칸이 비었어도 국내 별도 기저 행(관문 켬 · {@link CommonIncomeRead#separateEntity})은 총자본이 곧 지배 자본이다
+     * (ADR-0199). 그 밖은 칸 그대로다.
+     */
+    static BigDecimal controllingEquityOf(FinancialFigures figures) {
+        if (figures.totalEquityControlling() != null) {
+            return figures.totalEquityControlling();
+        }
+        CommonIncomeRead c = figures.common();
+        return c != null && c.equityRead() && c.separateEntity() ? figures.totalEquity() : null;
     }
 
     /**

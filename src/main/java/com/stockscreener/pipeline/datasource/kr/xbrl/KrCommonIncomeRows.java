@@ -44,18 +44,38 @@ public final class KrCommonIncomeRows {
         }
     }
 
-    /** 붙일 값 — {@link Judged}와 같은 뜻에 붙일 때의 행 스냅숏을 더한다. */
-    public record Resolved(Row row, String branch, BigDecimal common, char basis, char statement, BigDecimal payoutBase) {
+    /** 붙일 값 — {@link Judged}와 같은 뜻에 붙일 때의 행 스냅숏 · 보통주 자본 재료({@link KrCommonEquity} · ADR-0199)를 더한다. */
+    public record Resolved(Row row, String branch, BigDecimal common, char basis, char statement, BigDecimal payoutBase,
+                           KrCommonEquity.Equity equity) {
+
+        Resolved(Row row, String branch, BigDecimal common, char basis, char statement, BigDecimal payoutBase) {
+            this(row, branch, common, basis, statement, payoutBase, null);
+        }
 
         public BigDecimal incomeSnapshot() {
             return row.income().snapshot();
         }
+
+        Resolved withEquity(KrCommonEquity.Equity equity) {
+            return new Resolved(row, branch, common, basis, statement, payoutBase, equity);
+        }
+    }
+
+    /** 발행사 재료를 행에 묶인 판들로만 짓는다(스윕 · 시험). */
+    public static List<Resolved> resolve(List<Row> rows, Map<Integer, Register> registers, Multiple multiple) {
+        List<Map.Entry<Integer, List<Fact>>> filings = new ArrayList<>();
+        for (Row row : rows) {
+            filings.add(new java.util.AbstractMap.SimpleEntry<>(row.fiscalYear(), row.facts()));
+        }
+        return resolve(rows, registers, multiple, KrCommonEquity.Issuer.of(filings));
     }
 
     /**
      * @param registers 사업연도 → 명부(없는 해는 빠진다)
+     * @param issuer    발행사 판 전부에서 지은 보통주 자본 재료
      */
-    public static List<Resolved> resolve(List<Row> rows, Map<Integer, Register> registers, Multiple multiple) {
+    public static List<Resolved> resolve(List<Row> rows, Map<Integer, Register> registers, Multiple multiple,
+                                         KrCommonEquity.Issuer issuer) {
         Map<Long, Resolved> out = new HashMap<>();
         List<Row> ordered = new ArrayList<>(rows);
         ordered.sort(Comparator.comparing(Row::fiscalYear).thenComparing(r -> order(r.fiscalPeriod()))
@@ -81,9 +101,22 @@ public final class KrCommonIncomeRows {
                 out.put(row.id(), fourth(row, ordered, out));
             }
         }
+        // 보통주 자본은 손익과 따로 — 대차대조표 날짜의 판으로 정한다. Q4는 같은 기말의 FY 판(Q4 published 이하 마지막)이다.
+        Map<Long, KrCommonEquity.Equity> equity = new HashMap<>();
+        for (Row row : ordered) {
+            if (!"Q4".equals(row.fiscalPeriod())) {
+                equity.put(row.id(), KrCommonEquity.judge(row.end(), row.fiscalYear(), row.facts(), issuer, registers));
+            }
+        }
+        for (Row row : ordered) {
+            if ("Q4".equals(row.fiscalPeriod())) {
+                Row fy = vintage(ordered, row.fiscalYear(), "FY", row.published());
+                equity.put(row.id(), fy == null ? KrCommonEquity.Equity.OPEN : equity.get(fy.id()));
+            }
+        }
         List<Resolved> result = new ArrayList<>();
         for (Row row : rows) {
-            result.add(out.get(row.id()));
+            result.add(out.get(row.id()).withEquity(equity.get(row.id())));
         }
         return result;
     }

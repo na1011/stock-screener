@@ -47,6 +47,37 @@ class CommonEquityBasisTest {
     }
 
     @Test
+    @DisplayName("국내 정함 — (지배 자본 − 신종자본증권) × 보통주 몫 · 뺄 것 0 · 몫 1이면 지금 경로")
+    void domesticSubtractsHybridThenTakesTheCommonShare() {
+        FinancialFigures f = bank().krEquity(new BigDecimal("12291"), new BigDecimal("0.9"), "kr").build();
+        assertThat(FinancialMath.commonEquity(f)).isEqualByComparingTo("180000");
+
+        FinancialFigures none = bank().krEquity(BigDecimal.ZERO, BigDecimal.ONE, "kr").build();
+        assertThat(FinancialMath.commonEquity(none)).isEqualByComparingTo("212291");
+    }
+
+    @Test
+    @DisplayName("국내 kr-s(총자본이 곧 지배 자본)는 지배 자본 칸이 비어도 총자본에서 뺀다 · kr이면 미표시(비지배를 섞는다)")
+    void domesticSeparateEntityUsesTotalEquity() {
+        FinancialFiguresFixture separate = FinancialFiguresFixture.annual(END).totalEquity(new BigDecimal("1000"));
+        assertThat(FinancialMath.commonEquity(separate.krEquity(new BigDecimal("100"), new BigDecimal("0.5"), "kr-s").build()))
+                .isEqualByComparingTo("450");
+        FinancialFiguresFixture consolidated = FinancialFiguresFixture.annual(END).totalEquity(new BigDecimal("1000"));
+        assertThat(FinancialMath.commonEquity(consolidated.krEquity(new BigDecimal("100"), new BigDecimal("0.5"), "kr").build()))
+                .isNull();
+    }
+
+    @Test
+    @DisplayName("국내 NCAV 청구권 — 총부채 + 신종자본증권 · 메자닌 간극은 안 붙인다(미국 개념) · 보통주 몫은 계산기가 곱한다")
+    void domesticNcavClaimsSkipTheMezzanineGap() {
+        FinancialFigures f = FinancialFiguresFixture.annual(END).totalAssets(new BigDecimal("5120")).totalLiabilities(new BigDecimal("2178"))
+                .totalEquity(new BigDecimal("1181")).currentAssets(new BigDecimal("1811"))
+                .krEquity(new BigDecimal("100"), new BigDecimal("0.8"), "kr").build();
+        assertThat(FinancialMath.claimsAheadOfCommon(f)).isEqualByComparingTo("2278");
+        assertThat(FinancialMath.commonFraction(f)).isEqualByComparingTo("0.8");
+    }
+
+    @Test
     @DisplayName("못 정함은 미표시다 — 지배 자본으로 메우지 않는다")
     void undecidedIsNotShown() {
         FinancialFigures f = bank().commonEquity(null, null, "open").build();

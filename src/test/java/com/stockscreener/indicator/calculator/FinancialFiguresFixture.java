@@ -340,6 +340,13 @@ final class FinancialFiguresFixture {
         return this;
     }
 
+    /** 국내 관문 켬 행(ADR-0199) — 보통주 자본 재료(신종자본증권 지배 몫 · 보통주 몫 · 갈래). {@code hybrid} null이면 못 정함. */
+    FinancialFiguresFixture krEquity(BigDecimal hybrid, BigDecimal fraction, String branch) {
+        this.common = new com.stockscreener.indicator.CommonIncomeRead(null, "T", "kr-ni", null, true, hybrid, hybrid, branch, true,
+                fraction);
+        return this;
+    }
+
     FinancialFigures build() {
         return new FinancialFigures(
                 fiscalYear, fiscalPeriod, periodStart, periodEnd, publishedAt, currencyCode,

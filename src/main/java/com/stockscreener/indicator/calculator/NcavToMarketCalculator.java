@@ -108,7 +108,8 @@ public class NcavToMarketCalculator implements IndicatorCalculator {
         if (currentAssets == null || totalLiabilities == null) {
             return List.of();
         }
-        BigDecimal ncav = currentAssets.subtract(totalLiabilities);
+        // 국내 관문 켬 행은 그 가운데 보통주 몫이다 — 우선주가 같은 몫으로 나눠 갖는다(ADR-0199 · 미국은 1).
+        BigDecimal ncav = currentAssets.subtract(totalLiabilities).multiply(FinancialMath.commonFraction(latest));
 
         NavigableMap<LocalDate, BigDecimal> marketCap =
                 context.dependency(MarketCapCalculator.CODE);
