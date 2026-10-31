@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref, shallowRef } from 'vue'
 
+import { forgetPersistedDraft } from '@/lib/draftStorage'
 import { api } from '@/api/endpoints'
 import { ApiError, readCookie, setUnauthorizedHandler } from '@/api/http'
 import type { MeResponse } from '@/api/types'
@@ -131,6 +132,8 @@ export const useAuthStore = defineStore('auth', () => {
    * 폼으로 보내면 브라우저가 이동까지 처리한다. CSRF 토큰은 파라미터로 싣는다.
    */
   function signOut(): void {
+    // 같은 탭에서 다음 계정이 앞 사람의 초안을 물려받지 않게 지운다(`lib/draftStorage.ts`).
+    forgetPersistedDraft()
     const form = document.createElement('form')
     form.method = 'POST'
     form.action = '/logout'

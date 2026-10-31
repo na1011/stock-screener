@@ -604,17 +604,32 @@ describe('편집 중인 초안은 그 탭의 세션 저장소에서 새로고침
     return useScreenDraftStore()
   }
 
-  it('불러온 프리셋의 출처 · 설명 · 조건이 새로고침 뒤에도 남는다', async () => {
+  it('불러온 프리셋의 출처 · 조건이 남고, 설명 · 편집 가능 여부는 서버 목록이 다시 준다', async () => {
     const draft = useScreenDraftStore()
-    draft.loadFrom({ ...readOnlyPreset(), description: '결손 고지' })
+    draft.loadFrom({ ...readOnlyPreset(), description: '옛 고지' })
     await Promise.resolve()
 
     const restored = await reload()
-
-    expect(restored.origin).toEqual({ kind: 'preset', code: 'VALUE', name: '가치주', description: '결손 고지' })
-    expect(restored.presetDescription).toBe('결손 고지')
+    expect(restored.origin).toEqual({ kind: 'preset', code: 'VALUE', name: '가치주', description: null })
     expect(restored.conditions.map((it) => it.indicatorCode)).toEqual(['PER'])
+    expect(restored.readOnly).toBe(true)
+
+    restored.resyncOrigin([{ ...readOnlyPreset(), description: '새 고지' }])
+    expect(restored.presetDescription).toBe('새 고지')
     expect(restored.editable).toBe(false)
+  })
+
+  it('서버 목록에 더는 없는 전략이면 조건을 남긴 채 새 초안으로 내린다', async () => {
+    const draft = useScreenDraftStore()
+    draft.loadFrom(screen())
+    await Promise.resolve()
+    const restored = await reload()
+
+    restored.resyncOrigin([readOnlyPreset()])
+
+    expect(restored.origin).toEqual({ kind: 'custom' })
+    expect(restored.editable).toBe(true)
+    expect(restored.conditions).toHaveLength(1)
   })
 
   it('되살린 뒤 새로 만든 조건의 키가 되살린 키와 안 부딪힌다', async () => {
@@ -629,16 +644,27 @@ describe('편집 중인 초안은 그 탭의 세션 저장소에서 새로고침
     expect(new Set(keys).size).toBe(keys.length)
   })
 
-  it('이 판의 모양이 아닌 값은 버리고 새 초안으로 시작한다', async () => {
-    store.set('screenDraft.v1', JSON.stringify({ version: 0, conditions: 'x' }))
+  it('이 판의 모양이 아닌 값(키 없는 조건 포함)은 버리고 새 초안으로 시작한다', async () => {
+    store.set('screenDraft.v2', JSON.stringify({ version: 2, ownerId: null, origin: { kind: 'custom' },
+      evaluationMode: 'FILTER', conditions: [{ indicatorCode: 'PER' }], universeCode: null, asOf: null, dirty: true }))
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
 
     const fresh = await reload()
 
     expect(fresh.origin).toEqual({ kind: 'custom' })
     expect(fresh.conditions).toEqual([])
-    expect(store.has('screenDraft.v1')).toBe(false)
+    expect(store.has('screenDraft.v2')).toBe(false)
     expect(warn).toHaveBeenCalled()
     warn.mockRestore()
+  })
+
+  it('다른 계정의 초안은 되살리지 않는다', async () => {
+    store.set('screenDraft.v2', JSON.stringify({ version: 2, ownerId: 99, origin: { kind: 'custom' },
+      evaluationMode: 'FILTER', conditions: [], universeCode: 'US_TOP1000', asOf: null, dirty: false }))
+
+    const fresh = await reload()
+
+    expect(fresh.universeCode).toBeNull()
+    expect(store.has('screenDraft.v2')).toBe(false)
   })
 })

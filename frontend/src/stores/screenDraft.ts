@@ -2,7 +2,9 @@ import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
 
 import { MAX_CONDITIONS } from '@/api/limits'
-import { EVALUATION_MODES } from '@/api/types'
+import { readPersistedDraft, writePersistedDraft, type PersistedOrigin } from '@/lib/draftStorage'
+import { useAuthStore } from '@/stores/auth'
+import { useScreensStore } from '@/stores/screens'
 import type {
   ComparisonOperatorName,
   ConditionGroupPayload,
@@ -164,83 +166,6 @@ function emptyCondition(indicatorCode: string | null = null): DraftCondition {
   return { key: nextKey++, enabled: true, ...conditionDefaults(indicatorCode) }
 }
 
-/**
- * 편집 중인 초안을 **그 탭의 `sessionStorage`**에 둔다 — 새로고침에 조건 · 출처(프리셋 설명 포함) · 조회 대상 · 기준일이 살아남는다.
- *
- * `sessionStorage`를 고른 이유: 초안은 지속 성향이 아니라 **지금 이 탭의 작업**이다. `localStorage`면 다른 탭의 초안을 덮고,
- * URL 쿼리면 링크를 받은 사람의 편집기까지 바꾼다(`lib/detailVisibility.ts`의 같은 판단 · `auth.ts` 복귀 경로와 같은 저장소).
- * 실행 기록(`lastSent`)·휴지통(`lastRemoved`)은 싣지 않는다 — 결과 화면과 짝이라 결과가 없는 새로고침 뒤에는 뜻이 없다.
- *
- * 저장소가 없거나 막혔거나(사생활 모드) 담긴 값이 이 판의 모양이 아니면 버리고 새로 시작한다 — 버린 사실은 콘솔에 남긴다.
- */
-const DRAFT_STORAGE_KEY = 'screenDraft.v1'
-
-interface PersistedDraft {
-  version: 1
-  origin: DraftOrigin
-  conditions: DraftCondition[]
-  evaluationMode: EvaluationMode
-  universeCode: string | null
-  asOf: IsoDate | null
-  dirty: boolean
-  editable: boolean
-}
-
-/** 세션 저장소. 저장소 자체가 없는 실행 환경(노드 시험)이면 `null` — 그때는 영속하지 않는다(실패가 아니라 없는 것이다). */
-function draftStorage(): Storage | null {
-  return typeof globalThis.sessionStorage === 'undefined' ? null : globalThis.sessionStorage
-}
-
-function readPersistedDraft(): PersistedDraft | null {
-  const storage = draftStorage()
-  if (storage === null) {
-    return null
-  }
-  let raw: string | null
-  try {
-    raw = storage.getItem(DRAFT_STORAGE_KEY)
-  } catch (e) {
-    console.warn('편집 중인 초안을 세션 저장소에서 못 읽었다 — 새 초안으로 시작한다', e)
-    return null
-  }
-  if (raw === null) {
-    return null
-  }
-  try {
-    const parsed = JSON.parse(raw) as Partial<PersistedDraft>
-    const kind = (parsed.origin as { kind?: unknown } | undefined)?.kind
-    if (
-      parsed.version !== 1 ||
-      !Array.isArray(parsed.conditions) ||
-      (kind !== 'custom' && kind !== 'preset' && kind !== 'screen') ||
-      !(EVALUATION_MODES as readonly unknown[]).includes(parsed.evaluationMode)
-    ) {
-      throw new Error('모양이 이 판과 다르다')
-    }
-    return parsed as PersistedDraft
-  } catch (e) {
-    console.warn('세션 저장소의 초안이 이 판의 모양이 아니라 버린다', e)
-    try {
-      storage.removeItem(DRAFT_STORAGE_KEY)
-    } catch (removeError) {
-      console.warn('세션 저장소의 초안을 못 지웠다', removeError)
-    }
-    return null
-  }
-}
-
-function writePersistedDraft(draft: PersistedDraft): void {
-  const storage = draftStorage()
-  if (storage === null) {
-    return
-  }
-  try {
-    storage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft))
-  } catch (e) {
-    console.warn('편집 중인 초안을 세션 저장소에 못 썼다 — 새로고침하면 사라진다', e)
-  }
-}
-
 export const useScreenDraftStore = defineStore('screenDraft', () => {
   const origin = ref<DraftOrigin>({ kind: 'custom' })
   /**
@@ -280,33 +205,70 @@ export const useScreenDraftStore = defineStore('screenDraft', () => {
    */
   const editable = ref(true)
 
-  // 새로고침 전의 초안을 되살린다. 키 발급기를 되살린 키 위로 올려 새 조건이 옛 키와 부딪히지 않게 한다.
-  const persisted = readPersistedDraft()
+  // 새로고침 전의 초안을 되살린다(`lib/draftStorage.ts`). 출처의 설명(결손 고지)과 편집 가능 여부는 서버가 정하는 값이라 싣지 않고,
+  // 전략 목록이 오면 {@link resyncOrigin}이 서버 값으로 다시 맞춘다. 그 전까지 프리셋·저장 전략은 잠근다.
+  const auth = useAuthStore()
+  const owner = (): number | null => auth.me?.userId ?? null
+  let pendingResync = false
+  const persisted = readPersistedDraft(owner())
   if (persisted !== null) {
-    origin.value = persisted.origin
+    origin.value = toDraftOrigin(persisted.origin)
     conditions.value = persisted.conditions
     evaluationMode.value = persisted.evaluationMode
     universeCode.value = persisted.universeCode
     asOf.value = persisted.asOf
     dirty.value = persisted.dirty
-    editable.value = persisted.editable
+    editable.value = persisted.origin.kind === 'custom'
+    pendingResync = persisted.origin.kind !== 'custom'
     nextKey = Math.max(nextKey, ...persisted.conditions.map((it) => it.key + 1))
   }
   watch(
-    [origin, conditions, evaluationMode, universeCode, asOf, dirty, editable],
+    [origin, conditions, evaluationMode, universeCode, asOf, dirty],
     () =>
-      writePersistedDraft({
-        version: 1,
-        origin: origin.value,
+      writePersistedDraft(owner(), {
+        origin: toPersistedOrigin(origin.value),
         conditions: conditions.value,
         evaluationMode: evaluationMode.value,
         universeCode: universeCode.value,
         asOf: asOf.value,
         dirty: dirty.value,
-        editable: editable.value,
       }),
     { deep: true },
   )
+
+  /**
+   * 되살린 출처를 서버의 전략 목록으로 다시 맞춘다 — 설명(결손 고지)과 편집 가능 여부는 서버 값이 정본이다. 목록에 더는 없으면(지운 전략 ·
+   * 권한 없음) 조건을 남긴 채 새 초안으로 내린다. 되살린 뒤 한 번만 한다.
+   */
+  function resyncOrigin(screens: readonly ScreenResponse[]): void {
+    if (!pendingResync || screens.length === 0) {
+      return
+    }
+    pendingResync = false
+    const current = origin.value
+    const match =
+      current.kind === 'preset'
+        ? screens.find((it) => it.type === 'PRESET' && it.code === current.code)
+        : current.kind === 'screen'
+          ? screens.find((it) => it.type !== 'PRESET' && it.id === current.id)
+          : undefined
+    if (match === undefined) {
+      origin.value = { kind: 'custom' }
+      editable.value = true
+      dirty.value = conditions.value.length > 0
+      return
+    }
+    origin.value =
+      current.kind === 'preset'
+        ? { kind: 'preset', code: current.code, name: match.name, description: match.description }
+        : { kind: 'screen', id: (current as { id: number }).id, name: match.name }
+    editable.value = match.editable
+  }
+  if (pendingResync) {
+    // 목록은 레일 · 좁은 폭 Picker가 받는다 — 여기서는 지켜보기만 한다.
+    const screens = useScreensStore()
+    watch(() => screens.all, (list) => resyncOrigin(list), { immediate: true })
+  }
 
   const title = computed(() => (origin.value.kind === 'custom' ? FRESH_DRAFT_TITLE : origin.value.name))
   /** 출처가 프리셋인가. **표시용**이다 — 권한 판단은 {@link editable}이 한다. */
@@ -665,6 +627,7 @@ export const useScreenDraftStore = defineStore('screenDraft', () => {
     reset,
     loadFrom,
     forkAsCustom,
+    resyncOrigin,
     toConditionGroup,
     toRequest,
   }
@@ -767,4 +730,13 @@ function fromPayload(payload: ConditionPayload): DraftCondition {
     weight: payload.weight ?? null,
     required: payload.required ?? false,
   }
+}
+
+function toPersistedOrigin(origin: DraftOrigin): PersistedOrigin {
+  return origin.kind === 'preset' ? { kind: 'preset', code: origin.code, name: origin.name } : origin
+}
+
+function toDraftOrigin(origin: PersistedOrigin): DraftOrigin {
+  // 설명은 서버가 다시 준다(resyncOrigin) — 되살린 직후에는 비어 있다.
+  return origin.kind === 'preset' ? { ...origin, description: null } : origin
 }
