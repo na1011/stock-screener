@@ -43,8 +43,9 @@ applies_to:
   「LX홀딩스」 · 「에스케이스퀘어」 대 「SK스퀘어」).
 - MUST NOT: 기계가 원장 행을 거절(REJECTED)하지 않는다 — 반박은 보류(OBSERVED)다. 증거 쪽이 진짜 사건에서도 틀릴 수 있다(진짜 사건인데
   `vs = 0`인 날 7).
-- MUST: 관문 날 국내 시세 재적재는 봉이 있는 국내 종목 전부(`--tickers`)로 돈다 — 티커 없는 재적재는 지금 편입만 받아 보존 창 과거 편입의
-  기준가가 비고, 그 종목의 사건이 안 보인다.
+- MUST: 관문 날 국내 시세 재적재는 보존 창 편입 전원(`--tickers` · 지금 편입 + 창 안 과거 편입 — `initial-load --tickers`의 술어가 그
+  모집단이다)으로 돈다 — 티커 없는 재적재는 지금 편입만 받아 창 안 과거 편입의 기준가가 비고, 그 종목의 사건이 안 보인다. 창보다 앞에서
+  편입이 끝난 종목(코다코 046070 꼴)은 수집 · 화해 · 지표 어디서도 안 도니 기준가가 비어도 읽는 쪽이 없다 — premise도 그 모집단만 센다.
 
 ## 버린 대안
 
@@ -69,7 +70,13 @@ psql -d stock_screener -At -c "SELECT CASE
   ELSE (SELECT CASE WHEN count(*) FILTER (WHERE p.base_price IS NULL) = 0
       THEN 'OK 국내 봉 ' || count(*) || '개 전부 기준가가 있다'
       ELSE count(*) FILTER (WHERE p.base_price IS NULL) || '/' || count(*) || '개 국내 봉에 기준가가 없다 — 그 봉의 거래소 조정이 원장에 안 오른다. 관문 날 재적재가 그 종목을 빠뜨렸거나 꺼진 jar가 봉을 썼다'
-      END FROM price_daily p JOIN stock s ON s.id = p.stock_id WHERE s.market_code IN ('KOSPI', 'KOSDAQ'))
+      END FROM price_daily p JOIN stock s ON s.id = p.stock_id
+      WHERE s.market_code IN ('KOSPI', 'KOSDAQ') AND s.is_active
+        -- 모집단 = 기업행위 수집 · 시세 재적재(--tickers)가 도는 보존 창 편입(StockRegistrar.IN_RETENTION_WINDOW와 같은 술어)
+        AND EXISTS (SELECT 1 FROM universe_membership m JOIN universe u ON u.code = m.universe_code AND u.is_active
+                    WHERE m.stock_id = s.id AND (m.effective_to IS NULL
+                      OR (m.effective_from <= (SELECT max(d.trade_date) FROM indicator_trade_date d WHERE d.market_code = s.market_code)
+                          AND m.effective_to > (SELECT min(d.trade_date) FROM indicator_trade_date d WHERE d.market_code = s.market_code)))))
   END"
 ```
 
