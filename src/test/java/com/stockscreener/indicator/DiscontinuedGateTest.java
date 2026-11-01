@@ -138,6 +138,52 @@ class DiscontinuedGateTest {
                 .as("관문 꺼짐").isEqualTo(LocalDate.of(2024, 7, 30));
     }
 
+    @Test
+    @DisplayName("국내 관문 켬 — 기저 대체일은 뒤 보고서가 보이는 날로 옮긴다(16:10 게시 → 다음 날 · ADR-0204)")
+    void domesticSupersessionMovesToTheReportsVisibleDay() {
+        long kr = insertStock("KOSPI", "999981", "국내 기저 대체");
+        jdbcTemplate.update("""
+                INSERT INTO financial_statement
+                    (stock_id, fiscal_year, fiscal_period, period_start, period_end, published_at, revision_no, is_latest,
+                     currency_code, report_code, net_income, flow_superseded)
+                VALUES (?, 2024, 'FY', '2024-01-01', '2024-12-31', '2025-03-14', 0, true, 'KRW', '11011', 1000,
+                        '{"revenue": "2026-03-13"}'::jsonb)
+                """, kr);
+        jdbcTemplate.update("""
+                INSERT INTO kr_report_xbrl (rcept_no, stock_id, corp_code, detail_type, report_name, rcept_date, bsns_year, reprt_code)
+                VALUES ('20260313000777', ?, '00000003', 'A001', '사업보고서 (2025.12)', '2026-03-13', 2025, '11011')
+                """, kr);
+        jdbcTemplate.update("""
+                INSERT INTO kr_filing_time (rcept_no, corp_code, corp_name, report_name, listed_on, opened_at)
+                VALUES ('20260313000777', '00000003', '국내 기저 대체', '사업보고서 (2025.12)', '2026-03-13', '2026-03-13 16:10:59+09')
+                """);
+        FinancialFigures row = reader(false, true).readAnnualFigures(kr, LocalDate.of(2026, 3, 20), 5, FinancialVisibility.KNOWN_ON).get(0);
+        assertThat(row.flowsSupersededOn().get("revenue").since()).isEqualTo(LocalDate.of(2026, 3, 14));
+        assertThat(reader(false, false).readAnnualFigures(kr, LocalDate.of(2026, 3, 20), 5, FinancialVisibility.KNOWN_ON).get(0)
+                .flowsSupersededOn()).as("관문 꺼짐은 안 읽는다").isEmpty();
+    }
+
+    @Test
+    @DisplayName("국내 관문 켬 — 실적 발표는 DART 게시 시각으로 막는 날을 정한다(16:05 → 다음 날 · 모르면 접수일 · 관문 꺼짐은 저장 효력일)")
+    void domesticReleaseBlocksFromItsPostingTime() {
+        long kr = insertStock("KOSPI", "999980", "국내 잠정실적");
+        jdbcTemplate.update("UPDATE stock SET accounting_month = 12 WHERE id = ?", kr);
+        jdbcTemplate.update("""
+                INSERT INTO earnings_release (market, filing_no, stock_id, form, report_name, filed_on, effective_on)
+                VALUES ('KR', '20260130800501', ?, 'I', '연결재무제표기준영업(잠정)실적(공정공시)', '2026-01-30', '2026-01-30'),
+                       ('KR', '20260430800502', ?, 'I', '연결재무제표기준영업(잠정)실적(공정공시)', '2026-04-30', '2026-04-30')
+                """, kr, kr);
+        jdbcTemplate.update("""
+                INSERT INTO kr_filing_time (rcept_no, corp_code, corp_name, report_name, listed_on, opened_at)
+                VALUES ('20260130800501', '00000004', '국내 잠정실적', '연결재무제표기준영업(잠정)실적(공정공시)', '2026-01-30',
+                        '2026-01-30 16:05:59+09')
+                """);
+        assertThat(reader(false, true).readEarningsReleaseDates(kr, LocalDate.of(2026, 5, 1)))
+                .containsExactly(LocalDate.of(2026, 1, 31), LocalDate.of(2026, 4, 30));
+        assertThat(reader(false, false).readEarningsReleaseDates(kr, LocalDate.of(2026, 5, 1)))
+                .containsExactly(LocalDate.of(2026, 1, 30), LocalDate.of(2026, 4, 30));
+    }
+
     private IndicatorDataReader reader(boolean usGate, boolean krGate) {
         return new IndicatorDataReader(jdbcTemplate, corporateActions, shareClasses, usGate, krGate);
     }

@@ -591,11 +591,27 @@ public class IndicatorDataReader {
      * 화면도 그 종목을 판정 불가로 둔다({@code FinancialBasisReader.Untracked.NON_DECEMBER_FISCAL_YEAR}) — 두 자리가 같은 술어다.
      */
     public List<LocalDate> readEarningsReleaseDates(long stockId, LocalDate asOf) {
-        return jdbcTemplate.queryForList("""
-                SELECT DISTINCT r.effective_on FROM earnings_release r JOIN stock s ON s.id = r.stock_id
+        if (!krGate) {
+            return jdbcTemplate.queryForList("""
+                    SELECT DISTINCT r.effective_on FROM earnings_release r JOIN stock s ON s.id = r.stock_id
+                    WHERE r.stock_id = ? AND r.effective_on <= ? AND (s.market_code = 'US' OR s.accounting_month = 12)
+                      AND """ + EarningsReleaseStore.IS_EARNINGS_RELEASE + """
+                     ORDER BY 1""", LocalDate.class, stockId, asOf);
+        }
+        // 국내 관문 켬 — 국내 발표는 DART 게시 시각으로 막는 날을 정한다(ReportingBasis.domesticReleaseEffective · 화면 판독기와 같은 함수).
+        java.util.TreeSet<LocalDate> out = new java.util.TreeSet<>();
+        jdbcTemplate.query("""
+                SELECT r.market, r.effective_on, t.opened_at FROM earnings_release r JOIN stock s ON s.id = r.stock_id
+                  LEFT JOIN kr_filing_time t ON r.market = 'KR' AND t.rcept_no = r.filing_no
                 WHERE r.stock_id = ? AND r.effective_on <= ? AND (s.market_code = 'US' OR s.accounting_month = 12)
-                  AND """ + EarningsReleaseStore.IS_EARNINGS_RELEASE + """
-                 ORDER BY 1""", LocalDate.class, stockId, asOf);
+                  AND """ + EarningsReleaseStore.IS_EARNINGS_RELEASE, rs -> {
+            LocalDate stored = rs.getObject("effective_on", LocalDate.class);
+            LocalDate day = "KR".equals(rs.getString("market")) ? ReportingBasis.domesticReleaseEffective(stored, instant(rs, "opened_at")) : stored;
+            if (!day.isAfter(asOf)) {
+                out.add(day);
+            }
+        }, stockId, asOf);
+        return new ArrayList<>(out);
     }
 
     /**
@@ -808,7 +824,12 @@ public class IndicatorDataReader {
         // 보이는 날(관문 켬 · ReportingBasis.visibleFrom) — 미국은 COMMON_COLUMNS가, 국내는 KR_PUBLISHED가 공개 시각을 싣는다.
         Opening opening = line != null ? Opening.US : krCommon ? Opening.KR : Opening.NONE;
         ReportingBasis.SessionClose closes = opening == Opening.US ? usCloses() : null;
-        RowMapper<FinancialFigures> mapper = (rs, rowNum) -> mapFigures(rs, line, discontinued, krCommon, krCommon, opening, closes);
+        // 국내 기저 대체일(ADR-0200)은 뒤 보고서의 저장 공시일이다 — 그 보고서가 보이는 날로 옮긴다(ADR-0204).
+        java.util.function.UnaryOperator<LocalDate> krVisible = krCommon ? krVisibleDays(stockId) : null;
+        RowMapper<FinancialFigures> mapper = (rs, rowNum) -> {
+            FinancialFigures figures = mapFigures(rs, line, discontinued, krCommon, krCommon, opening, closes);
+            return krVisible == null ? figures : figures.withFlowsShifted(krVisible);
+        };
         return switch (visibility) {
             case LATEST -> jdbcTemplate.query(
                     (krCommon ? SELECT_FINANCIALS_LATEST_COMMON_KR
@@ -879,6 +900,26 @@ public class IndicatorDataReader {
     private static java.time.Instant instant(ResultSet rs, String column) throws SQLException {
         java.time.OffsetDateTime at = rs.getObject(column, java.time.OffsetDateTime.class);
         return at == null ? null : at.toInstant();
+    }
+
+    /**
+     * 국내 종목의 날짜(접수번호 앞 8자리) → 그날 낸 공시가 보이는 날 — 그날 공시들의 「공시 목록 접수일 · 게시 시각 규칙」 중 늦은 쪽의 최댓값.
+     * 그날 낸 공시를 모르면 다음 날(늦는 쪽).
+     */
+    private java.util.function.UnaryOperator<LocalDate> krVisibleDays(long stockId) {
+        Map<LocalDate, LocalDate> days = new HashMap<>();
+        jdbcTemplate.query("""
+                SELECT to_date(left(k.rcept_no, 8), 'YYYYMMDD') AS day, k.rcept_date, t.opened_at
+                  FROM kr_report_xbrl k LEFT JOIN kr_filing_time t ON t.rcept_no = k.rcept_no
+                 WHERE k.stock_id = ?
+                """, rs -> {
+            LocalDate day = rs.getObject("day", LocalDate.class);
+            LocalDate rule = ReportingBasis.visibleFrom(day, instant(rs, "opened_at"), false, null);
+            LocalDate listed = rs.getObject("rcept_date", LocalDate.class);
+            LocalDate visible = listed != null && listed.isAfter(rule) ? listed : rule;
+            days.merge(day, visible, (a, b) -> a.isAfter(b) ? a : b);
+        }, stockId);
+        return day -> days.getOrDefault(day, day.plusDays(1));
     }
 
     /** 보이는 날을 지을 공개 시각 원자료 — 미국 EDGAR 접수 시각 · 국내 DART 게시 시각 · 없음(관문 꺼짐). */

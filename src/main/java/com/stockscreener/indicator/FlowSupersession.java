@@ -34,4 +34,14 @@ public record FlowSupersession(LocalDate since, NavigableMap<LocalDate, BigDecim
     public boolean staleOn(LocalDate day) {
         return !since.isAfter(day);
     }
+
+    /**
+     * 날짜를 보이는 날로 옮긴 사본(국내 관문 켬 · ADR-0204) — 대체일과 새 값의 날짜는 뒤 보고서의 저장 공시일이다. 그 보고서가 장 마감 뒤
+     * 게시됐으면 그날 봉은 아직 새 기저를 모른다(그 보고서 행 자체도 다음 봉부터 보인다).
+     */
+    public FlowSupersession shifted(java.util.function.UnaryOperator<LocalDate> visible) {
+        TreeMap<LocalDate, BigDecimal> moved = new TreeMap<>();
+        restated.forEach((day, value) -> moved.merge(visible.apply(day), value, (earlier, later) -> later));
+        return new FlowSupersession(visible.apply(since), moved);
+    }
 }

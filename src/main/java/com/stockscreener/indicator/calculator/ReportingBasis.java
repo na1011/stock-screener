@@ -130,6 +130,14 @@ public final class ReportingBasis {
         return first.isBefore(published) ? published : first;
     }
 
+    /**
+     * 국내 실적 발표가 막기 시작하는 날(국내 관문 켬 · ADR-0204) — DART 게시 시각을 알면 재무 보이기와 같은 규칙(15:30 뒤면 다음 날 · 같은 날 장
+     * 마감 뒤 잠정실적과 분기보고서가 함께 다음 봉으로 간다), 모르면 저장 효력일(접수일 — 막기는 일찍 막는 쪽이 보수).
+     */
+    public static LocalDate domesticReleaseEffective(LocalDate stored, Instant opened) {
+        return opened == null ? stored : visibleFrom(stored, opened, false, null);
+    }
+
     public static LocalDate effectiveOn(LocalDate filedOn, Instant acceptedAt) {
         if (acceptedAt == null) {
             return filedOn;

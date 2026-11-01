@@ -225,9 +225,14 @@ public class FinancialBasisReader {
         Map<Long, List<LocalDate>> out = new HashMap<>();
         Timestamp bound = writtenBy == null ? null : Timestamp.from(writtenBy);
         jdbc.query(con -> {
+            // 국내 관문 켬 — 국내 발표는 DART 게시 시각으로 막는 날을 정한다(지표 판독기와 같은 함수 · ReportingBasis.domesticReleaseEffective).
+            boolean kr = indicatorDataReader.gateOn("KOSPI");
             var ps = con.prepareStatement("""
-                    SELECT r.stock_id, r.effective_on FROM earnings_release r
-                    WHERE r.stock_id = ANY(?) AND r.effective_on <= ? AND """ + EarningsReleaseStore.IS_EARNINGS_RELEASE + """
+                    SELECT r.stock_id, r.market, r.effective_on, %s AS opened_at FROM earnings_release r %s
+                    WHERE r.stock_id = ANY(?) AND r.effective_on <= ? AND """.formatted(
+                    kr ? "t.opened_at" : "NULL::timestamptz",
+                    kr ? "LEFT JOIN kr_filing_time t ON r.market = 'KR' AND t.rcept_no = r.filing_no" : "")
+                    + EarningsReleaseStore.IS_EARNINGS_RELEASE + """
                       AND (CAST(? AS timestamptz) IS NULL OR coalesce(r.resolved_at, r.first_seen_at) <= CAST(? AS timestamptz))
                     """);
             ps.setArray(1, con.createArrayOf("bigint", stockIds.toArray()));
@@ -236,7 +241,14 @@ public class FinancialBasisReader {
             ps.setTimestamp(4, bound);
             return ps;
         }, rs -> {
-            out.computeIfAbsent(rs.getLong("stock_id"), k -> new ArrayList<>()).add(rs.getObject("effective_on", LocalDate.class));
+            LocalDate stored = rs.getObject("effective_on", LocalDate.class);
+            java.time.OffsetDateTime opened = rs.getObject("opened_at", java.time.OffsetDateTime.class);
+            LocalDate day = "KR".equals(rs.getString("market"))
+                    ? com.stockscreener.indicator.calculator.ReportingBasis.domesticReleaseEffective(stored, opened == null ? null : opened.toInstant())
+                    : stored;
+            if (!day.isAfter(asOf)) {
+                out.computeIfAbsent(rs.getLong("stock_id"), k -> new ArrayList<>()).add(day);
+            }
         });
         return out;
     }

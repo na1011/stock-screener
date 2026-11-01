@@ -206,6 +206,23 @@ public record FinancialFigures(
         return visibleFrom != null ? visibleFrom : publishedAt;
     }
 
+    /** 기저 대체일을 보이는 날로 옮긴 사본(국내 관문 켬 · ADR-0204 · {@link FlowSupersession#shifted}). */
+    public FinancialFigures withFlowsShifted(java.util.function.UnaryOperator<LocalDate> visible) {
+        if (flowsSupersededOn.isEmpty()) {
+            return this;
+        }
+        java.util.Map<String, FlowSupersession> moved = new java.util.HashMap<>();
+        flowsSupersededOn.forEach((column, f) -> moved.put(column, f.shifted(visible)));
+        return new FinancialFigures(fiscalYear, fiscalPeriod, periodStart, periodEnd, publishedAt, currencyCode, revenue,
+                operatingIncome, netIncome, totalAssets, totalEquity, totalEquityControlling, totalLiabilities, currentAssets,
+                currentLiabilities, retainedEarnings, operatingCashFlow, sharesOutstanding, eps, bps, costOfSales,
+                cashAndEquivalents, capex, inventories, netIncomeControlling, interestAndDividendIncome, noninterestIncome,
+                interestExpense, noninterestExpense, benefitsLossesAndExpenses, grossProfit, operatingExpenses, costsAndExpenses,
+                incomeTaxExpense, profitBeforeTax, shareBasisMultiple, shareBasisStatus, shareClassState, weightedShares,
+                weightedSharesJudged, discontinuedIncome, discontinuedIncomeControlling, discontinuedRule, common, moved,
+                annualOfYear, visibleFrom);
+    }
+
     /** 보이는 날을 단 사본. */
     public FinancialFigures withVisibleFrom(LocalDate day) {
         return new FinancialFigures(fiscalYear, fiscalPeriod, periodStart, periodEnd, publishedAt, currencyCode, revenue,
