@@ -279,14 +279,74 @@ final class SecEdgarFacts {
     static Result build(JsonNode facts, int fromFiscalYear, boolean usGate, CoverUnitJudge.Result coverUnit,
                         IssuerProfile.Profile issuer)
             throws DataSourceException {
+        return build(facts, fromFiscalYear, usGate, coverUnit, issuer, SecStatementFaceCollector.SecStatementFaces.NONE);
+    }
+
+    /** 영업이익을 재무제표 본문에 실었다고 셀 개념 — us-gaap · IFRS 같은 뜻(TaxonomyFrame이 IFRS를 us-gaap 열쇠에 싣는다). */
+    static final Set<String> OPERATING_INCOME_ON_FACE = Set.of("us-gaap_OperatingIncomeLoss", "ifrs-full_ProfitLossFromOperatingActivities");
+
+    /**
+     * 본문으로 거르는 열 — 영업이익(ADR-0202). 매출 · 원가의 「본문 우선」은 데이터셋이 손익계산서를 일부만 실은 공시(ARES 2020 1분기: 그 분기
+     * 본문 값 11줄 · 총매출 줄 없음)에서 구성 줄이 총매출을 밀어내 아직 안 넣는다(재고 「본문 밖 매출 후보가 최댓값으로 이김」).
+     */
+    static final List<SecEdgarColumn> HEADLINE = List.of(SecEdgarColumn.OPERATING_INCOME);
+
+    /** us-gaap 후보 태그 하나를 본문에서 찾을 이름 — 그 태그와, TaxonomyFrame이 그 열쇠에 싣는 IFRS 개념. */
+    static Set<String> faceNames(String usGaapTag) {
+        Set<String> names = new java.util.HashSet<>();
+        names.add("us-gaap_" + usGaapTag);
+        for (TaxonomyFrame.Alias alias : TaxonomyFrame.ALIASES) {
+            if (alias.usGaap().equals(usGaapTag)) {
+                names.add("ifrs-full_" + alias.ifrs());
+            }
+        }
+        return names;
+    }
+
+    /**
+     * 손익 머리 열의 사실을 낸 공시들 중 창 안 기간을 실은 것 — 본문 재료를 받을 대상(창 밖 옛 공시까지 받으면 관문 첫 실행에 1만 건 넘게 부른다).
+     */
+    static Set<String> headlineAccessions(JsonNode facts, int fromFiscalYear, String sic) {
+        Set<String> out = new java.util.TreeSet<>();
+        LocalDate from = LocalDate.of(fromFiscalYear - 1, 1, 1);
+        for (SecEdgarColumn column : HEADLINE) {
+            for (String tag : column.candidates(true, sic)) {
+                for (String name : faceNames(tag)) {
+                    int cut = name.indexOf('_');
+                    JsonNode concept = facts.path(name.substring(0, cut)).path(name.substring(cut + 1));
+                    for (String unit : concept.path("units").propertyNames()) {
+                        for (JsonNode node : concept.path("units").path(unit)) {
+                            String accn = node.path("accn").asString("");
+                            LocalDate end = date(node, "end");
+                            if (!accn.isEmpty() && end != null && !end.isBefore(from)) {
+                                out.add(accn);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return out;
+    }
+
+    /**
+     * @param faces 공시마다 재무제표 본문에 실린 개념(관문 켬 · {@link SecStatementFaceCollector}) — 본문에 영업이익이 없다고 아는 공시의 영업이익
+     *              사실은 버린다: 그 값은 손익계산서 소계가 아니라 부문 주석의 합계 줄이다(SHW · PPG · SLB · EXP · 대조군 MSFT · 2026-11-01).
+     *              모르는 공시는 그대로다
+     */
+    static Result build(JsonNode facts, int fromFiscalYear, boolean usGate, CoverUnitJudge.Result coverUnit,
+                        IssuerProfile.Profile issuer, SecStatementFaceCollector.SecStatementFaces faces)
+            throws DataSourceException {
         // 관문 켬: 공시마다 택소노미·표시 통화를 하나로 정하고 IFRS 개념을 같은 뜻의 us-gaap 열쇠에 싣는다(ADR-0182).
         TaxonomyFrame.Result frame = usGate ? TaxonomyFrame.of(facts) : null;
         if (frame != null) {
             facts = frame.facts();
         }
         Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn = collect(facts, usGate, issuer.sic());
+        Set<String> offStatement = Set.of();
         if (usGate) {
             dropAnnualQuarterContextCarryingTheYear(byColumn);
+            offStatement = dropOffStatementHeadlines(byColumn, faces);
         }
         // 옛 추출 값(sharesSuperseded)은 판정 전 사실로 센다 — 옛 규칙이 실제로 고른 것은 단위가 틀린 그 표지다.
         Map<String, Map<Slot, Fact>> sharesAsFiled = new LinkedHashMap<>(byColumn.get(SecEdgarColumn.SHARES_OUTSTANDING));
@@ -330,7 +390,7 @@ final class SecEdgarFacts {
             Map<SecEdgarColumn, String> tags =
                     chooseTags(labelAnchors.get(label), e.getValue(), periodic);
             reports.addAll(revisionsOf(label, e.getValue(), labelAnchors.get(label),
-                    byColumn, reporting, tags, withheld, usGate));
+                    byColumn, reporting, tags, withheld, usGate, offStatement));
         }
         List<RawFinancialReport> fourthQuarters =
                 deriveFourthQuarters(reports, windows, fromFiscalYear, byColumn, usGate);
@@ -363,7 +423,7 @@ final class SecEdgarFacts {
         reports.sort(Comparator.comparing(RawFinancialReport::periodEnd)
                 .thenComparing(RawFinancialReport::fiscalPeriod)
                 .thenComparing(RawFinancialReport::publishedAt));
-        return new Result(reports, dropped, withoutDerived(absencesOf(facts, byColumn), reports),
+        return new Result(reports, dropped, withoutDerived(absencesOf(facts, byColumn, offStatement), reports),
                 Collections.unmodifiableSet(withheld));
     }
 
@@ -538,6 +598,43 @@ final class SecEdgarFacts {
      * <p>ADR-0157 §버린 대안의 「순수익 태그를 후보에 넣는 것으로 끝낸다」(HWC FY2011 979M 대 728M)는 은행형 유도가 먼저라 여기 안 닿는다(유도가
      * 서는 창은 {@link #revenue}가 이 컬럼을 안 읽는다 · 0콜 스윕 HWC 변화 0).
      */
+    /**
+     * 관문 켬 — 영업이익은 그 공시 손익계산서 본문의 줄만 받는다(ADR-0202). 본문이 그 기간을 싣는 사실만 판정한다 · 본문 줄 = 값이 같은 공시 · 같은
+     * 기간 본문 줄 값과 같다(데이터셋 재료) 또는 개념이 본문에 실렸다(공시 폴더 재료). 아니면 버리고 그 (공시 · 기간)을 낸다 — 주석의 영업이익은
+     * 부문 합계라 전사 비용을 안 뺀 다른 뜻이다(SHW · PPG · SLB). 판 짓기가 그 판의 그 열을 앞 판에서 잇지 않고 부재로 싣는다. 국내는 응답 행이
+     * 이미 재무제표 본문(sj_div)이라 같은 기준이다.
+     */
+    private static Set<String> dropOffStatementHeadlines(Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn,
+                                                         SecStatementFaceCollector.SecStatementFaces faces) {
+        Set<String> off = new java.util.HashSet<>();
+        java.time.format.DateTimeFormatter ymd = java.time.format.DateTimeFormatter.BASIC_ISO_DATE;
+        for (SecEdgarColumn column : HEADLINE) {
+            Map<String, Map<Slot, Fact>> byTag = byColumn.get(column);
+            for (Map.Entry<String, Map<Slot, Fact>> tag : byTag.entrySet()) {
+                Set<String> names = faceNames(tag.getKey());
+                tag.getValue().entrySet().removeIf(e -> {
+                    Slot slot = e.getKey();
+                    int quarters = slot.start() == null ? 0
+                            : (int) Math.round(java.time.temporal.ChronoUnit.MONTHS.between(slot.start(), slot.end().plusDays(1)) / 3.0);
+                    Boolean on = faces.onIncomeStatement(slot.accn(), e.getValue().form(), names, slot.end().format(ymd), quarters,
+                            e.getValue().value());
+                    if (Boolean.FALSE.equals(on)) {
+                        off.add(offKey(slot.accn(), column, slot.start(), slot.end()));
+                        return true;
+                    }
+                    return false;
+                });
+            }
+            byTag.values().removeIf(Map::isEmpty);
+        }
+        return off;
+    }
+
+    /** 버린 사실의 열쇠 — 기간 시작까지 넣는다(같은 기말의 연간 사실이 버려졌다고 3개월 창을 끊지 않게). */
+    private static String offKey(String accn, SecEdgarColumn column, LocalDate start, LocalDate end) {
+        return accn + "|" + column + "|" + start + "|" + end;
+    }
+
     private static void preferNetRevenue(Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn) {
         Map<String, Map<Slot, Fact>> revenue = byColumn.get(SecEdgarColumn.REVENUE);
         Map<Slot, Fact> net = revenue.get(SecEdgarColumn.NET_REVENUE_TAG);
@@ -697,7 +794,7 @@ final class SecEdgarFacts {
     }
 
     private static List<FinancialColumnAbsence> absencesOf(
-            JsonNode facts, Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn) {
+            JsonNode facts, Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn, Set<String> offStatement) {
         List<FinancialColumnAbsence> absences = new ArrayList<>();
         for (SecEdgarColumn column : SecEdgarColumn.values()) {
             // 관문 뒤 재료(F2b)는 저장 컬럼이 아니라 판정 재료다 — 부재 사유 카드의 대상이 아니다(관문 꺼짐 출력도 그대로).
@@ -715,7 +812,11 @@ final class SecEdgarFacts {
                 }
             }
             FinancialColumnAbsence.State state;
-            if (tagExists) {
+            String offTag = "|" + column + "|";
+            if (tagExists && offStatement.stream().anyMatch(k -> k.contains(offTag))) {
+                // 관문 켬(ADR-0202): 사실이 전부 본문 밖 줄이었다 — 그 회사가 재무제표 본문에 그 항목을 안 싣는다(회사에 대한 사실 · 우리 한계가 아니다).
+                state = FinancialColumnAbsence.State.ABSENT;
+            } else if (tagExists) {
                 state = FinancialColumnAbsence.State.FILTERED;
             } else if (hasAny(facts, column.partialCandidates())) {
                 // 후보는 하나도 없는데 부분 개념 태그는 있다. 「안 낸다」가 아니라 「뜻이 다른
@@ -1506,7 +1607,8 @@ final class SecEdgarFacts {
                                                         Map<String, Anchor> anchors,
                                                         Map<SecEdgarColumn, String> tags,
                                                         Set<FinancialFetch.WithheldVintage> withheld,
-                                                        boolean usGate) {
+                                                        boolean usGate,
+                                                        Set<String> offStatement) {
         // 손익 비지배의 마지막 관측. 이 기간보다 앞이면 「그 뒤로 비지배를 안 낸다」이고
         // 연결 총액을 지배주주 값으로 채울 수 있다(noNoncontrollingIncomeBy).
         LocalDate lastNoncontrolling = lastNoncontrollingIncome(byColumn);
@@ -1550,8 +1652,10 @@ final class SecEdgarFacts {
             Map<SecEdgarColumn, BigDecimal> values = null;
             Anchor reporter = null;
             String currency = null;
+            List<String> groupAccns = new ArrayList<>();
             for (int k = i; k < end; k++) {
                 Anchor candidate = reporters.get(k);
+                groupAccns.add(candidate.accn());
                 String candidateCurrency = currencyOf(candidate, window, tags, byColumn);
                 if (candidateCurrency == null) {
                     // 통화를 못 읽는 판은 지금도 통째로 건너뛴다. 묶음에 섞으면 그 판의 값이
@@ -1601,7 +1705,18 @@ final class SecEdgarFacts {
             //
             // 그리고 **앞 판의 값을 이어받는다**(carryForward). 그러지 않으면 뒤 판이 안 실은
             // 컬럼이 null로 저장되어, 정정 하나가 그 기간의 손익을 통째로 지운다.
-            Map<SecEdgarColumn, BigDecimal> carried = carryForward(baseline, values);
+            Map<SecEdgarColumn, BigDecimal> carried = new EnumMap<>(SecEdgarColumn.class);
+            carried.putAll(carryForward(baseline, values));
+            // 관문 켬(ADR-0202): 이 판이 그 열을 본문 밖 줄로만 실었다 — 「이 판은 그 열을 안 실었다」이고 앞 판 값을 잇지 않는다(이으면 재작성 전
+            // 기저의 값이 재작성된 매출과 한 행에 앉는다 · FTI FY2016 · CAG 2015 1분기).
+            Set<String> withdrawn = new java.util.LinkedHashSet<>();
+            for (SecEdgarColumn column : HEADLINE) {
+                if (values.get(column) == null
+                        && groupAccns.stream().anyMatch(accn -> offStatement.contains(offKey(accn, column, window.start(), window.end())))) {
+                    carried.remove(column);
+                    withdrawn.add(column.columnName());
+                }
+            }
             RawFinancialReport candidate = toReport(label, window, reporter, currency, carried,
                     byColumn.getOrDefault(SecEdgarColumn.MINORITY_INTEREST, Map.of()).isEmpty(),
                     noNoncontrollingIncomeBy(lastNoncontrolling, window),
@@ -1641,6 +1756,9 @@ final class SecEdgarFacts {
                         byColumn.getOrDefault(SecEdgarColumn.DISCONTINUED_OPERATIONS, Map.of()).isEmpty(),
                         usGate, noNoncontrollingIncomeBy(lastNonzeroNoncontrolling, window),
                         pairsDiffer.contains(window.end()));
+            }
+            if (!withdrawn.isEmpty()) {
+                candidate = candidate.withAssertedAbsent(withdrawn);
             }
             // MUST: 「저장될 행이 달라지는가」로 판정한다. 원시 컬럼 맵으로 판정하면 안 된다 —
             // 다리 컬럼(유도 재료)이 달라져도 유도 결과가 같으면 저장은 한 칸도 안 바뀌고,

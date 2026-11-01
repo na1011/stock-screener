@@ -235,6 +235,11 @@ stockscreener:
     cache-dir: ${user.home}/.stock-screener/kr-xbrl
     max-fetches-per-run: 1000
 
+  # 미국 공시마다 재무제표 본문에 실린 개념(관문 켬 · 재고 「부문 합계가 영업이익 자리에 앉음」) — 공시 폴더의 MetaLinks.json(또는 FilingSummary와
+  # 표시 링크베이스)에서 지은 것. 한 번 받으면 안 바뀐다(공시는 고쳐지지 않는다).
+  sec-face:
+    cache-dir: ${user.home}/.stock-screener/sec-face
+
   # ── 원장 공시 목록의 첫 커서(ADR-0176) ───────────────────────
   # 장부가 비었을 때만 쓴다 — 한 번 닫으면 커서는 filing_listing_day의 마지막 날이다. 값은 시장마다 「마지막 전원 FR이
   # 받았을 수 있는 공시」의 앞이다(그 뒤 공시가 DB에 없을 수 있다): 미국 FR #683(2026-09-28 01:14 KST = 09-27 미 동부)에서

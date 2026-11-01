@@ -329,6 +329,21 @@ public record RawFinancialReport(
                 sharesSuperseded);
     }
 
+    /** 부재 판정을 더한다 — 이 판이 그 칸을 안 실었다는 어댑터의 판정(쓰기기가 저장값을 지운다). */
+    public RawFinancialReport withAssertedAbsent(Set<String> more) {
+        Set<String> absent = new java.util.LinkedHashSet<>(assertedAbsent);
+        absent.addAll(more);
+        return new RawFinancialReport(fiscalYear, fiscalPeriod, periodStart, periodEnd, publishedAt, reportCode,
+                currencyCode, revenue, operatingIncome, netIncome, totalAssets, totalEquity,
+                totalEquityControlling, totalLiabilities, currentAssets, currentLiabilities,
+                retainedEarnings, operatingCashFlow, sharesOutstanding, eps, bps, costOfSales,
+                cashAndEquivalents, capex, inventories, netIncomeControlling, interestAndDividendIncome,
+                noninterestIncome, interestExpense, noninterestExpense, benefitsLossesAndExpenses,
+                grossProfit, operatingExpenses, costsAndExpenses, incomeTaxExpense,
+                profitBeforeTax, derived, Set.copyOf(absent), discontinuedIncome, discontinuedIncomeControlling, discontinuedRule,
+                sharesSuperseded);
+    }
+
     /** 같은 행에 「이 주식수가 대신한 옛 추출 값」을 단다 — 관문 켬 미국 어댑터가 판을 다 지은 뒤 싣는다. */
     public RawFinancialReport withSharesSuperseded(Set<BigDecimal> superseded) {
         return new RawFinancialReport(fiscalYear, fiscalPeriod, periodStart, periodEnd, publishedAt, reportCode,

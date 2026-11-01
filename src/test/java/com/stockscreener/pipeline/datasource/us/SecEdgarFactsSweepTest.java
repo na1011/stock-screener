@@ -158,11 +158,28 @@ class SecEdgarFactsSweepTest {
                         }
                     }
                     IssuerProfile.Profile issuer = issuers.getOrDefault(ticker, IssuerProfile.Profile.UNKNOWN);
+                    // 공시 본문 재료(관문 켬 · 재고 「부문 합계가 영업이익 자리에 앉음」) — REPLAY_FACE_DIR의 캐시만 읽는다(0콜 · 없으면 그 공시는 모름).
+                    SecStatementFaceCollector.SecStatementFaces faces = SecStatementFaceCollector.SecStatementFaces.NONE;
+                    if (System.getenv("REPLAY_FACE_DIR") != null) {
+                        java.util.Map<String, SecStatementFaceCollector.Face> known = new java.util.HashMap<>();
+                        for (String accn : SecEdgarFacts.headlineAccessions(facts, from, issuer.sic())) {
+                            java.util.Optional<SecStatementFaceCollector.Face> face = SecStatementFaceCollector.read(
+                                    Path.of(System.getenv("REPLAY_FACE_DIR")), root.path("cik").asLong(), accn);
+                            if (face != null && face.isPresent()) {
+                                known.put(accn, face.get());
+                            } else if (face == null && System.getenv("REPLAY_FACE_MISSING_OUT") != null) {
+                                // 재료가 없는 창 안 공시 — 운영 수집기가 공시 폴더에서 받을 것(받기 도구의 대상 목록).
+                                Files.writeString(Path.of(System.getenv("REPLAY_FACE_MISSING_OUT")), root.path("cik").asLong() + "\t" + accn + "\n",
+                                        java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.APPEND);
+                            }
+                        }
+                        faces = new SecStatementFaceCollector.SecStatementFaces(known);
+                    }
                     result = usGate && splits != null
                             ? SecEdgarFacts.build(facts, from, true,
-                                    ShareClassCollector.judgeCovers(facts, splits.getOrDefault(ticker, List.of())), issuer)
+                                    ShareClassCollector.judgeCovers(facts, splits.getOrDefault(ticker, List.of())), issuer, faces)
                             : SecEdgarFacts.build(facts, from, usGate,
-                                    com.stockscreener.pipeline.datasource.us.shareclass.CoverUnitJudge.Result.NONE, issuer);
+                                    com.stockscreener.pipeline.datasource.us.shareclass.CoverUnitJudge.Result.NONE, issuer, faces);
                 } catch (RuntimeException | java.io.IOException
                         | com.stockscreener.pipeline.datasource.DataSourceException e) {
                     // MUST: DataSourceException도 잡는다. checked라 목록에 없던 탓에 한 종목의

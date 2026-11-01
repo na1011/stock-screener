@@ -76,6 +76,8 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
     private final CompanyFactsHistory history;
     /** 팩트 해석의 증인인 발행사 속성 — 선언 결산월(SecEdgarFacts.interimSeed) · SIC(관문 켬 업종 총매출 폴백). */
     private final IssuerProfile issuerProfile;
+    /** 공시 본문 재료(관문 켬) — 없으면 영업이익을 본문으로 거르지 않는다. */
+    private final SecStatementFaceCollector faces;
 
     /**
      * MUST — {@code @Autowired}를 유지한다. 생성자가 둘이면 Spring이 어느 쪽을 쓸지 정하지
@@ -91,10 +93,11 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
                                     DepositaryCoverCollector depositary,
                                     CompanyFactsHistory history,
                                     IssuerProfile issuerProfile,
+                                    SecStatementFaceCollector faces,
                                     @Value("${stockscreener.gate.us}") boolean usGate) {
         this(clientFactory, properties, rateLimiter, cikCache,
                 properties.getSecEdgar().getBaseUrl(), usGate, supplement, SecFilingClient.Backoff.standard(), shareClass,
-                depositary, history, issuerProfile);
+                depositary, history, issuerProfile, faces);
     }
 
     /** MockWebServer 테스트 전용 — base URL만 바꿔 끼운다. 관문 설정은 꺼진 채이고 보충하지 않는다. */
@@ -127,7 +130,8 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
                              FilingSupplementer supplementer,
                              CompanyFactsHistory history) {
         this(clientFactory, properties, rateLimiter, cikCache, baseUrl, usGate, supplementer,
-                new SecFilingClient.Backoff(SecFilingClient.Backoff.STANDARD_MILLIS, millis -> { }), null, null, history, IssuerProfile.NONE);
+                new SecFilingClient.Backoff(SecFilingClient.Backoff.STANDARD_MILLIS, millis -> { }), null, null, history, IssuerProfile.NONE,
+                null);
     }
 
     SecEdgarFinancialAdapter(ExternalApiClientFactory clientFactory,
@@ -141,7 +145,9 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
                              ShareClassCollector shareClass,
                              DepositaryCoverCollector depositary,
                              CompanyFactsHistory history,
-                             IssuerProfile issuerProfile) {
+                             IssuerProfile issuerProfile,
+                             SecStatementFaceCollector faces) {
+        this.faces = faces;
         DataSourceProperties.Source source = properties.getSecEdgar();
         this.client = clientFactory.create(source, baseUrl, SecEdgarHeaders.of(source));
         this.rateLimiter = rateLimiter;
@@ -256,8 +262,13 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
         // 두 쪽이 저마다 내면 입력(보충 공시의 표지 · IFRS 가중평균 별칭)이 달라 결정이 갈린다.
         com.stockscreener.pipeline.datasource.us.shareclass.CoverUnitJudge.Result coverUnit =
                 classInput != null ? shareClass.judgeCovers(security, cik.get(), frame.shareClassFacts(), tree) : null;
+        // 관문 켬: 손익 머리 열의 사실을 낸 창 안 공시마다 재무제표 본문(ADR-0202) — 주석의 줄을 본문 열로 받지 않는다.
+        SecStatementFaceCollector.SecStatementFaces statementFaces = usGate && faces != null
+                ? faces.faces(cik.get(), SecEdgarFacts.headlineAccessions(tree, fromFiscalYear, issuerProfile.of(security.stockId()).sic()), context)
+                : SecStatementFaceCollector.SecStatementFaces.NONE;
         SecEdgarFacts.Result result = SecEdgarFacts.build(tree, fromFiscalYear, usGate,
-                coverUnit != null ? coverUnit : com.stockscreener.pipeline.datasource.us.shareclass.CoverUnitJudge.Result.NONE, issuerProfile.of(security.stockId()));
+                coverUnit != null ? coverUnit : com.stockscreener.pipeline.datasource.us.shareclass.CoverUnitJudge.Result.NONE,
+                issuerProfile.of(security.stockId()), statementFaces);
         if (result.dropped() > 0) {
             // MUST NOT: 조용히 버리지 않는다. 「없다」와 「우리가 못 만들었다」는 다르고,
             // 그 구분이 없으면 결손 판정이 서지 않는다(P22 ①축).
