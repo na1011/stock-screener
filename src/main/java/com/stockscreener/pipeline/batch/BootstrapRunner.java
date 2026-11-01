@@ -194,6 +194,14 @@ public class BootstrapRunner implements ApplicationRunner {
     private final CandidateIntake candidateIntake;
     private final FreshnessCatchUpJob freshnessCatchUpJob;
     private final KrXbrlCollectJob krXbrlCollectJob;
+
+    /** 국내 공시 게시 시각(ADR-0204) — 생성자를 시험이 직접 부르므로 주입으로 단다. */
+    private KrFilingTimeJob krFilingTimeJob;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    void krFilingTimeJob(KrFilingTimeJob job) {
+        this.krFilingTimeJob = job;
+    }
     private final BatchExecutionSweeper executionSweeper;
     private final ConfigurableApplicationContext context;
 
@@ -427,6 +435,9 @@ public class BootstrapRunner implements ApplicationRunner {
                     csv(args, "tickers"));
             // 국내 보통주 몫 재료(ADR-0192) — 재료 표 둘과 디스크 캐시를 쓰고, 재료가 숫자가 같다고 답한 라벨에 원본 접수일의 판을 넣는다
             // (재무 표 · ADR-0195 — 화해가 짝이다). --max-fetches 0 이하면 새로 받기 상한 없음(관문 앞 밀린 재료 비우기) · 안 주면 정기 상한.
+            // 국내 공시 게시 시각(ADR-0204) — DART 웹 「오늘의 공시」를 캐시에 받고, 국내 관문 켬이면 관문 표에 올린다. 재무 값은 안 바꾼다.
+            case "kr-filing-time" -> krFilingTimeJob.run(asOf, BatchExecutionRecorder.TriggeredBy.MANUAL,
+                    integer(args, "day-limit", Integer.MAX_VALUE));
             case "kr-xbrl-collect" -> krXbrlCollectJob.run(asOf, BatchExecutionRecorder.TriggeredBy.MANUAL, csv(args, "tickers"),
                     optionalInteger(args, "max-fetches"));
             // 외부 호출이 0이다. 유도 규칙을 고친 뒤 이것만 다시 돌린다.
@@ -571,7 +582,7 @@ public class BootstrapRunner implements ApplicationRunner {
             // stock-fold 전용(새 행 후보의 생성 시각 하한 · ISO 오프셋 시각) · sec-cik-bind 전용(손 후보 티커:CIK,…).
             "since", "ciks",
             // earnings-release 전용(시장별 과거 훑기 상한 · ADR-0195) · kr-xbrl-collect 전용(새로 받기 상한 · ADR-0192).
-            "sweep-limit", "max-fetches");
+            "sweep-limit", "max-fetches", "day-limit");
 
     /**
      * {@code --universe}가 뜻을 갖는 잡. 나머지에서는 조용히 무시되므로 거절한다.

@@ -94,6 +94,14 @@ public class PipelineScheduler {
     private final WriteLock writeLock;
     private final FilingListingJob filingListingJob;
     private final EarningsReleaseJob earningsReleaseJob;
+
+    /** 국내 공시 게시 시각(ADR-0204) — 생성자를 시험이 직접 부르므로 주입으로 단다(없으면 건너뛴다). */
+    private com.stockscreener.pipeline.batch.KrFilingTimeJob krFilingTimeJob;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void krFilingTimeJob(com.stockscreener.pipeline.batch.KrFilingTimeJob job) {
+        this.krFilingTimeJob = job;
+    }
     private final FilingConsumptionJob filingConsumptionJob;
     private final FreshnessCatchUpJob freshnessCatchUpJob;
     private final com.stockscreener.pipeline.batch.KrXbrlCollectJob krXbrlCollectJob;
@@ -253,6 +261,18 @@ public class PipelineScheduler {
                     return;
                 } catch (RuntimeException e) {
                     held = keepFirst(held, e);
+                }
+                // 국내 공시 게시 시각(ADR-0204) — 지난 날짜만(오늘 목록은 계속 는다). 일일 갱신이 그 시각으로 보이는 날을 짓게 그 앞이다.
+                if (krFilingTimeJob != null) {
+                    try {
+                        krFilingTimeJob.run(today, BatchExecutionRecorder.TriggeredBy.SCHEDULER,
+                                com.stockscreener.pipeline.batch.KrFilingTimeJob.SCHEDULED_DAY_LIMIT);
+                    } catch (BatchShutdownException e) {
+                        log.info("일일 갱신 앞 게시 시각 받기가 종료로 중단됐다. today={} — 일일 갱신을 시작하지 않는다.", today);
+                        return;
+                    } catch (RuntimeException e) {
+                        held = keepFirst(held, e);
+                    }
                 }
                 log.info("국내 일일 갱신을 시작한다. targetDate={}", targetDate);
                 try {

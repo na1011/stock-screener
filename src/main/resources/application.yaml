@@ -240,6 +240,10 @@ stockscreener:
   sec-face:
     cache-dir: ${user.home}/.stock-screener/sec-face
 
+  # ── 국내 공시 게시 시각 캐시(ADR-0204 · DART 웹 「오늘의 공시」) ─────
+  dart-day:
+    cache-dir: ${user.home}/.stock-screener/dart-day
+
   # ── 원장 공시 목록의 첫 커서(ADR-0176) ───────────────────────
   # 장부가 비었을 때만 쓴다 — 한 번 닫으면 커서는 filing_listing_day의 마지막 날이다. 값은 시장마다 「마지막 전원 FR이
   # 받았을 수 있는 공시」의 앞이다(그 뒤 공시가 DB에 없을 수 있다): 미국 FR #683(2026-09-28 01:14 KST = 09-27 미 동부)에서
