@@ -340,6 +340,17 @@ final class SecEdgarFacts {
     static Result build(JsonNode facts, int fromFiscalYear, boolean usGate, CoverUnitJudge.Result coverUnit,
                         IssuerProfile.Profile issuer, SecStatementFaceCollector.SecStatementFaces faces)
             throws DataSourceException {
+        return build(facts, fromFiscalYear, usGate, coverUnit, issuer, faces, null);
+    }
+
+    /**
+     * @param acceptances 발행사 전 이력 공시의 접수 시각(관문 켬 · ADR-0204 · {@code null}이면 판정 안 함) — 판마다 공개 시각을 싣는다
+     *                    ({@link #openedAt})
+     */
+    static Result build(JsonNode facts, int fromFiscalYear, boolean usGate, CoverUnitJudge.Result coverUnit,
+                        IssuerProfile.Profile issuer, SecStatementFaceCollector.SecStatementFaces faces,
+                        Map<String, java.time.Instant> acceptances)
+            throws DataSourceException {
         // 관문 켬: 공시마다 택소노미·표시 통화를 하나로 정하고 IFRS 개념을 같은 뜻의 us-gaap 열쇠에 싣는다(ADR-0182).
         TaxonomyFrame.Result frame = usGate ? TaxonomyFrame.of(facts) : null;
         if (frame != null) {
@@ -424,6 +435,10 @@ final class SecEdgarFacts {
             Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> asFiled = new EnumMap<>(byColumn);
             asFiled.put(SecEdgarColumn.SHARES_OUTSTANDING, sharesAsFiled);
             reports.replaceAll(r -> withSharesSuperseded(r, labelAnchors, asFiled, coverUnit));
+        }
+        if (usGate && acceptances != null) {
+            Map<LocalDate, Set<String>> filedOn = filingsByDate(facts);
+            reports.replaceAll(r -> r.withAcceptedAt(openedAt(filedOn.getOrDefault(r.publishedAt(), Set.of()), acceptances)));
         }
         reports.sort(Comparator.comparing(RawFinancialReport::periodEnd)
                 .thenComparing(RawFinancialReport::fiscalPeriod)
@@ -628,6 +643,44 @@ final class SecEdgarFacts {
             byTag.values().removeIf(Map::isEmpty);
         }
         return off;
+    }
+
+    /**
+     * 판의 공개 시각 — 그 판 공시일에 사실을 낸 발행사 공시들의 접수 시각 중 가장 늦은 것(ADR-0204). 하나라도 모르면 {@code null}(모른다 —
+     * 아는 쪽 시각을 쓰면 모르는 공시의 값을 미리 본다) · 그날 사실을 낸 공시가 없어도 {@code null}. 판 묶음(같은 날 접기) · 유도 4분기 ·
+     * 보충 공시 · 8-K 값이 이 한 규칙에 든다 — 그 판에 값을 안 낸 같은 날 공시까지 넣어 틀려도 늦는 쪽으로만 틀린다.
+     */
+    static java.time.Instant openedAt(Set<String> accessions, Map<String, java.time.Instant> acceptances) {
+        java.time.Instant latest = null;
+        for (String accn : accessions) {
+            java.time.Instant at = acceptances.get(accn);
+            if (at == null) {
+                return null;
+            }
+            if (latest == null || at.isAfter(latest)) {
+                latest = at;
+            }
+        }
+        return latest;
+    }
+
+    /** 제출일 → 그날 사실을 낸 공시(companyfacts + 보충 · 모든 네임스페이스). */
+    private static Map<LocalDate, Set<String>> filingsByDate(JsonNode facts) {
+        Map<LocalDate, Set<String>> out = new HashMap<>();
+        for (Map.Entry<String, JsonNode> namespace : facts.properties()) {
+            for (Map.Entry<String, JsonNode> concept : namespace.getValue().properties()) {
+                for (Map.Entry<String, JsonNode> unit : concept.getValue().path("units").properties()) {
+                    for (JsonNode node : unit.getValue()) {
+                        LocalDate filed = date(node, "filed");
+                        String accn = node.path("accn").asString("");
+                        if (filed != null && !accn.isEmpty()) {
+                            out.computeIfAbsent(filed, k -> new HashSet<>()).add(accn);
+                        }
+                    }
+                }
+            }
+        }
+        return out;
     }
 
     /** 그 사실이 그 공시 손익계산서 본문의 줄인가 — 모르면 {@code null}({@link SecStatementFaceCollector.SecStatementFaces#onIncomeStatement}). */

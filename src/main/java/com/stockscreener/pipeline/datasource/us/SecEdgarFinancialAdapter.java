@@ -79,6 +79,14 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
     /** 공시 본문 재료(관문 켬) — 없으면 영업이익을 본문으로 거르지 않는다. */
     private final SecStatementFaceCollector faces;
 
+    /** 발행사 전 이력 공시의 접수 시각(관문 켬 · ADR-0204) — 없으면(키 없음 · 시험) 판정하지 않는다. */
+    private SecCurrentReportClient acceptances;
+
+    @Autowired(required = false)
+    void acceptances(SecCurrentReportClient client) {
+        this.acceptances = client;
+    }
+
     /**
      * MUST — {@code @Autowired}를 유지한다. 생성자가 둘이면 Spring이 어느 쪽을 쓸지 정하지
      * 못해 <b>기동에 실패</b>하고, 단위 테스트는 생성자를 직접 부르므로 그것을 잡지 못한다.
@@ -266,9 +274,12 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
         SecStatementFaceCollector.SecStatementFaces statementFaces = usGate && faces != null
                 ? faces.faces(cik.get(), SecEdgarFacts.headlineAccessions(tree, fromFiscalYear, issuerProfile.of(security.stockId()).sic()), context)
                 : SecStatementFaceCollector.SecStatementFaces.NONE;
+        // 관문 켬: 판마다 공개 시각(ADR-0204) — 발행사 전 이력 공시의 접수 시각. 받기 실패는 그 종목의 실패다(「모름」으로 접으면 실행마다
+        // 그 판이 보이는 봉이 갈린다).
+        java.util.Map<String, java.time.Instant> accepted = usGate && acceptances != null ? acceptances.acceptances(cik.get()) : null;
         SecEdgarFacts.Result result = SecEdgarFacts.build(tree, fromFiscalYear, usGate,
                 coverUnit != null ? coverUnit : com.stockscreener.pipeline.datasource.us.shareclass.CoverUnitJudge.Result.NONE,
-                issuerProfile.of(security.stockId()), statementFaces);
+                issuerProfile.of(security.stockId()), statementFaces, accepted);
         if (result.dropped() > 0) {
             // MUST NOT: 조용히 버리지 않는다. 「없다」와 「우리가 못 만들었다」는 다르고,
             // 그 구분이 없으면 결손 판정이 서지 않는다(P22 ①축).

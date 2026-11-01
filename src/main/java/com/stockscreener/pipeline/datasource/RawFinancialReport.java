@@ -236,8 +236,53 @@ public record RawFinancialReport(
          * 원장 값이라 손 수리를 덮는 전제가 선다.
          * {@code null}이면 빈 집합으로 정규화한다 — 비면 지금까지와 똑같이 동작한다.
          */
-        Set<BigDecimal> sharesSuperseded
+        Set<BigDecimal> sharesSuperseded,
+
+        /**
+         * <b>이 판의 공개 시각</b>(관문 켬 미국 어댑터만 · ADR-0204) — 그 판 공시일에 사실을 낸 발행사 공시들의 EDGAR 접수 시각 중 가장 늦은 것.
+         * 그중 하나라도 모르면 {@code null}(모른다 — 공시일 다음 날부터 보인다). 저장은 관문 칸 {@code accepted_at}이고 이 호출의 보고서가
+         * 실었을 때만 쓴다({@link #openedJudged}).
+         */
+        java.time.Instant acceptedAt,
+
+        /** 공개 시각을 판정했는가 — 참이면 {@link #acceptedAt}이 null이어도 「모른다」로 저장한다(관문 칸 관할). */
+        boolean openedJudged
 ) {
+
+    /** 공개 시각을 안 싣는 판(관문 꺼짐 · 국내) — 쓰기기는 그 칸을 안 건드린다. */
+    public RawFinancialReport(int fiscalYear, String fiscalPeriod, LocalDate periodStart, LocalDate periodEnd,
+                              LocalDate publishedAt, String reportCode, String currencyCode, BigDecimal revenue,
+                              BigDecimal operatingIncome, BigDecimal netIncome, BigDecimal totalAssets, BigDecimal totalEquity,
+                              BigDecimal totalEquityControlling, BigDecimal totalLiabilities, BigDecimal currentAssets,
+                              BigDecimal currentLiabilities, BigDecimal retainedEarnings, BigDecimal operatingCashFlow,
+                              BigDecimal sharesOutstanding, BigDecimal eps, BigDecimal bps, BigDecimal costOfSales,
+                              BigDecimal cashAndEquivalents, BigDecimal capex, BigDecimal inventories,
+                              BigDecimal netIncomeControlling, BigDecimal interestAndDividendIncome,
+                              BigDecimal noninterestIncome, BigDecimal interestExpense, BigDecimal noninterestExpense,
+                              BigDecimal benefitsLossesAndExpenses, BigDecimal grossProfit, BigDecimal operatingExpenses,
+                              BigDecimal costsAndExpenses, BigDecimal incomeTaxExpense, BigDecimal profitBeforeTax,
+                              boolean derived, Set<String> assertedAbsent, BigDecimal discontinuedIncome,
+                              BigDecimal discontinuedIncomeControlling, BigDecimal discontinuedRule,
+                              Set<BigDecimal> sharesSuperseded) {
+        this(fiscalYear, fiscalPeriod, periodStart, periodEnd, publishedAt, reportCode, currencyCode, revenue, operatingIncome,
+                netIncome, totalAssets, totalEquity, totalEquityControlling, totalLiabilities, currentAssets, currentLiabilities,
+                retainedEarnings, operatingCashFlow, sharesOutstanding, eps, bps, costOfSales, cashAndEquivalents, capex, inventories,
+                netIncomeControlling, interestAndDividendIncome, noninterestIncome, interestExpense, noninterestExpense,
+                benefitsLossesAndExpenses, grossProfit, operatingExpenses, costsAndExpenses, incomeTaxExpense, profitBeforeTax,
+                derived, assertedAbsent, discontinuedIncome, discontinuedIncomeControlling, discontinuedRule, sharesSuperseded,
+                null, false);
+    }
+
+    /** 같은 행에 공개 시각 판정을 단다(관문 켬 미국 어댑터가 판을 다 지은 뒤 · {@code null} = 모른다). */
+    public RawFinancialReport withAcceptedAt(java.time.Instant at) {
+        return new RawFinancialReport(fiscalYear, fiscalPeriod, periodStart, periodEnd, publishedAt, reportCode, currencyCode, revenue,
+                operatingIncome, netIncome, totalAssets, totalEquity, totalEquityControlling, totalLiabilities, currentAssets,
+                currentLiabilities, retainedEarnings, operatingCashFlow, sharesOutstanding, eps, bps, costOfSales, cashAndEquivalents,
+                capex, inventories, netIncomeControlling, interestAndDividendIncome, noninterestIncome, interestExpense,
+                noninterestExpense, benefitsLossesAndExpenses, grossProfit, operatingExpenses, costsAndExpenses, incomeTaxExpense,
+                profitBeforeTax, derived, assertedAbsent, discontinuedIncome, discontinuedIncomeControlling, discontinuedRule,
+                sharesSuperseded, at, true);
+    }
 
     /** 중단영업 판정 규칙의 지금 판(F2b · ADR-0184). 규칙을 바꾸면 올린다 — 저장이 그 판으로 옛 판정을 고친다. */
     public static final BigDecimal DISCONTINUED_RULE_VERSION = BigDecimal.ONE;
@@ -292,7 +337,7 @@ public record RawFinancialReport(
                 cashAndEquivalents, capex, inventories, netIncomeControlling, interestAndDividendIncome,
                 noninterestIncome, interestExpense, noninterestExpense, benefitsLossesAndExpenses,
                 grossProfit, operatingExpenses, costsAndExpenses, incomeTaxExpense,
-                profitBeforeTax, derived, absent, consolidated, controlling, DISCONTINUED_RULE_VERSION, sharesSuperseded);
+                profitBeforeTax, derived, absent, consolidated, controlling, DISCONTINUED_RULE_VERSION, sharesSuperseded, acceptedAt, openedJudged);
     }
 
     /**
@@ -310,7 +355,7 @@ public record RawFinancialReport(
                 cashAndEquivalents, capex, inventories, netIncomeControlling, interestAndDividendIncome,
                 noninterestIncome, interestExpense, noninterestExpense, benefitsLossesAndExpenses,
                 grossProfit, operatingExpenses, costsAndExpenses, incomeTaxExpense,
-                profitBeforeTax, derived, Set.copyOf(absent), null, null, null, sharesSuperseded);
+                profitBeforeTax, derived, Set.copyOf(absent), null, null, null, sharesSuperseded, acceptedAt, openedJudged);
     }
 
     /**
@@ -326,7 +371,7 @@ public record RawFinancialReport(
                 noninterestIncome, interestExpense, noninterestExpense, benefitsLossesAndExpenses,
                 grossProfit, operatingExpenses, costsAndExpenses, incomeTaxExpense,
                 profitBeforeTax, derived, Set.of(), discontinuedIncome, discontinuedIncomeControlling, discontinuedRule,
-                sharesSuperseded);
+                sharesSuperseded, acceptedAt, openedJudged);
     }
 
     /** 부재 판정을 더한다 — 이 판이 그 칸을 안 실었다는 어댑터의 판정(쓰기기가 저장값을 지운다). */
@@ -341,7 +386,7 @@ public record RawFinancialReport(
                 noninterestIncome, interestExpense, noninterestExpense, benefitsLossesAndExpenses,
                 grossProfit, operatingExpenses, costsAndExpenses, incomeTaxExpense,
                 profitBeforeTax, derived, Set.copyOf(absent), discontinuedIncome, discontinuedIncomeControlling, discontinuedRule,
-                sharesSuperseded);
+                sharesSuperseded, acceptedAt, openedJudged);
     }
 
     /** 같은 행에 「이 주식수가 대신한 옛 추출 값」을 단다 — 관문 켬 미국 어댑터가 판을 다 지은 뒤 싣는다. */
@@ -354,7 +399,7 @@ public record RawFinancialReport(
                 noninterestIncome, interestExpense, noninterestExpense, benefitsLossesAndExpenses,
                 grossProfit, operatingExpenses, costsAndExpenses, incomeTaxExpense,
                 profitBeforeTax, derived, assertedAbsent, discontinuedIncome, discontinuedIncomeControlling,
-                discontinuedRule, superseded);
+                discontinuedRule, superseded, acceptedAt, openedJudged);
     }
 
     /** 저장된 주식수가 이 행이 대신한 옛 추출 값인가 — 소수 자리와 무관하게({@code compareTo}) 본다. */

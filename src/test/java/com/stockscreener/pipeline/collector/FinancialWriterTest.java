@@ -232,6 +232,24 @@ class FinancialWriterTest {
         }
 
         @Test
+        @DisplayName("공개 시각(관문 칸 · ADR-0204)은 판정을 실은 보고서만 쓴다 — 다르면 null로도 덮고 · 안 실은 호출은 안 건드린다")
+        void acceptedAtIsWrittenOnlyWhenJudgedAndOverwrittenEvenWithNull() {
+            writer.write(stockId, List.of(report(2025, "FY", "2026-03-15", "1000")));
+            assertThat(latestRow().get("accepted_at")).as("관문 꺼짐 어댑터의 행").isNull();
+
+            java.time.Instant at = java.time.Instant.parse("2026-03-15T20:06:00Z");
+            writer.write(stockId, List.of(report(2025, "FY", "2026-03-15", "1000").withAcceptedAt(at)), WriteMode.FILL_MISSING);
+            assertThat(((java.sql.Timestamp) latestRow().get("accepted_at")).toInstant()).isEqualTo(at);
+
+            writer.write(stockId, List.of(report(2025, "FY", "2026-03-15", "1000")), WriteMode.FILL_MISSING);
+            assertThat(((java.sql.Timestamp) latestRow().get("accepted_at")).toInstant()).as("안 실은 호출").isEqualTo(at);
+
+            writer.write(stockId, List.of(report(2025, "FY", "2026-03-15", "1000").withAcceptedAt(null)), WriteMode.FILL_MISSING);
+            assertThat(latestRow().get("accepted_at")).as("모른다는 판정은 아는 옛 시각을 덮는다").isNull();
+            assertThat(rowCount()).isEqualTo(1);
+        }
+
+        @Test
         @DisplayName("지배 몫을 모른다는 판정(assertedAbsent)은 옛 지배 몫을 지운다 — 소스 행의 null이라도")
         void unresolvedControllingShareClearsTheOldValue() {
             writer.write(stockId, List.of(report(2025, "FY", "2026-03-15", "1000")

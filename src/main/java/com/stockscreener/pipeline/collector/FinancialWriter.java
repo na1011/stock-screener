@@ -863,8 +863,17 @@ public class FinancialWriter {
         boolean reportCodeDiffers =
                 !java.util.Objects.equals(existing.reportCode(), report.reportCode());
 
+        // 공개 시각(관문 칸 · ADR-0204) — 판정을 실은 보고서만. 다르면 null로도 덮는다: null은 「그 판에 값을 낸 공시 중 모르는 것이 있다」는
+        // 판정이라, 아는 옛 시각을 남기면 모르는 공시의 값을 그 시각에 미리 본다.
+        boolean openedDiffers = false;
+        if (report.openedJudged()) {
+            java.time.OffsetDateTime stored = jdbcTemplate.queryForObject(
+                    "SELECT accepted_at FROM financial_statement WHERE id = ?", java.time.OffsetDateTime.class, existing.id());
+            openedDiffers = !java.util.Objects.equals(stored == null ? null : stored.toInstant(), report.acceptedAt());
+        }
+
         if (toFill.isEmpty() && toCorrect.isEmpty() && toClear.isEmpty()
-                && !periodDiffers && !reportCodeDiffers) {
+                && !periodDiffers && !reportCodeDiffers && !openedDiffers) {
             tally.untouched++;
             return;
         }
@@ -889,6 +898,10 @@ public class FinancialWriter {
             setParts.add("report_code = ?");
             values.add(report.reportCode());
         }
+        if (openedDiffers) {
+            setParts.add("accepted_at = ?");
+            values.add(report.acceptedAt() == null ? null : java.sql.Timestamp.from(report.acceptedAt()));
+        }
         values.add(existing.id());
 
         jdbcTemplate.update(
@@ -910,6 +923,11 @@ public class FinancialWriter {
                     IndicatorInvalidationPort.InvalidationReason.FINANCIAL_REVISED);
         }
 
+        if (openedDiffers) {
+            // 보이는 날이 바뀐다 — 그 판 공시일부터의 봉이 다른 판을 본다.
+            invalidationPort.invalidate(stockId, report.publishedAt(),
+                    IndicatorInvalidationPort.InvalidationReason.FINANCIAL_REVISED);
+        }
         if (!toFill.isEmpty()) {
             tally.filled++;
         }
@@ -1097,6 +1115,11 @@ public class FinancialWriter {
             args.add(report.discontinuedIncomeControlling());
             args.add(report.discontinuedRule());
         }
+        // 공개 시각(관문 칸 · ADR-0204) — 판정을 실은 보고서만.
+        boolean opened = report.openedJudged();
+        if (opened) {
+            args.add(report.acceptedAt() == null ? null : java.sql.Timestamp.from(report.acceptedAt()));
+        }
         jdbcTemplate.update(("""
                 INSERT INTO financial_statement
                     (stock_id, fiscal_year, fiscal_period, period_start, period_end, published_at,
@@ -1114,8 +1137,9 @@ public class FinancialWriter {
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                         ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?%s, now())
                 """).formatted(
-                        discontinued ? ", discontinued_income, discontinued_income_controlling, discontinued_rule" : "",
-                        discontinued ? ", ?, ?, ?" : ""),
+                        (discontinued ? ", discontinued_income, discontinued_income_controlling, discontinued_rule" : "")
+                                + (opened ? ", accepted_at" : ""),
+                        (discontinued ? ", ?, ?, ?" : "") + (opened ? ", ?" : "")),
                 args.toArray());
     }
 

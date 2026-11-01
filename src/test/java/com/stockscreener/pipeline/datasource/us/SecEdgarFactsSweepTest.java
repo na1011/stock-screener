@@ -95,6 +95,19 @@ class SecEdgarFactsSweepTest {
         // 발행사 속성(티커 · 결산월 · SIC — 운영 stock 표에서 뜬 TSV). 어댑터가 IssuerProfile로 묻는 증인이다 — 안 주면 모름(UNKNOWN)이라
         // 그 증인이 필요한 해석(연차 보고서 전 회계연도 창 · 관문 켬 업종 총매출 폴백)이 안 선다.
         java.util.Map<String, IssuerProfile.Profile> issuers = new java.util.HashMap<>();
+        // 공시 접수 시각(관문 켬 · ADR-0204) — 접수번호 \t UTC 시각(ISO). 주면 판마다 공개 시각 칸을 줄 끝에 붙인다(안 주면 형식 그대로).
+        java.util.Map<String, java.time.Instant> acceptances = new java.util.HashMap<>();
+        Optional.ofNullable(System.getenv("REPLAY_ACCEPTANCES")).map(Path::of).ifPresent(p -> {
+            try {
+                for (String line : Files.readAllLines(p)) {
+                    String[] c = line.split("\t", -1);
+                    acceptances.put(c[0], java.time.Instant.parse(c[1]));
+                }
+            } catch (java.io.IOException e) {
+                throw new java.io.UncheckedIOException(e);
+            }
+        });
+        boolean opened = System.getenv("REPLAY_ACCEPTANCES") != null;
         Optional.ofNullable(System.getenv("REPLAY_ISSUERS")).map(Path::of).ifPresent(p -> {
             try {
                 for (String line : Files.readAllLines(p)) {
@@ -177,9 +190,11 @@ class SecEdgarFactsSweepTest {
                     }
                     result = usGate && splits != null
                             ? SecEdgarFacts.build(facts, from, true,
-                                    ShareClassCollector.judgeCovers(facts, splits.getOrDefault(ticker, List.of())), issuer, faces)
+                                    ShareClassCollector.judgeCovers(facts, splits.getOrDefault(ticker, List.of())), issuer, faces,
+                                    opened ? acceptances : null)
                             : SecEdgarFacts.build(facts, from, usGate,
-                                    com.stockscreener.pipeline.datasource.us.shareclass.CoverUnitJudge.Result.NONE, issuer, faces);
+                                    com.stockscreener.pipeline.datasource.us.shareclass.CoverUnitJudge.Result.NONE, issuer, faces,
+                                    opened ? acceptances : null);
                 } catch (RuntimeException | java.io.IOException
                         | com.stockscreener.pipeline.datasource.DataSourceException e) {
                     // MUST: DataSourceException도 잡는다. checked라 목록에 없던 탓에 한 종목의
@@ -229,6 +244,9 @@ class SecEdgarFactsSweepTest {
                         for (BigDecimal v : java.util.Arrays.asList(r.discontinuedIncome(),
                                 r.discontinuedIncomeControlling(), r.discontinuedRule())) {
                             line.append('\t').append(v == null ? "" : v.stripTrailingZeros().toPlainString());
+                        }
+                        if (opened) {
+                            line.append('\t').append(r.acceptedAt() == null ? "" : r.acceptedAt().toString());
                         }
                     }
                     w.write(line.toString());

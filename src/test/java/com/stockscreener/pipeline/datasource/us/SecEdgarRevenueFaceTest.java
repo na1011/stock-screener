@@ -89,4 +89,27 @@ class SecEdgarRevenueFaceTest {
         assertThat(revenue(coincidence, true, faceWith(18_259_000_000L, 41_000_000L))).as("KMB 2017 — 차액이 비지배 순이익")
                 .isEqualByComparingTo("18259000000");
     }
+
+    @Test
+    @DisplayName("판의 공개 시각 — 그날 사실을 낸 공시들의 접수 시각 최댓값 · 하나라도 모르면 모른다 · 그날 공시가 없어도 모른다(ADR-0204)")
+    void openedAtIsTheLatestAcceptanceAndUnknownWins() throws Exception {
+        java.time.Instant morning = java.time.Instant.parse("2024-07-30T13:00:00Z");
+        java.time.Instant evening = java.time.Instant.parse("2024-07-30T20:06:00Z");
+        Map<String, java.time.Instant> known = Map.of("A", morning, "B", evening);
+        assertThat(SecEdgarFacts.openedAt(Set.of("A", "B"), known)).isEqualTo(evening);
+        assertThat(SecEdgarFacts.openedAt(Set.of("A", "C"), known)).as("C를 모른다").isNull();
+        assertThat(SecEdgarFacts.openedAt(Set.of(), known)).isNull();
+
+        // build는 판 공시일에 사실을 낸 공시들로 짓는다 — 관문 꺼짐은 판정하지 않는다.
+        String json = tag("Revenues", 14_950 * MILLION);
+        JsonNode facts = new ObjectMapper().readTree("{\"facts\":{\"us-gaap\":{" + json + "}}}").path("facts");
+        java.time.Instant accepted = java.time.Instant.parse("2018-02-15T21:10:00Z");
+        RawFinancialReport on = SecEdgarFacts.build(facts, 2015, true, CoverUnitJudge.Result.NONE, IssuerProfile.Profile.UNKNOWN,
+                SecStatementFaceCollector.SecStatementFaces.NONE, Map.of(ACCN, accepted)).reports().get(0);
+        assertThat(on.acceptedAt()).isEqualTo(accepted);
+        assertThat(on.openedJudged()).isTrue();
+        RawFinancialReport off = SecEdgarFacts.build(facts, 2015, false, CoverUnitJudge.Result.NONE, IssuerProfile.Profile.UNKNOWN,
+                SecStatementFaceCollector.SecStatementFaces.NONE, Map.of(ACCN, accepted)).reports().get(0);
+        assertThat(off.openedJudged()).as("관문 꺼짐").isFalse();
+    }
 }

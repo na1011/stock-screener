@@ -137,7 +137,7 @@ public class SecCurrentReportClient {
                 continue;
             }
             out.add(new CurrentReport(accessions.get(i).asString(""), form, date, items.get(i).asString(""),
-                    i < accepted.size() ? parseInstant(accepted.get(i).asString("")) : null));
+                    i < accepted.size() ? parseInstant(accepted.get(i).asString(""), context) : null));
         }
         return out;
     }
@@ -149,15 +149,57 @@ public class SecCurrentReportClient {
         return SecEdgarResponse.requireJson(response.getStatusCode(), response.getBody(), context);
     }
 
-    /** 「2026-10-29T20:05:45.000Z」. 못 읽으면 {@code null} — 그 줄의 공개일은 접수일로 보수적으로 둔다. */
-    private static Instant parseInstant(String raw) {
+    /**
+     * 「2026-10-29T20:05:45.000Z」(진짜 UTC — SEC 데이터셋의 동부 시각 {@code accepted}와 8-K 22건이 일치 · ADR-0204). 칸이 비면 {@code null}
+     * (원장이 시각을 안 줬다 — 그 줄의 공개일은 접수일로 보수적으로 둔다). 값이 있는데 못 읽으면 본문 이상이다 — 조용히 「모름」으로 접지 않는다.
+     */
+    private static Instant parseInstant(String raw, String context) throws DataSourceException {
         if (raw == null || raw.isBlank()) {
             return null;
         }
         try {
             return Instant.parse(raw);
         } catch (DateTimeParseException e) {
-            return null;
+            throw new DataSourceException(DataSourceException.Kind.MALFORMED, SecEdgarResponse.SOURCE_NAME,
+                    "접수 시각을 못 읽었다: %s %s".formatted(raw, context), e);
+        }
+    }
+
+    /**
+     * 발행사의 <b>전 이력</b> 공시의 접수 시각(접수번호 → 시각 · 양식 무관 · ADR-0204) — 미국 판이 보이기 시작하는 날의 재료. 창으로 자르지
+     * 않는다(창 밖 비교열 공시의 시각도 그 판의 공개 시각이다). 시각 칸이 빈 공시는 결과에 없다(모른다). 받기 실패는 던진다(그 종목의 실패).
+     */
+    public java.util.Map<String, Instant> acceptances(long cik) throws DataSourceException {
+        String padded = SecTickerCikCache.padded(cik);
+        String context = "submissions acceptance " + padded;
+        JsonNode filings = json("/submissions/" + padded + ".json", context).path("filings");
+        if (!filings.has("recent")) {
+            throw new DataSourceException(DataSourceException.Kind.MALFORMED, SecEdgarResponse.SOURCE_NAME,
+                    "200인데 filings.recent가 없다. " + context);
+        }
+        java.util.Map<String, Instant> out = new java.util.HashMap<>();
+        acceptances(filings.path("recent"), out, context);
+        for (JsonNode page : filings.path("files")) {
+            String name = page.path("name").asString("");
+            if (!name.isBlank()) {
+                acceptances(json("/submissions/" + name, context + " " + name), out, context + " " + name);
+            }
+        }
+        return out;
+    }
+
+    static void acceptances(JsonNode table, java.util.Map<String, Instant> out, String context) throws DataSourceException {
+        JsonNode accessions = table.path("accessionNumber");
+        JsonNode accepted = table.path("acceptanceDateTime");
+        if (accepted.size() != accessions.size()) {
+            throw new DataSourceException(DataSourceException.Kind.MALFORMED, SecEdgarResponse.SOURCE_NAME,
+                    "열 배열의 길이가 다르다(접수번호 %d · 접수 시각 %d). %s".formatted(accessions.size(), accepted.size(), context));
+        }
+        for (int i = 0; i < accessions.size(); i++) {
+            Instant at = parseInstant(accepted.get(i).asString(""), context);
+            if (at != null) {
+                out.put(accessions.get(i).asString(""), at);
+            }
         }
     }
 
