@@ -112,4 +112,19 @@ class SecEdgarRevenueFaceTest {
                 SecStatementFaceCollector.SecStatementFaces.NONE, Map.of(ACCN, accepted)).reports().get(0);
         assertThat(off.openedJudged()).as("관문 꺼짐").isFalse();
     }
+
+    @Test
+    @DisplayName("원가도 같은 원칙 — 본문이 상품 · 용역 원가만 싣고 합계가 어느 본문에도 없으면(부분 개념 줄 + 후보 줄 = 고른 값) 그대로(WAT FY2016)")
+    void costSplitFaceKeepsTheTotal() throws Exception {
+        String json = String.join(",",
+                tag("CostOfGoodsAndServicesSold", 891_500_000L),
+                tag("CostOfGoodsSold", 595_800_000L),
+                tag("CostOfServices", 295_700_000L),
+                tag("Revenues", 2_167_400_000L));
+        JsonNode facts = new ObjectMapper().readTree("{\"facts\":{\"us-gaap\":{" + json + "}}}").path("facts");
+        RawFinancialReport fy = SecEdgarFacts.build(facts, 2015, true, CoverUnitJudge.Result.NONE, IssuerProfile.Profile.UNKNOWN,
+                faceWith(595_800_000L, 295_700_000L, 2_167_400_000L)).reports().stream()
+                .filter(r -> r.fiscalYear() == 2017 && "FY".equals(r.fiscalPeriod())).findFirst().orElseThrow();
+        assertThat(fy.costOfSales()).isEqualByComparingTo("891500000");
+    }
 }

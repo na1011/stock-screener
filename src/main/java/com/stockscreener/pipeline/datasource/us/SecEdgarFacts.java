@@ -289,10 +289,11 @@ final class SecEdgarFacts {
     static final List<SecEdgarColumn> HEADLINE = List.of(SecEdgarColumn.OPERATING_INCOME);
 
     /** 판마다 고른 값이 어느 공시 본문에도 없으면 본문 줄 후보로 바꾸는 열({@link #faceLines}). */
-    static final List<SecEdgarColumn> FACE_PREFERRED = List.of(SecEdgarColumn.REVENUE);
+    static final List<SecEdgarColumn> FACE_PREFERRED = List.of(SecEdgarColumn.REVENUE, SecEdgarColumn.COST_OF_SALES);
 
     /** 본문 재료를 받을 열 — 거르는 열과 본문 줄을 고르는 열. */
-    static final List<SecEdgarColumn> FACE_JUDGED = List.of(SecEdgarColumn.OPERATING_INCOME, SecEdgarColumn.REVENUE);
+    static final List<SecEdgarColumn> FACE_JUDGED = List.of(SecEdgarColumn.OPERATING_INCOME, SecEdgarColumn.REVENUE,
+            SecEdgarColumn.COST_OF_SALES);
 
     /** us-gaap 후보 태그 하나를 본문에서 찾을 이름 — 그 태그와, TaxonomyFrame이 그 열쇠에 싣는 IFRS 개념. */
     static Set<String> faceNames(String usGaapTag) {
@@ -357,7 +358,7 @@ final class SecEdgarFacts {
             facts = frame.facts();
         }
         Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn = collect(facts, usGate, issuer.sic());
-        Map<String, Set<BigDecimal>> revenueLines = usGate ? revenueConceptValues(facts) : Map.of();
+        Map<SecEdgarColumn, Map<String, Set<BigDecimal>>> revenueLines = usGate ? splitConceptValues(facts) : Map.of();
         Set<String> offStatement = Set.of();
         if (usGate) {
             dropAnnualQuarterContextCarryingTheYear(byColumn);
@@ -1826,7 +1827,7 @@ final class SecEdgarFacts {
                                                         boolean usGate,
                                                         Set<String> offStatement,
                                                         SecStatementFaceCollector.SecStatementFaces faces,
-                                                        Map<String, Set<BigDecimal>> revenueLines) {
+                                                        Map<SecEdgarColumn, Map<String, Set<BigDecimal>>> revenueLines) {
         // 손익 비지배의 마지막 관측. 이 기간보다 앞이면 「그 뒤로 비지배를 안 낸다」이고
         // 연결 총액을 지배주주 값으로 채울 수 있다(noNoncontrollingIncomeBy).
         LocalDate lastNoncontrolling = lastNoncontrollingIncome(byColumn);
@@ -2520,7 +2521,7 @@ final class SecEdgarFacts {
             Anchor anchor, Anchor labelAnchor, Label label, Window window,
             Map<SecEdgarColumn, String> tags,
             Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn,
-            boolean ownCover, SecStatementFaceCollector.SecStatementFaces faces, Map<String, Set<BigDecimal>> revenueLines) {
+            boolean ownCover, SecStatementFaceCollector.SecStatementFaces faces, Map<SecEdgarColumn, Map<String, Set<BigDecimal>>> revenueLines) {
         Map<SecEdgarColumn, BigDecimal> values = new EnumMap<>(SecEdgarColumn.class);
         for (SecEdgarColumn column : SecEdgarColumn.values()) {
             if (column.annualOnly() && !"FY".equals(label.period())) {
@@ -2570,11 +2571,11 @@ final class SecEdgarFacts {
      * ARES 2020 1분기 주석의 `Revenues` 429M 대 본문 「Total revenues」 13.4M). 어느 공시든 본문에 실린 값이면 그대로다 — 본문 표시가 판마다 바뀌고 구성
      * 줄만 싣는 판이 있다(SNA 2018년 3분기 전 순매출 · 금융서비스 수익 두 줄 · WAT FY2017 원가 상품 623 · 용역 324 — 합계는 뒤 공시 본문에 있다).
      * 판정은 공시마다 서므로 기간마다 고정한 태그가 아니라 이 판 공시의 사실로 고른다 — 고정 태그를 첫 판의 본문 판정으로 고르면 뒤 공시에서 같은 태그가
-     * 구성 줄을 가리킨다(INVH 2017 3분기 · KKR · HGTY). 재료를 모르면 그대로다. 원가는 하지 않는다 — 구성 줄만 싣고 합계를 어느 공시 본문에도 안 싣는
-     * 기간이 있다(WAT FY2016 상품 595.8 · 용역 295.7 대 주석 합계 891.5 — 그 열의 부분 개념 `CostOfServices`는 후보 수집에 없다).
+     * 구성 줄을 가리킨다(INVH 2017 3분기 · KKR · HGTY). 재료를 모르면 그대로다. 원가도 같다 — 구성 줄만 싣고 합계를 어느 공시 본문에도 안 싣는
+     * 기간(WAT FY2016 상품 595.8 · 용역 295.7 대 주석 합계 891.5)은 「나눠 실은 본문」 가드가 그 열의 부분 개념(`CostOfServices`)으로 지킨다.
      */
     private static void faceLines(Anchor anchor, Window window, Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn,
-                                  SecStatementFaceCollector.SecStatementFaces faces, Map<String, Set<BigDecimal>> revenueLines,
+                                  SecStatementFaceCollector.SecStatementFaces faces, Map<SecEdgarColumn, Map<String, Set<BigDecimal>>> revenueLines,
                                   Map<SecEdgarColumn, BigDecimal> values) {
         if (window.start() == null) {
             return;
@@ -2608,7 +2609,8 @@ final class SecEdgarFacts {
                     largest = fact.value();
                 }
             }
-            if (largest != null && !chosenOnFace && !splitOnFace(anchor, window, quarters, chosen, largest, faces, revenueLines)) {
+            if (largest != null && !chosenOnFace
+                    && !splitOnFace(anchor, window, quarters, chosen, largest, faces, revenueLines.getOrDefault(column, Map.of()))) {
                 values.put(column, largest);
             }
         }
@@ -2628,14 +2630,24 @@ final class SecEdgarFacts {
     }
 
     /**
-     * 공시 · 기간마다 매출 개념(이름에 {@code Revenue}가 든 표준 · IFRS 태그) 사실의 값 — {@link #splitOnFace}의 증거로만 쓴다(그 값으로 매출 열을
-     * 채우지 않는다 — 이름은 계약이 아니라서 열의 후보로는 못 쓴다).
+     * 열마다 「나눠 실은 본문」의 증거가 되는 개념의 공시 · 기간 값({@link #splitOnFace}의 증거로만 — 그 값으로 열을 채우지 않는다): 매출은 이름에
+     * {@code Revenue}가 든 표준 · IFRS 태그(SNA 「Financial services revenue」), 원가는 그 열의 후보와 부분 개념(코드에 선언된 목록 ·
+     * `CostOfServices` 등 — WAT FY2016 상품 595.8 + 용역 295.7 = 주석 합계 891.5).
      */
-    private static Map<String, Set<BigDecimal>> revenueConceptValues(JsonNode facts) {
+    private static Map<SecEdgarColumn, Map<String, Set<BigDecimal>>> splitConceptValues(JsonNode facts) {
+        Set<String> cost = new HashSet<>(SecEdgarColumn.COST_OF_SALES.partialCandidates());
+        cost.addAll(SecEdgarColumn.COST_OF_SALES.candidates(true, null));
+        Map<SecEdgarColumn, Map<String, Set<BigDecimal>>> out = new java.util.EnumMap<>(SecEdgarColumn.class);
+        out.put(SecEdgarColumn.REVENUE, conceptValues(facts, tag -> tag.contains("Revenue")));
+        out.put(SecEdgarColumn.COST_OF_SALES, conceptValues(facts, cost::contains));
+        return out;
+    }
+
+    private static Map<String, Set<BigDecimal>> conceptValues(JsonNode facts, java.util.function.Predicate<String> concept) {
         Map<String, Set<BigDecimal>> out = new HashMap<>();
         for (String namespace : List.of("us-gaap", "ifrs-full")) {
             for (Map.Entry<String, JsonNode> tag : facts.path(namespace).properties()) {
-                if (!tag.getKey().contains("Revenue")) {
+                if (!concept.test(tag.getKey())) {
                     continue;
                 }
                 for (Map.Entry<String, JsonNode> unit : tag.getValue().path("units").properties()) {
