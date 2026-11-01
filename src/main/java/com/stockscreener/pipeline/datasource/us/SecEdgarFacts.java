@@ -2725,7 +2725,7 @@ final class SecEdgarFacts {
                     for (JsonNode node : unit.getValue()) {
                         if (node.hasNonNull("start") && node.hasNonNull("val")) {
                             out.computeIfAbsent(node.path("accn").asString("") + "|" + node.path("start").asString("") + "|"
-                                    + node.path("end").asString(""), k -> new HashSet<>()).add(node.path("val").decimalValue().stripTrailingZeros());
+                                    + node.path("end").asString(""), k -> new HashSet<>()).add(new BigDecimal(node.path("val").asString()).stripTrailingZeros());
                         }
                     }
                 }

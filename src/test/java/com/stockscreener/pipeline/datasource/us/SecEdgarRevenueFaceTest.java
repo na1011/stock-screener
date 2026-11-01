@@ -64,6 +64,16 @@ class SecEdgarRevenueFaceTest {
     }
 
     @Test
+    @DisplayName("공시 보충이 더한 팩트(XBRL 인스턴스 · val이 문자열)도 본문 줄 경쟁을 탄다 — 2026-11-01 관문 재적재 44종목이 여기서 던졌다")
+    void supplementFactWithTextValue() throws Exception {
+        String json = String.join(",",
+                tag("Revenues", 14_950 * MILLION),
+                tag("RevenueFromContractWithCustomerExcludingAssessedTax", 21_700 * MILLION))
+                .replaceAll("\"val\":(\\d+)", "\"val\":\"$1\"");
+        assertThat(revenue(json, true, faceWith(14_950 * MILLION, 5_859 * MILLION))).isEqualByComparingTo("14950000000");
+    }
+
+    @Test
     @DisplayName("본문 줄 후보가 없거나 공시를 모르면 전부가 최댓값을 다툰다")
     void noFaceCandidateKeepsLargest() throws Exception {
         String json = String.join(",",
