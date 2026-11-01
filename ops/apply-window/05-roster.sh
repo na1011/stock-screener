@@ -26,7 +26,7 @@ gate_line "$LOG-calendar.log"; new_exec "$PROD" "$P" market-calendar - > /dev/nu
 L=$(q "$PROD" "select max(session_date) from market_calendar where exchange_code='NYSE' and core_end < now()")
 [ -n "$L" ] || die "미국 마지막 마감 세션을 못 구했다 — ② 달력"
 OBS_MAX=$(q "$PROD" "select max(greatest(effective_from, coalesce(effective_to, effective_from))) from universe_membership where universe_code='US_TOP1000' and origin='OBSERVED'")
-if [[ "$OBS_MAX" > "$L" ]]; then die "관측 원장에 L($L)보다 늦은 날짜 $OBS_MAX가 있다"; fi
+if [[ "$OBS_MAX" > "$L" ]]; then die "관측 원장에 L($L)보다 늦은 날짜 ${OBS_MAX}가 있다"; fi
 echo "  L=$L (관측 원장 최신 $OBS_MAX)"
 P=$(max_exec_id "$PROD")
 boot "$PROD" --job=universe-restore --universe=US_TOP1000 --as-of=$L --apply=true --replace=true --rebuild-observed=true $GATE_ARGS \

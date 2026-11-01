@@ -60,5 +60,5 @@ fi
 # 정보로만 센다 — 손으로 다시 쓰지 않는다(2026-10-25 사용자 기준 · 관문 켬 판독은 판정이 정한다).
 SC=$({ cat "$A"/refill-*-"$PROD".log "$A"/refill-retry-"$PROD"-*.log 2>/dev/null || true; } | sed -n 's/.* 주식수교정=\([0-9]*\).*/\1/p' | awk '{s+=$1} END {print s+0}')
 HK=$({ cat "$A"/refill-*-"$PROD".log "$A"/refill-retry-"$PROD"-*.log 2>/dev/null || true; } | sed -n 's/.* 주식수손수리남김=\([0-9]*\).*/\1/p' | awk '{s+=$1} END {print s+0}')
-echo "주식수 교정 $SC행 · 손 수리 남김 $HK행(정보 — 쓰기 단계 없음)" | tee -a $NOTES
+echo "주식수 교정 ${SC}행 · 손 수리 남김 ${HK}행(정보 — 쓰기 단계 없음)" | tee -a $NOTES
 echo "OK 재적재 — 현 편입 $N_CUR · 후보 재무 대상 $M(하한 $N_CAND_FIN) · 업종 먼저 ${K:-0} · note 합계 $(note_nums $NOTES)"
