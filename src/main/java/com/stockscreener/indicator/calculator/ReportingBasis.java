@@ -87,6 +87,49 @@ public final class ReportingBasis {
      * 실적 발표가 공개돼 있는 첫 봉의 날짜. 미국은 접수 시각이 동부 16:00 전이면 그 날, 뒤면 다음 날이다(RMD 8-K 2026-10-29 16:05 ET →
      * 10-29 종가는 발표 전). 접수 시각을 모르면(국내 · 미국 미해결) 접수일이다 — 보수적으로 그 봉 하나를 일찍 막는다.
      */
+    /** 국내 정규장 마감 — 2016-08-01부터 15:30(그 앞은 15:00 · 한국거래소 거래시간 연장). */
+    private static final LocalDate KR_CLOSE_EXTENDED = LocalDate.of(2016, 8, 1);
+    private static final ZoneId KR_ZONE = ZoneId.of("Asia/Seoul");
+    /** 미국에서 가장 이른 마감(조기 폐장) — 그날 마감을 모르면 이것으로 본다(보이기는 늦는 쪽이 보수). */
+    private static final LocalTime US_EARLIEST_CLOSE = LocalTime.of(13, 0);
+
+    /** 그 시장 그날의 정규장 마감 시각 — 모르면 {@code null}(세션 달력 범위 밖 · 휴장 · 아직 안 받음 — 셋을 가르지 않는다). */
+    @FunctionalInterface
+    public interface SessionClose {
+        LocalTime on(LocalDate day);
+    }
+
+    /**
+     * <b>재무 판 · 거버넌스 사실이 보이기 시작하는 날</b>(관문 켬 · 재고 「공개 시각이 공시일 칸과 갈린다」) — 공개 시각 뒤 처음 마감하는
+     * 세션의 날. 시각을 모르면 저장 공시일 다음 날이다(봉은 세션에만 있어 다음 거래일이 된다 — 미래를 안 보고 늦는 쪽만 남는다). 그날의
+     * 마감을 모르면 그 시장의 가장 이른 마감으로 본다(미국 13:00 · 국내 정규장 마감). 결과는 저장 공시일보다 이르지 않다.
+     *
+     * <p>실적 발표 <b>막기</b>({@link #effectiveOn})와 보수의 방향이 반대다 — 막기는 일찍 막는 쪽이, 보이기는 늦게 보이는 쪽이 보수라 두 규칙의
+     * 「모를 때」가 다르다.
+     *
+     * @param us    미국 시장인가 — 시간대와 마감 규칙을 고른다
+     * @param close 그날 미국 정규장 마감(세션 달력 {@code core_end}) — 국내는 안 쓴다
+     */
+    public static LocalDate visibleFrom(LocalDate published, Instant opened, boolean us, SessionClose close) {
+        if (published == null) {
+            return null;
+        }
+        if (opened == null) {
+            return published.plusDays(1);
+        }
+        ZonedDateTime local = opened.atZone(us ? US_EAST : KR_ZONE);
+        LocalDate day = local.toLocalDate();
+        LocalTime sessionClose;
+        if (us) {
+            LocalTime known = close == null ? null : close.on(day);
+            sessionClose = known != null ? known : US_EARLIEST_CLOSE;
+        } else {
+            sessionClose = day.isBefore(KR_CLOSE_EXTENDED) ? LocalTime.of(15, 0) : LocalTime.of(15, 30);
+        }
+        LocalDate first = local.toLocalTime().isBefore(sessionClose) ? day : day.plusDays(1);
+        return first.isBefore(published) ? published : first;
+    }
+
     public static LocalDate effectiveOn(LocalDate filedOn, Instant acceptedAt) {
         if (acceptedAt == null) {
             return filedOn;

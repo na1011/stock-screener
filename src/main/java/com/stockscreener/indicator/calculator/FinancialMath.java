@@ -880,8 +880,8 @@ final class FinancialMath {
             // 실려 **봉보다 늦게 공시**돼 있을 수 있다. 안 걸러내면 그 봉이 미래에 공시된
             // 주식수를 쓴다 — 실측으로 LYFT·HOOD·TWLO·UHAL 넷이 그 자리였고, 봉이 공시일보다
             // 최대 **9개월** 앞이었다.
-            if (bar != null && asOf.publishedAt() != null
-                    && asOf.publishedAt().isAfter(bar.tradeDate())) {
+            if (bar != null && asOf.visibleOn() != null
+                    && asOf.visibleOn().isAfter(bar.tradeDate())) {
                 continue;
             }
             if (asOf.shareClassState() == com.stockscreener.pipeline.datasource.us.shareclass.ShareClassLine.State.HIDDEN) {
@@ -1006,7 +1006,7 @@ final class FinancialMath {
      */
     static int publishedIndexOn(List<FinancialFigures> quarters, LocalDate asOf) {
         for (int i = 0; i < quarters.size(); i++) {
-            LocalDate published = quarters.get(i).publishedAt();
+            LocalDate published = quarters.get(i).visibleOn();
             if (published != null && !published.isAfter(asOf)) {
                 return i;
             }

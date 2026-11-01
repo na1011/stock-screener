@@ -340,7 +340,8 @@ public final class IndicatorContext {
         // 앞의 값이 그 봉까지 펴진다.
         return java.util.stream.Stream.concat(
                         java.util.stream.Stream.concat(annualRevisions.stream(), quarterlyRevisions.stream())
-                                .map(FinancialFigures::publishedAt),
+                                // 보이기 시작하는 날이 경계다 — 공시일로 자르면 장 마감 뒤 공시 판이 다음 경계까지 안 들어온다.
+                                .map(FinancialFigures::visibleOn),
                         java.util.stream.Stream.concat(earningsReleaseDates.stream(),
                                 // 관문 켬: 분사 효력일도 경계다(F1) — 그날부터 가격과 짝짓는 재무가 바뀐다(withoutPreSpinOffBasis).
                                 gateOn ? spinOffDates.stream() : java.util.stream.Stream.<LocalDate>empty()))
@@ -354,7 +355,7 @@ public final class IndicatorContext {
     private static List<FinancialFigures> publishedOnOrBefore(List<FinancialFigures> figures,
                                                               LocalDate tradeDate) {
         return figures.stream()
-                .filter(f -> f.publishedAt() == null || !f.publishedAt().isAfter(tradeDate))
+                .filter(f -> f.visibleOn() == null || !f.visibleOn().isAfter(tradeDate))
                 // 기저가 대체된 손익 칸은 그날부터 모른다(국내 관문 켬 · A6 — 비면 그대로).
                 .map(f -> f.asSeenOn(tradeDate))
                 .toList();

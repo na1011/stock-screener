@@ -162,11 +162,60 @@ public record FinancialFigures(
          * <b>4분기 행이 기대는 그 해 FY 행</b>(관문 켬 봉 사본만 · {@code IndicatorContext.visibleAt}) — 4분기로 끝나는 TTM 창의 네 분기 합은 그
          * 해 FY다. 분기 칸이 비면(기저 대체 · ADR-0200) 합 대신 이 행의 값을 쓴다(재고 「A6 남은 것」). 그 밖 행은 {@code null}.
          */
-        FinancialFigures annualOfYear
+        FinancialFigures annualOfYear,
+
+        /**
+         * <b>이 판이 보이기 시작하는 날</b>(관문 켬 · 재고 「공개 시각이 공시일 칸과 갈린다」) — 공개 시각 뒤 처음 마감하는 세션의 날
+         * ({@code ReportingBasis.visibleFrom}). {@code null}이면 {@link #publishedAt}이다(이 규칙으로 안 읽은 행). 보이기 소비자는
+         * {@link #visibleOn()}을, 앵커 소비자(주식수 · 기업행위 배수)는 저장 공시일 {@link #publishedAt}을 읽는다.
+         */
+        LocalDate visibleFrom
 ) {
 
     public FinancialFigures {
         flowsSupersededOn = flowsSupersededOn == null ? java.util.Map.of() : java.util.Map.copyOf(flowsSupersededOn);
+    }
+
+    /** {@link #visibleFrom}을 안 싣는 호출 — 보이는 날은 공시일이다. */
+    public FinancialFigures(int fiscalYear, FiscalPeriod fiscalPeriod, LocalDate periodStart, LocalDate periodEnd,
+                            LocalDate publishedAt, String currencyCode, BigDecimal revenue, BigDecimal operatingIncome,
+                            BigDecimal netIncome, BigDecimal totalAssets, BigDecimal totalEquity, BigDecimal totalEquityControlling,
+                            BigDecimal totalLiabilities, BigDecimal currentAssets, BigDecimal currentLiabilities,
+                            BigDecimal retainedEarnings, BigDecimal operatingCashFlow, BigDecimal sharesOutstanding, BigDecimal eps,
+                            BigDecimal bps, BigDecimal costOfSales, BigDecimal cashAndEquivalents, BigDecimal capex,
+                            BigDecimal inventories, BigDecimal netIncomeControlling, BigDecimal interestAndDividendIncome,
+                            BigDecimal noninterestIncome, BigDecimal interestExpense, BigDecimal noninterestExpense,
+                            BigDecimal benefitsLossesAndExpenses, BigDecimal grossProfit, BigDecimal operatingExpenses,
+                            BigDecimal costsAndExpenses, BigDecimal incomeTaxExpense, BigDecimal profitBeforeTax,
+                            BigDecimal shareBasisMultiple, String shareBasisStatus, ShareClassLine.State shareClassState,
+                            BigDecimal weightedShares, boolean weightedSharesJudged, BigDecimal discontinuedIncome,
+                            BigDecimal discontinuedIncomeControlling, BigDecimal discontinuedRule, CommonIncomeRead common,
+                            java.util.Map<String, FlowSupersession> flowsSupersededOn, FinancialFigures annualOfYear) {
+        this(fiscalYear, fiscalPeriod, periodStart, periodEnd, publishedAt, currencyCode, revenue, operatingIncome, netIncome,
+                totalAssets, totalEquity, totalEquityControlling, totalLiabilities, currentAssets, currentLiabilities,
+                retainedEarnings, operatingCashFlow, sharesOutstanding, eps, bps, costOfSales, cashAndEquivalents, capex,
+                inventories, netIncomeControlling, interestAndDividendIncome, noninterestIncome, interestExpense,
+                noninterestExpense, benefitsLossesAndExpenses, grossProfit, operatingExpenses, costsAndExpenses,
+                incomeTaxExpense, profitBeforeTax, shareBasisMultiple, shareBasisStatus, shareClassState, weightedShares,
+                weightedSharesJudged, discontinuedIncome, discontinuedIncomeControlling, discontinuedRule, common, flowsSupersededOn,
+                annualOfYear, null);
+    }
+
+    /** 보이기 시작하는 날({@link #visibleFrom} · 없으면 공시일) — 보이기 소비자는 이것을 읽는다. */
+    public LocalDate visibleOn() {
+        return visibleFrom != null ? visibleFrom : publishedAt;
+    }
+
+    /** 보이는 날을 단 사본. */
+    public FinancialFigures withVisibleFrom(LocalDate day) {
+        return new FinancialFigures(fiscalYear, fiscalPeriod, periodStart, periodEnd, publishedAt, currencyCode, revenue,
+                operatingIncome, netIncome, totalAssets, totalEquity, totalEquityControlling, totalLiabilities, currentAssets,
+                currentLiabilities, retainedEarnings, operatingCashFlow, sharesOutstanding, eps, bps, costOfSales,
+                cashAndEquivalents, capex, inventories, netIncomeControlling, interestAndDividendIncome, noninterestIncome,
+                interestExpense, noninterestExpense, benefitsLossesAndExpenses, grossProfit, operatingExpenses, costsAndExpenses,
+                incomeTaxExpense, profitBeforeTax, shareBasisMultiple, shareBasisStatus, shareClassState, weightedShares,
+                weightedSharesJudged, discontinuedIncome, discontinuedIncomeControlling, discontinuedRule, common, flowsSupersededOn,
+                annualOfYear, day);
     }
 
     /** {@link #annualOfYear}를 안 싣는 호출. */
@@ -203,7 +252,7 @@ public record FinancialFigures(
                 interestExpense, noninterestExpense, benefitsLossesAndExpenses, grossProfit, operatingExpenses, costsAndExpenses,
                 incomeTaxExpense, profitBeforeTax, shareBasisMultiple, shareBasisStatus, shareClassState, weightedShares,
                 weightedSharesJudged, discontinuedIncome, discontinuedIncomeControlling, discontinuedRule, common, flowsSupersededOn,
-                annual);
+                annual, visibleFrom);
     }
 
     /** {@link #flowsSupersededOn}을 안 싣는 호출 — 이 규칙으로 안 읽은 행. */
@@ -272,7 +321,7 @@ public record FinancialFigures(
                 costsAndExpenses, value.apply("income_tax_expense"), value.apply("profit_before_tax"), shareBasisMultiple,
                 shareBasisStatus, shareClassState, weightedShares, weightedSharesJudged, value.apply("discontinued_income"),
                 value.apply("discontinued_income_controlling"), discontinuedRule,
-                income && common != null ? common.withoutIncome() : common, flowsSupersededOn, annualOfYear);
+                income && common != null ? common.withoutIncome() : common, flowsSupersededOn, annualOfYear, visibleFrom);
     }
 
     /** 함께 낡는 손익 칸(DB 컬럼명) — {@link #asSeenOn}. */
