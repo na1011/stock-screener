@@ -55,9 +55,10 @@ if [ "${K:-0}" -gt 0 ]; then
   s=$(q "$PROD" "select status from batch_execution where id > $(cat "$A/exec-cur.txt") and job_name='company-profile' and triggered_by='MANUAL' order by id desc limit 1")
   case "$s" in SUCCESS|PARTIAL_SUCCESS) ;; *) die "후보 업종 먼저 실행이 ${s:-없음}이다(업종 먼저 $K)";; esac
 fi
+# 재시도가 없으면 refill-retry 로그가 없어 cat이 실패한다 — pipefail · set -e에 걸려 멈춤 메시지 없이 rc=1로 끝나므로(2026-11-01 드라이런) 실패를 삼킨다.
 # 주식수 교정(관문 켬): 옛 추출 값 · 단위가 틀린 표지와 그 손 수리를 사다리 값으로 덮은 행(ADR-0186 · ADR-0193). 남긴 손 수리(ADR-0126)는
 # 정보로만 센다 — 손으로 다시 쓰지 않는다(2026-10-25 사용자 기준 · 관문 켬 판독은 판정이 정한다).
-SC=$(cat "$A"/refill-*-"$PROD".log "$A"/refill-retry-"$PROD"-*.log 2>/dev/null | sed -n 's/.* 주식수교정=\([0-9]*\).*/\1/p' | awk '{s+=$1} END {print s+0}')
-HK=$(cat "$A"/refill-*-"$PROD".log "$A"/refill-retry-"$PROD"-*.log 2>/dev/null | sed -n 's/.* 주식수손수리남김=\([0-9]*\).*/\1/p' | awk '{s+=$1} END {print s+0}')
+SC=$({ cat "$A"/refill-*-"$PROD".log "$A"/refill-retry-"$PROD"-*.log 2>/dev/null || true; } | sed -n 's/.* 주식수교정=\([0-9]*\).*/\1/p' | awk '{s+=$1} END {print s+0}')
+HK=$({ cat "$A"/refill-*-"$PROD".log "$A"/refill-retry-"$PROD"-*.log 2>/dev/null || true; } | sed -n 's/.* 주식수손수리남김=\([0-9]*\).*/\1/p' | awk '{s+=$1} END {print s+0}')
 echo "주식수 교정 $SC행 · 손 수리 남김 $HK행(정보 — 쓰기 단계 없음)" | tee -a $NOTES
 echo "OK 재적재 — 현 편입 $N_CUR · 후보 재무 대상 $M(하한 $N_CAND_FIN) · 업종 먼저 ${K:-0} · note 합계 $(note_nums $NOTES)"
