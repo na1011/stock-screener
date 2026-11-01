@@ -54,4 +54,13 @@ class DartDayListTest {
         assertThatThrownBy(() -> DartDayList.parse(PAGE.replace("name=\"totalCnt\"", "name=\"x\""), "시험"))
                 .isInstanceOf(DataSourceException.class);
     }
+
+    @Test
+    @DisplayName("보고서명에 이스케이프 안 된 큰따옴표가 들어도 읽는다(2019-07-15 MDS스피어)")
+    void quotesInsideTheReportName() throws Exception {
+        String row = PAGE.replace("title=\"분기보고서 (2025.09) 공시뷰어 새창\"",
+                "title=\"투자판단관련주요경영사항(인도네시아 \"Super K-POP Festival\" 계약 체결) 공시뷰어 새창\"");
+        DartDayList.Page page = DartDayList.parse(row, "시험");
+        assertThat(page.rows().get(1).reportName()).isEqualTo("투자판단관련주요경영사항(인도네시아 \"Super K-POP Festival\" 계약 체결)");
+    }
 }

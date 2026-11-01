@@ -23,7 +23,8 @@ public final class DartDayList {
     private static final Pattern ROW = Pattern.compile("<tr>(.*?)</tr>", Pattern.DOTALL);
     private static final Pattern TIME = Pattern.compile("<td>\\s*([0-2]\\d):([0-5]\\d)\\s*</td>");
     private static final Pattern CORP = Pattern.compile("openCorpInfoNew\\('(\\d{8})'[^>]*>\\s*([^<]+?)\\s*</a>", Pattern.DOTALL);
-    private static final Pattern REPORT = Pattern.compile("rcpNo=(\\d{14})\"[^>]*title=\"([^\"]*?) 공시뷰어 새창\"");
+    // 보고서명에 이스케이프 안 된 큰따옴표가 든다(2019-07-15 「…\"Super K-POP Festival…\"…」) — 고정 꼬리 「 공시뷰어 새창"」로 끝을 잡는다.
+    private static final Pattern REPORT = Pattern.compile("rcpNo=(\\d{14})\"[^>]*?title=\"(.*?) 공시뷰어 새창\"", Pattern.DOTALL);
     private static final Pattern LISTED = Pattern.compile("<td>(\\d{4}\\.\\d{2}\\.\\d{2})</td>");
     private static final Pattern TOTAL = Pattern.compile("name=\"totalCnt\"[^>]*value=\"(\\d+)\"|value=\"(\\d+)\"[^>]*name=\"totalCnt\"");
     private static final Pattern PAGES = Pattern.compile("\\[(\\d+)/(\\d+)\\]");
