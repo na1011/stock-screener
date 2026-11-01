@@ -200,14 +200,28 @@ public class SecStatementFaceCollector {
                 // 값 재료가 없다(공시 폴더) — 개념 이름으로.
                 return concepts.stream().anyMatch(face.concepts()::contains);
             }
-            if (!periods.contains(endYyyyMmDd + "|" + quarters)) {
+            String ddate = dataSetDate(endYyyyMmDd);
+            if (!periods.contains(ddate + "|" + quarters)) {
                 return null;
             }
             if (value.signum() == 0) {
                 return null;   // 0은 아무 줄과나 같다(PSMT FY2015 `Revenues` 0) — 값으로 판정하지 않는다
             }
             // 값 재료가 있다(데이터셋) — 값으로만(개념 이름은 기간을 안 가린다).
-            return face.incomeValues().contains(Face.key(endYyyyMmDd, quarters, value));
+            return face.incomeValues().contains(Face.key(ddate, quarters, value));
+        }
+
+        /**
+         * 데이터셋의 기말({@code ddate}) — 가장 가까운 월말로 반올림한 날이다(SEC 데이터셋 규약). 사실의 기말 그대로 찾으면 52/53주 회계연도의 기간이
+         * 판정되지 않는다(SNA 2018-09-29 · HAS 2024-12-29 · NTAP 2022-01-28 — 데이터셋은 0930 · 1231 · 0131).
+         */
+        static String dataSetDate(String yyyyMmDd) {
+            java.time.LocalDate d = java.time.LocalDate.parse(yyyyMmDd, java.time.format.DateTimeFormatter.BASIC_ISO_DATE);
+            java.time.LocalDate monthEnd = d.withDayOfMonth(d.lengthOfMonth());
+            java.time.LocalDate previousEnd = d.withDayOfMonth(1).minusDays(1);
+            java.time.LocalDate nearest = java.time.temporal.ChronoUnit.DAYS.between(d, monthEnd)
+                    <= java.time.temporal.ChronoUnit.DAYS.between(previousEnd, d) ? monthEnd : previousEnd;
+            return nearest.format(java.time.format.DateTimeFormatter.BASIC_ISO_DATE);
         }
 
         private static boolean formPresents(String form, int quarters) {

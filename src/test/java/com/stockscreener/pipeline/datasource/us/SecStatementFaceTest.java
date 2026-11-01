@@ -85,4 +85,13 @@ class SecStatementFaceTest {
         assertThat(SecStatementFace.finalIncomeLine("CI", "NetIncomeLoss")).as("INTU FY2024: CI만").isFalse();
         assertThat(SecStatementFace.finalIncomeLine("IS", "GoodwillAndIntangibleAssetImpairment")).as("CCL FY2019: IS 한 줄").isFalse();
     }
+
+    @Test
+    @DisplayName("데이터셋 기말은 가장 가까운 월말이다 — 52/53주 회계연도의 사실 기말을 그 날로 맞춰 찾는다")
+    void dataSetDateRoundsToTheNearestMonthEnd() {
+        assertThat(SecStatementFaceCollector.SecStatementFaces.dataSetDate("20180929")).as("SNA 2018 3분기").isEqualTo("20180930");
+        assertThat(SecStatementFaceCollector.SecStatementFaces.dataSetDate("20220128")).as("NTAP").isEqualTo("20220131");
+        assertThat(SecStatementFaceCollector.SecStatementFaces.dataSetDate("20190102")).as("1월 초 기말은 앞 달 말").isEqualTo("20181231");
+        assertThat(SecStatementFaceCollector.SecStatementFaces.dataSetDate("20171231")).isEqualTo("20171231");
+    }
 }
