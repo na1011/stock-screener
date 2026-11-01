@@ -211,6 +211,24 @@ public class SecStatementFaceCollector {
             return face.incomeValues().contains(Face.key(ddate, quarters, value));
         }
 
+        /** 그 공시의 손익계산서 본문이 그 기간에 그 값의 줄을 실었는가(데이터셋 재료만). */
+        public boolean presents(String accession, String endYyyyMmDd, int quarters, java.math.BigDecimal value) {
+            Face face = known.get(accession);
+            return face != null && value.signum() != 0 && face.incomeValues().contains(Face.key(dataSetDate(endYyyyMmDd), quarters, value));
+        }
+
+        /**
+         * 그 기간의 그 값을 손익계산서 본문에 실은 공시가 이 발행사에 하나라도 있는가(데이터셋 재료만 — 값 재료가 없는 공시는 안 센다). 본문 표시가 판마다
+         * 바뀐다 — SNA는 2018년 3분기 전 본문이 「Net sales」 · 「Financial services revenue」 두 줄만 싣고 합계 3,711.8은 2019 10-K부터 본문에 있다.
+         */
+        public boolean presentedAnywhere(String endYyyyMmDd, int quarters, java.math.BigDecimal value) {
+            if (value.signum() == 0) {
+                return false;
+            }
+            String key = Face.key(dataSetDate(endYyyyMmDd), quarters, value);
+            return known.values().stream().anyMatch(f -> f.incomeValues().contains(key));
+        }
+
         /**
          * 데이터셋의 기말({@code ddate}) — 가장 가까운 월말로 반올림한 날이다(SEC 데이터셋 규약). 사실의 기말 그대로 찾으면 52/53주 회계연도의 기간이
          * 판정되지 않는다(SNA 2018-09-29 · HAS 2024-12-29 · NTAP 2022-01-28 — 데이터셋은 0930 · 1231 · 0131).

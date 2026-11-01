@@ -285,11 +285,14 @@ final class SecEdgarFacts {
     /** 영업이익을 재무제표 본문에 실었다고 셀 개념 — us-gaap · IFRS 같은 뜻(TaxonomyFrame이 IFRS를 us-gaap 열쇠에 싣는다). */
     static final Set<String> OPERATING_INCOME_ON_FACE = Set.of("us-gaap_OperatingIncomeLoss", "ifrs-full_ProfitLossFromOperatingActivities");
 
-    /**
-     * 본문으로 거르는 열 — 영업이익(ADR-0202). 매출 · 원가의 「본문 우선」은 데이터셋이 손익계산서를 일부만 실은 공시(ARES 2020 1분기: 그 분기
-     * 본문 값 11줄 · 총매출 줄 없음)에서 구성 줄이 총매출을 밀어내 아직 안 넣는다(재고 「본문 밖 매출 후보가 최댓값으로 이김」).
-     */
+    /** 본문으로 거르는 열 — 영업이익(ADR-0202). 본문 밖 사실은 버린다. */
     static final List<SecEdgarColumn> HEADLINE = List.of(SecEdgarColumn.OPERATING_INCOME);
+
+    /** 판마다 고른 값이 어느 공시 본문에도 없으면 본문 줄 후보로 바꾸는 열({@link #faceLines}). */
+    static final List<SecEdgarColumn> FACE_PREFERRED = List.of(SecEdgarColumn.REVENUE);
+
+    /** 본문 재료를 받을 열 — 거르는 열과 본문 줄을 고르는 열. */
+    static final List<SecEdgarColumn> FACE_JUDGED = List.of(SecEdgarColumn.OPERATING_INCOME, SecEdgarColumn.REVENUE);
 
     /** us-gaap 후보 태그 하나를 본문에서 찾을 이름 — 그 태그와, TaxonomyFrame이 그 열쇠에 싣는 IFRS 개념. */
     static Set<String> faceNames(String usGaapTag) {
@@ -304,12 +307,12 @@ final class SecEdgarFacts {
     }
 
     /**
-     * 손익 머리 열의 사실을 낸 공시들 중 창 안 기간을 실은 것 — 본문 재료를 받을 대상(창 밖 옛 공시까지 받으면 관문 첫 실행에 1만 건 넘게 부른다).
+     * 본문 재료를 받을 열({@link #FACE_JUDGED})의 사실을 낸 공시들 중 창 안 기간을 실은 것 — 본문 재료를 받을 대상(창 밖 옛 공시까지 받으면 관문 첫 실행에 1만 건 넘게 부른다).
      */
     static Set<String> headlineAccessions(JsonNode facts, int fromFiscalYear, String sic) {
         Set<String> out = new java.util.TreeSet<>();
         LocalDate from = LocalDate.of(fromFiscalYear - 1, 1, 1);
-        for (SecEdgarColumn column : HEADLINE) {
+        for (SecEdgarColumn column : FACE_JUDGED) {
             for (String tag : column.candidates(true, sic)) {
                 for (String name : faceNames(tag)) {
                     int cut = name.indexOf('_');
@@ -343,6 +346,7 @@ final class SecEdgarFacts {
             facts = frame.facts();
         }
         Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn = collect(facts, usGate, issuer.sic());
+        Map<String, Set<BigDecimal>> revenueLines = usGate ? revenueConceptValues(facts) : Map.of();
         Set<String> offStatement = Set.of();
         if (usGate) {
             dropAnnualQuarterContextCarryingTheYear(byColumn);
@@ -390,7 +394,8 @@ final class SecEdgarFacts {
             Map<SecEdgarColumn, String> tags =
                     chooseTags(labelAnchors.get(label), e.getValue(), periodic);
             reports.addAll(revisionsOf(label, e.getValue(), labelAnchors.get(label),
-                    byColumn, reporting, tags, withheld, usGate, offStatement));
+                    byColumn, reporting, tags, withheld, usGate, offStatement, usGate ? faces : SecStatementFaceCollector.SecStatementFaces.NONE,
+                    revenueLines));
         }
         List<RawFinancialReport> fourthQuarters =
                 deriveFourthQuarters(reports, windows, fromFiscalYear, byColumn, usGate);
@@ -607,18 +612,13 @@ final class SecEdgarFacts {
     private static Set<String> dropOffStatementHeadlines(Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn,
                                                          SecStatementFaceCollector.SecStatementFaces faces) {
         Set<String> off = new java.util.HashSet<>();
-        java.time.format.DateTimeFormatter ymd = java.time.format.DateTimeFormatter.BASIC_ISO_DATE;
         for (SecEdgarColumn column : HEADLINE) {
             Map<String, Map<Slot, Fact>> byTag = byColumn.get(column);
             for (Map.Entry<String, Map<Slot, Fact>> tag : byTag.entrySet()) {
                 Set<String> names = faceNames(tag.getKey());
                 tag.getValue().entrySet().removeIf(e -> {
                     Slot slot = e.getKey();
-                    int quarters = slot.start() == null ? 0
-                            : (int) Math.round(java.time.temporal.ChronoUnit.MONTHS.between(slot.start(), slot.end().plusDays(1)) / 3.0);
-                    Boolean on = faces.onIncomeStatement(slot.accn(), e.getValue().form(), names, slot.end().format(ymd), quarters,
-                            e.getValue().value());
-                    if (Boolean.FALSE.equals(on)) {
+                    if (Boolean.FALSE.equals(onIncomeStatement(faces, e.getValue(), names))) {
                         off.add(offKey(slot.accn(), column, slot.start(), slot.end()));
                         return true;
                     }
@@ -628,6 +628,14 @@ final class SecEdgarFacts {
             byTag.values().removeIf(Map::isEmpty);
         }
         return off;
+    }
+
+    /** 그 사실이 그 공시 손익계산서 본문의 줄인가 — 모르면 {@code null}({@link SecStatementFaceCollector.SecStatementFaces#onIncomeStatement}). */
+    private static Boolean onIncomeStatement(SecStatementFaceCollector.SecStatementFaces faces, Fact fact, Set<String> names) {
+        int quarters = fact.start() == null ? 0
+                : (int) Math.round(java.time.temporal.ChronoUnit.MONTHS.between(fact.start(), fact.end().plusDays(1)) / 3.0);
+        return faces.onIncomeStatement(fact.accn(), fact.form(), names, fact.end().format(java.time.format.DateTimeFormatter.BASIC_ISO_DATE),
+                quarters, fact.value());
     }
 
     /** 버린 사실의 열쇠 — 기간 시작까지 넣는다(같은 기말의 연간 사실이 버려졌다고 3개월 창을 끊지 않게). */
@@ -660,10 +668,14 @@ final class SecEdgarFacts {
         revenue.values().removeIf(Map::isEmpty);
     }
 
-    /** 이 판의 매출이 앞 판과 1% 넘게 다른데, 이 판이 다른 매출 후보 태그로 이 창에 앞 판 값(0.1% 안)을 실었는가. */
+    /**
+     * 이 판의 매출이 앞 판과 1% 넘게 다른데, 이 판이 다른 매출 후보 태그로 이 창에 앞 판 값(0.1% 안)을 실었는가. 그 사실이 이 공시 손익계산서 본문 밖이면
+     * 증거가 아니다 — 앞 판 값이 주석 줄로만 남은 재작성이다(ARES FY2017 10-K 2020-02-28: 주석 `Revenues` 1,085.0 대 본문 「Total revenues」 1,479.9).
+     */
     private static boolean retaggedRevenue(Map<SecEdgarColumn, BigDecimal> baseline, Map<SecEdgarColumn, BigDecimal> carried,
                                            Anchor reporter, Window window,
-                                           Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn) {
+                                           Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn,
+                                           SecStatementFaceCollector.SecStatementFaces faces) {
         BigDecimal before = baseline.get(SecEdgarColumn.REVENUE);
         BigDecimal now = carried.get(SecEdgarColumn.REVENUE);
         if (before == null || now == null || before.signum() == 0
@@ -675,11 +687,23 @@ final class SecEdgarFacts {
                 continue;
             }
             BigDecimal v = ownValue(reporter, SecEdgarColumn.REVENUE, window, tag, byColumn);
-            if (v != null && v.subtract(before).abs().compareTo(before.abs().multiply(new BigDecimal("0.001"))) <= 0) {
+            if (v != null && v.subtract(before).abs().compareTo(before.abs().multiply(new BigDecimal("0.001"))) <= 0
+                    && !offFace(reporter, window, tag, byColumn, faces)) {
                 return true;
             }
         }
         return false;
+    }
+
+    /** 이 판 공시의 그 매출 태그 사실이 손익계산서 본문 밖이라고 아는가. */
+    private static boolean offFace(Anchor reporter, Window window, String tag, Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn,
+                                   SecStatementFaceCollector.SecStatementFaces faces) {
+        Map<Slot, Fact> slots = byColumn.get(SecEdgarColumn.REVENUE).get(tag);
+        Fact fact = slots.get(new Slot(reporter.accn(), window.start(), window.end()));
+        if (fact == null) {
+            fact = nearStart(slots, reporter, window);
+        }
+        return fact != null && Boolean.FALSE.equals(onIncomeStatement(faces, fact, faceNames(tag)));
     }
 
     /**
@@ -1608,7 +1632,9 @@ final class SecEdgarFacts {
                                                         Map<SecEdgarColumn, String> tags,
                                                         Set<FinancialFetch.WithheldVintage> withheld,
                                                         boolean usGate,
-                                                        Set<String> offStatement) {
+                                                        Set<String> offStatement,
+                                                        SecStatementFaceCollector.SecStatementFaces faces,
+                                                        Map<String, Set<BigDecimal>> revenueLines) {
         // 손익 비지배의 마지막 관측. 이 기간보다 앞이면 「그 뒤로 비지배를 안 낸다」이고
         // 연결 총액을 지배주주 값으로 채울 수 있다(noNoncontrollingIncomeBy).
         LocalDate lastNoncontrolling = lastNoncontrollingIncome(byColumn);
@@ -1673,7 +1699,7 @@ final class SecEdgarFacts {
                     }
                     continue;
                 }
-                values = carryForward(values, valuesOf(candidate, labelAnchor, label, window, tags, byColumn, usGate));
+                values = carryForward(values, valuesOf(candidate, labelAnchor, label, window, tags, byColumn, usGate, faces, revenueLines));
                 reporter = candidate;
                 currency = candidateCurrency;
             }
@@ -1723,7 +1749,7 @@ final class SecEdgarFacts {
                     byColumn.getOrDefault(SecEdgarColumn.DISCONTINUED_OPERATIONS, Map.of()).isEmpty(),
                     usGate, noNoncontrollingIncomeBy(lastNonzeroNoncontrolling, window),
                     usGate && pairsDiffer.contains(window.end()));
-            if (usGate && last != null && retaggedRevenue(baseline, carried, reporter, window, byColumn)) {
+            if (usGate && last != null && retaggedRevenue(baseline, carried, reporter, window, byColumn, faces)) {
                 // 관문 켬(P5) — 이 판의 고정 태그 매출이 앞 판과 1% 넘게 달라도, 이 판이 다른 매출 후보 태그로 앞 판 값을 그대로 실었으면
                 // 재작성이 아니라 태그를 바꾼 것이다(계약 매출 + 계약 밖 매출로 다시 나눠 실음 — MARA FY2022 9.9 대 같은 공시 `Revenues`
                 // 117.8 · HRI · STT · CHRW · TRGP). 앞 판 값을 잇는다 — 안 이으면 부분값이 최신이 되고 판이 오간다.
@@ -2302,7 +2328,7 @@ final class SecEdgarFacts {
             Anchor anchor, Anchor labelAnchor, Label label, Window window,
             Map<SecEdgarColumn, String> tags,
             Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn,
-            boolean ownCover) {
+            boolean ownCover, SecStatementFaceCollector.SecStatementFaces faces, Map<String, Set<BigDecimal>> revenueLines) {
         Map<SecEdgarColumn, BigDecimal> values = new EnumMap<>(SecEdgarColumn.class);
         for (SecEdgarColumn column : SecEdgarColumn.values()) {
             if (column.annualOnly() && !"FY".equals(label.period())) {
@@ -2327,6 +2353,7 @@ final class SecEdgarFacts {
         }
         if (ownCover) {
             ownGrossMarginLine(anchor, window, tags, byColumn, values);
+            faceLines(anchor, window, byColumn, faces, revenueLines, values);
         }
         if (ownCover && values.get(SecEdgarColumn.NET_INCOME) == null
                 && values.get(SecEdgarColumn.NET_INCOME_TOTAL) == null
@@ -2343,6 +2370,93 @@ final class SecEdgarFacts {
             }
         }
         return values;
+    }
+
+    /**
+     * 관문 켬 — 이 판의 매출로 고른 값이 <b>그 기간을 실은 어느 공시의 손익계산서 본문 줄도 아니고</b> 이 판 공시의 본문에 그 열의 후보 줄이 있으면,
+     * 그 후보 줄 중 가장 큰 것이 이 판의 매출이다(재고 「본문 밖 매출 · 원가 후보가 최댓값으로 이김」 — MA FY2018 리베이트 전 주석 총액 · MKSI 주석 ×1,000 ·
+     * ARES 2020 1분기 주석의 `Revenues` 429M 대 본문 「Total revenues」 13.4M). 어느 공시든 본문에 실린 값이면 그대로다 — 본문 표시가 판마다 바뀌고 구성
+     * 줄만 싣는 판이 있다(SNA 2018년 3분기 전 순매출 · 금융서비스 수익 두 줄 · WAT FY2017 원가 상품 623 · 용역 324 — 합계는 뒤 공시 본문에 있다).
+     * 판정은 공시마다 서므로 기간마다 고정한 태그가 아니라 이 판 공시의 사실로 고른다 — 고정 태그를 첫 판의 본문 판정으로 고르면 뒤 공시에서 같은 태그가
+     * 구성 줄을 가리킨다(INVH 2017 3분기 · KKR · HGTY). 재료를 모르면 그대로다. 원가는 하지 않는다 — 구성 줄만 싣고 합계를 어느 공시 본문에도 안 싣는
+     * 기간이 있다(WAT FY2016 상품 595.8 · 용역 295.7 대 주석 합계 891.5 — 그 열의 부분 개념 `CostOfServices`는 후보 수집에 없다).
+     */
+    private static void faceLines(Anchor anchor, Window window, Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn,
+                                  SecStatementFaceCollector.SecStatementFaces faces, Map<String, Set<BigDecimal>> revenueLines,
+                                  Map<SecEdgarColumn, BigDecimal> values) {
+        if (window.start() == null) {
+            return;
+        }
+        for (SecEdgarColumn column : FACE_PREFERRED) {
+            // 고른 값이 없으면(기간마다 고정한 태그가 이 판에 없다) 그대로다 — 이 판의 그 줄만 바꾸면 앞 판에서 이은 같은 줄의 다른 칸과 기저가
+            // 섞인다(재작성 비교열: 원가 칸이 바뀐 127행 중 「매출 − 원가 = 총이익」이 85 → 77). 그 칸은 같은 공시 항등식으로 가르는 K4의 몫이다.
+            BigDecimal chosen = values.get(column);
+            if (chosen == null) {
+                continue;
+            }
+            int quarters = (int) Math.round(java.time.temporal.ChronoUnit.MONTHS.between(window.start(), window.end().plusDays(1)) / 3.0);
+            if (faces.presentedAnywhere(window.end().format(java.time.format.DateTimeFormatter.BASIC_ISO_DATE), quarters, chosen)) {
+                continue;
+            }
+            BigDecimal largest = null;
+            boolean chosenOnFace = false;
+            for (Map.Entry<String, Map<Slot, Fact>> entry : byColumn.get(column).entrySet()) {
+                if (!column.competesForLargest(entry.getKey())) {
+                    continue;
+                }
+                Fact fact = entry.getValue().get(new Slot(anchor.accn(), window.start(), window.end()));
+                if (fact == null) {
+                    fact = nearStart(entry.getValue(), anchor, window);
+                }
+                if (fact == null || fact.value() == null || !Boolean.TRUE.equals(onIncomeStatement(faces, fact, faceNames(entry.getKey())))) {
+                    continue;
+                }
+                chosenOnFace |= fact.value().compareTo(chosen) == 0;   // 공시 폴더 재료(값 없음)는 개념으로 판정한다
+                if (largest == null || fact.value().compareTo(largest) > 0) {
+                    largest = fact.value();
+                }
+            }
+            if (largest != null && !chosenOnFace && !splitOnFace(anchor, window, quarters, chosen, largest, faces, revenueLines)) {
+                values.put(column, largest);
+            }
+        }
+    }
+
+    /**
+     * 본문이 합계 줄 없이 매출을 나눠 실었는가 — 고른 값 = 본문 매출 후보 줄 + 같은 공시 · 같은 기간 본문의 다른 매출 개념 줄(SNA 2015 ~ 2017년 2분기:
+     * 「Net sales」 + 「Financial services revenue」 = 주석의 `Revenues`). 차액이 본문 값과 같기만 한 것은 증거가 아니다 — 비지배 순이익(KMB 2017
+     * 41M) · 법인세(ED 2024 3분기 133M) · 스톡옵션 세금효과(CNP)가 우연히 같았다.
+     */
+    private static boolean splitOnFace(Anchor anchor, Window window, int quarters, BigDecimal chosen, BigDecimal faceLine,
+                                       SecStatementFaceCollector.SecStatementFaces faces, Map<String, Set<BigDecimal>> revenueLines) {
+        BigDecimal rest = chosen.subtract(faceLine);
+        return rest.signum() > 0
+                && revenueLines.getOrDefault(anchor.accn() + "|" + window.start() + "|" + window.end(), Set.of()).contains(rest.stripTrailingZeros())
+                && faces.presents(anchor.accn(), window.end().format(java.time.format.DateTimeFormatter.BASIC_ISO_DATE), quarters, rest);
+    }
+
+    /**
+     * 공시 · 기간마다 매출 개념(이름에 {@code Revenue}가 든 표준 · IFRS 태그) 사실의 값 — {@link #splitOnFace}의 증거로만 쓴다(그 값으로 매출 열을
+     * 채우지 않는다 — 이름은 계약이 아니라서 열의 후보로는 못 쓴다).
+     */
+    private static Map<String, Set<BigDecimal>> revenueConceptValues(JsonNode facts) {
+        Map<String, Set<BigDecimal>> out = new HashMap<>();
+        for (String namespace : List.of("us-gaap", "ifrs-full")) {
+            for (Map.Entry<String, JsonNode> tag : facts.path(namespace).properties()) {
+                if (!tag.getKey().contains("Revenue")) {
+                    continue;
+                }
+                for (Map.Entry<String, JsonNode> unit : tag.getValue().path("units").properties()) {
+                    for (JsonNode node : unit.getValue()) {
+                        if (node.hasNonNull("start") && node.hasNonNull("val")) {
+                            out.computeIfAbsent(node.path("accn").asString("") + "|" + node.path("start").asString("") + "|"
+                                    + node.path("end").asString(""), k -> new HashSet<>()).add(node.path("val").decimalValue().stripTrailingZeros());
+                        }
+                    }
+                }
+            }
+        }
+        return out;
     }
 
     /**
