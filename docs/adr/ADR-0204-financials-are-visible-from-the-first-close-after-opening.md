@@ -49,7 +49,12 @@ applies_to:
 
 ## 검증
 
-- `./gradlew test --tests '*ReportingBasisTest*' --tests '*DiscontinuedGateTest*'`.
+- `./gradlew test --tests '*ReportingBasisTest*' --tests '*DiscontinuedGateTest*' --tests '*DartDayListTest*' --tests '*KrFilingTimeStoreTest*'`.
+- 관문 날 커버리지(관문 전엔 「잴 것이 없었다」 · 국내는 `kr-filing-time` 실행 요약의 실패 날짜 수):
+
+```premise 창 안 미국 판에 공개 시각이 있다
+psql -d stock_screener -At -c "SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'financial_statement' AND column_name = 'accepted_at') THEN '잴 것이 없었다 — 관문 전(V70_12 전)' ELSE (SELECT CASE WHEN count(*) = 0 THEN '잴 것이 없었다 — 창 안 미국 판이 없다' WHEN count(*) FILTER (WHERE to_jsonb(f) ->> 'accepted_at' IS NULL) = 0 THEN 'OK 창 안 미국 판 ' || count(*) || ' 전부 공개 시각 있음' ELSE count(*) FILTER (WHERE to_jsonb(f) ->> 'accepted_at' IS NULL) || '판(창 안 미국 ' || count(*) || ' 중)에 공개 시각이 없다 — 그 판은 공시일 다음 날부터 보인다(늦는 쪽). 관문 재적재(FR)가 submissions로 채운다' END FROM financial_statement f JOIN stock s ON s.id = f.stock_id WHERE s.market_code = 'US' AND f.published_at >= current_date - 400) END"
+```
 
 ## 결과
 
