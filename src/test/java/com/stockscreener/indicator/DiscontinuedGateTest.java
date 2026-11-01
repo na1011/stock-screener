@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -81,8 +82,9 @@ class DiscontinuedGateTest {
         IndicatorDataReader krOnly = reader(false, true);
         assertThat(krOnly.readAnnualFigures(kr, LocalDate.of(2026, 3, 14), 5, FinancialVisibility.KNOWN_ON))
                 .as("토요일 봉은 아직 공개 전").isEmpty();
-        assertThat(krOnly.readAnnualFigures(kr, LocalDate.of(2026, 3, 16), 5, FinancialVisibility.KNOWN_ON).get(0).publishedAt())
-                .isEqualTo(LocalDate.of(2026, 3, 16));
+        FinancialFigures monday = krOnly.readAnnualFigures(kr, LocalDate.of(2026, 3, 16), 5, FinancialVisibility.KNOWN_ON).get(0);
+        assertThat(monday.visibleOn()).as("보이는 날 = 접수일(게시 시각 모름 → 공시일 다음 날보다 접수일이 늦다)").isEqualTo(LocalDate.of(2026, 3, 16));
+        assertThat(monday.publishedAt()).as("앵커는 저장 공시일(설계 v3)").isEqualTo(LocalDate.of(2026, 3, 13));
         assertThat(reader(false, false).readAnnualFigures(kr, LocalDate.of(2026, 3, 14), 5, FinancialVisibility.KNOWN_ON))
                 .as("관문 꺼짐은 저장 공시일 그대로").hasSize(1);
     }
@@ -99,11 +101,41 @@ class DiscontinuedGateTest {
                 INSERT INTO kr_report_xbrl (rcept_no, stock_id, corp_code, detail_type, report_name, rcept_date, bsns_year, reprt_code)
                 VALUES ('20260313900124', ?, '00000002', 'A001', '사업보고서 (2025.12)', '2026-03-16', 2025, '11011')
                 """, kr);
-        assertThat(reader(false, true).readGovernanceFacts(kr, LocalDate.of(2026, 3, 14), 3, FinancialVisibility.KNOWN_ON))
-                .as("토요일 봉은 아직 공개 전").isEmpty();
-        assertThat(reader(false, true).readGovernanceFacts(kr, LocalDate.of(2026, 3, 16), 3, FinancialVisibility.KNOWN_ON)).hasSize(1);
-        assertThat(reader(false, false).readGovernanceFacts(kr, LocalDate.of(2026, 3, 14), 3, FinancialVisibility.KNOWN_ON))
-                .as("관문 꺼짐").hasSize(1);
+        // 보이는 날은 값이 싣고(GovernanceMath가 봉마다 거른다) 저장 공시일은 앵커로 남는다(설계 v3).
+        GovernanceValue gated = reader(false, true).readGovernanceFacts(kr, LocalDate.of(2026, 3, 14), 3, FinancialVisibility.KNOWN_ON)
+                .get(0).get(GovernanceMetric.DPS_COMMON);
+        assertThat(gated.visibleOn()).as("공개 시각을 모르면 접수일(월)보다 이르지 않다").isEqualTo(LocalDate.of(2026, 3, 16));
+        assertThat(gated.publishedAt()).as("앵커는 저장 공시일").isEqualTo(LocalDate.of(2026, 3, 13));
+        GovernanceValue off = reader(false, false).readGovernanceFacts(kr, LocalDate.of(2026, 3, 14), 3, FinancialVisibility.KNOWN_ON)
+                .get(0).get(GovernanceMetric.DPS_COMMON);
+        assertThat(off.visibleOn()).as("관문 꺼짐은 그대로(공시일)").isEqualTo(LocalDate.of(2026, 3, 13));
+
+        // 게시 시각을 알면 그 시각 뒤 처음 마감하는 세션 — 금 15:40 KST 게시는 그날 종가 뒤라 다음 날(접수일 월보다 이르면 접수일).
+        jdbcTemplate.update("""
+                INSERT INTO kr_filing_time (rcept_no, corp_code, corp_name, report_name, listed_on, opened_at)
+                VALUES ('20260313900124', '00000002', '국내 거버넌스 접수일', '사업보고서 (2025.12)', '2026-03-13', '2026-03-13 15:40:59+09')
+                """);
+        assertThat(reader(false, true).readGovernanceFacts(kr, LocalDate.of(2026, 3, 16), 3, FinancialVisibility.KNOWN_ON)
+                .get(0).get(GovernanceMetric.DPS_COMMON).visibleOn()).isEqualTo(LocalDate.of(2026, 3, 16));
+    }
+
+    @Test
+    @DisplayName("미국 관문 켬 — 재무 판은 접수 시각 뒤 처음 마감하는 세션부터 보인다 · 앵커는 저장 공시일 · 시각을 모르면 다음 날 · 관문 꺼짐은 공시일")
+    void usFinancialsAreVisibleAfterTheFirstCloseFollowingAcceptance() {
+        long us = insertStock("US", "ZZA1", "미국 접수 시각");
+        jdbcTemplate.update("""
+                INSERT INTO financial_statement
+                    (stock_id, fiscal_year, fiscal_period, period_start, period_end, published_at, revision_no, is_latest,
+                     currency_code, net_income, accepted_at)
+                VALUES (?, 2024, 'FY', '2023-07-01', '2024-06-30', '2024-07-30', 0, true, 'USD', 1000, '2024-07-30 20:06:00+00'),
+                       (?, 2023, 'FY', '2022-07-01', '2023-06-30', '2023-07-27', 0, true, 'USD', 900, NULL)
+                """, us, us);
+        List<FinancialFigures> on = reader(true, false).readAnnualFigures(us, LocalDate.of(2024, 7, 30), 5, FinancialVisibility.KNOWN_ON);
+        assertThat(on.get(0).visibleOn()).as("16:06 ET 접수 → 다음 날(달력에 없으면 13:00 마감으로)").isEqualTo(LocalDate.of(2024, 7, 31));
+        assertThat(on.get(0).publishedAt()).as("앵커").isEqualTo(LocalDate.of(2024, 7, 30));
+        assertThat(on.get(1).visibleOn()).as("시각 모름 → 공시일 다음 날").isEqualTo(LocalDate.of(2023, 7, 28));
+        assertThat(reader(false, false).readAnnualFigures(us, LocalDate.of(2024, 7, 30), 5, FinancialVisibility.KNOWN_ON).get(0).visibleOn())
+                .as("관문 꺼짐").isEqualTo(LocalDate.of(2024, 7, 30));
     }
 
     private IndicatorDataReader reader(boolean usGate, boolean krGate) {

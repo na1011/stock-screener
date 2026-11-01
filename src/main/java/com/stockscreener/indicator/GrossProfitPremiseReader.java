@@ -37,8 +37,11 @@ public class GrossProfitPremiseReader {
 
     /** 전제가 깨졌으면 그 갈래, 아니면 {@code null}. */
     public GrossProfitPremise.Break brokenAt(long stockId, LocalDate asOf) {
+        // 질의의 공시일 선필터는 보이는 날보다 넓다(관문 켬 · 장 마감 뒤 공시는 다음 봉부터 보인다) — 판정은 그날 보이는 판만으로.
         List<FinancialFigures> annual = dataReader.readAnnualFigures(
-                stockId, asOf, YEARS, IndicatorDataReader.FinancialVisibility.KNOWN_ON);
+                        stockId, asOf, YEARS, IndicatorDataReader.FinancialVisibility.KNOWN_ON).stream()
+                .filter(f -> f.visibleOn() == null || !f.visibleOn().isAfter(asOf))
+                .toList();
         return GrossProfitPremise.of(annual);
     }
 }

@@ -45,7 +45,7 @@ public final class GovernanceMath {
         // 목록이 회계연도 내림차순이므로 앞에서부터 첫 성립이 곧 최신이다.
         for (GovernanceFigures figures : context.governanceFacts()) {
             GovernanceValue value = figures.get(metric);
-            if (value != null && !value.publishedAt().isAfter(tradeDate)) {
+            if (value != null && !value.visibleOn().isAfter(tradeDate)) {
                 return value;
             }
         }
@@ -62,7 +62,7 @@ public final class GovernanceMath {
                                               GovernanceMetric anchor) {
         for (GovernanceFigures figures : context.governanceFacts()) {
             GovernanceValue value = figures.get(anchor);
-            if (value != null && !value.publishedAt().isAfter(tradeDate)) {
+            if (value != null && !value.visibleOn().isAfter(tradeDate)) {
                 return figures;
             }
         }
@@ -83,7 +83,7 @@ public final class GovernanceMath {
                 continue;
             }
             GovernanceValue value = figures.get(metric);
-            if (value != null && !value.publishedAt().isAfter(tradeDate)) {
+            if (value != null && !value.visibleOn().isAfter(tradeDate)) {
                 return figures;
             }
         }

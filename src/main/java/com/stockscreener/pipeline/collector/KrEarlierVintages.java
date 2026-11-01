@@ -258,12 +258,16 @@ public class KrEarlierVintages {
         return changed.size();
     }
 
-    /** 판을 복사할 열 — 식별 · 생성 시각 · 판 표지(공시일 · 번호 · 최신)를 뺀 전부. 열이 늘어도 같이 따라간다. */
+    /**
+     * 판을 복사할 열 — 식별 · 생성 시각 · 판 표지(공시일 · 번호 · 최신) · 공개 시각(그 공시의 것이라 다른 접수의 판에 옮기면 그 판의 보이는
+     * 날이 틀린다 · V70_12)을 뺀 전부. 열이 늘어도 같이 따라간다.
+     */
     private String copiedColumns() {
         return jdbc.queryForList("""
                 SELECT column_name FROM information_schema.columns
                 WHERE table_schema = current_schema() AND table_name = 'financial_statement'
-                  AND column_name NOT IN ('id', 'created_at', 'published_at', 'revision_no', 'is_latest', 'copied_from', 'derived_from')
+                  AND column_name NOT IN ('id', 'created_at', 'published_at', 'revision_no', 'is_latest', 'copied_from', 'derived_from',
+                                          'accepted_at')
                 ORDER BY ordinal_position
                 """, String.class).stream().collect(Collectors.joining(", "));
     }

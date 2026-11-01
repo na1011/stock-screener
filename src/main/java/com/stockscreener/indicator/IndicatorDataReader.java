@@ -1,5 +1,6 @@
 package com.stockscreener.indicator;
 
+import com.stockscreener.indicator.calculator.ReportingBasis;
 import com.stockscreener.pipeline.collector.CorporateActionLedger;
 import com.stockscreener.pipeline.collector.EarningsReleaseStore;
 import com.stockscreener.pipeline.datasource.us.UsMarket;
@@ -136,6 +137,7 @@ public class IndicatorDataReader {
                  AND ci.report_code = financial_statement.report_code) AS equity_ncav_non_common
             , (SELECT ci.equity_branch FROM financial_common_income ci WHERE ci.financial_statement_id = financial_statement.id
                  AND ci.report_code = financial_statement.report_code) AS equity_branch
+            , financial_statement.accepted_at AS accepted_at
             """;
 
     /**
@@ -158,6 +160,7 @@ public class IndicatorDataReader {
             , (SELECT ci.common_fraction FROM financial_common_income ci WHERE %1$s) AS equity_common_fraction
             , financial_statement.flow_superseded::text AS flow_superseded
             , financial_statement.published_effective AS published_effective
+            , financial_statement.opened_at AS opened_at
             """.formatted(COMMON_KR_MATCH);
 
     /**
@@ -259,7 +262,11 @@ public class IndicatorDataReader {
                                           WHERE k.stock_id = fs.stock_id AND k.bsns_year = fs.fiscal_year
                                             AND k.reprt_code = fs.report_code AND k.rcept_date > fs.published_at
                                             AND k.rcept_no LIKE to_char(fs.published_at, 'YYYYMMDD') || '%%%%'), fs.published_at)
-                          AS published_effective
+                          AS published_effective,
+                          (SELECT CASE WHEN count(*) > 0 AND count(t.opened_at) = count(*) THEN max(t.opened_at) END
+                             FROM kr_report_xbrl k LEFT JOIN kr_filing_time t ON t.rcept_no = k.rcept_no
+                            WHERE k.stock_id = fs.stock_id AND k.bsns_year = fs.fiscal_year AND k.reprt_code = fs.report_code
+                              AND k.rcept_no LIKE to_char(fs.published_at, 'YYYYMMDD') || '%%%%') AS opened_at
                     FROM financial_statement fs) financial_statement
             """;
 
@@ -351,6 +358,18 @@ public class IndicatorDataReader {
      */
     private static final String SELECT_FINANCIALS_KNOWN_ON_BATCH_KR =
             domestic(SELECT_FINANCIALS_KNOWN_ON_BATCH).replace("SELECT stock_id, ", "SELECT stock_id, published_effective, ");
+
+    /** 관문 켬 일괄 질의 — 행의 시장과 공개 시각 원자료를 싣는다({@link Opening}). */
+    private static String batchWithOpening(boolean us, boolean kr) {
+        String sql = kr ? SELECT_FINANCIALS_KNOWN_ON_BATCH_KR : SELECT_FINANCIALS_KNOWN_ON_BATCH;
+        String extra = "(SELECT s.market_code FROM stock s WHERE s.id = financial_statement.stock_id) AS row_market, "
+                + (us ? "accepted_at, " : "") + (kr ? "opened_at, " : "");
+        String out = sql.replace("SELECT stock_id, ", "SELECT stock_id, " + extra);
+        if (out.equals(sql)) {
+            throw new IllegalStateException("관문 켬 일괄 질의를 못 지었다 — 틀이 바뀌었다");
+        }
+        return out;
+    }
 
     private static final RowMapper<PriceBar> PRICE_BAR_MAPPER = (rs, rowNum) -> new PriceBar(
             rs.getObject("trade_date", LocalDate.class),
@@ -645,7 +664,7 @@ public class IndicatorDataReader {
         }
         Timestamp bound = writtenBy == null ? null : Timestamp.from(writtenBy);
         jdbcTemplate.query(con -> {
-            var ps = con.prepareStatement(krGate ? SELECT_FINANCIALS_KNOWN_ON_BATCH_KR : SELECT_FINANCIALS_KNOWN_ON_BATCH);
+            var ps = con.prepareStatement(usGate || krGate ? batchWithOpening(usGate, krGate) : SELECT_FINANCIALS_KNOWN_ON_BATCH);
             java.sql.Array ids = con.createArrayOf("bigint", stockIds.toArray());
             ps.setArray(1, ids);
             ps.setObject(2, asOf);
@@ -656,7 +675,10 @@ public class IndicatorDataReader {
             return ps;
         }, rs -> {
             long stockId = rs.getLong("stock_id");
-            FinancialFigures figures = mapFigures(rs, null, false, false, krGate);
+            String rowMarket = usGate || krGate ? rs.getString("row_market") : null;
+            Opening opening = rowMarket == null ? Opening.NONE
+                    : UsMarket.CODE.equals(rowMarket) ? (usGate ? Opening.US : Opening.NONE) : (krGate ? Opening.KR : Opening.NONE);
+            FinancialFigures figures = mapFigures(rs, null, false, false, krGate, opening, usCloses());
             (figures.fiscalPeriod() == FinancialFigures.FiscalPeriod.FY ? annual : quarterly)
                     .computeIfAbsent(stockId, k -> new ArrayList<>()).add(figures);
             String code = rs.getString("report_code");
@@ -710,18 +732,36 @@ public class IndicatorDataReader {
         // 국내 관문 켬 — 공시일은 공시 목록의 접수일이다(재무와 같은 규칙 · KR_PUBLISHED). 접수번호 앞 8자리는 제출일이라 영업시간 밖 · 휴일
         // 제출이 1~4일 이르다(거버넌스 133사실 · 11접수 · 반증 밖 렌즈) — 배당성향 분자(거버넌스)와 분모(재무)의 공개일이 갈리지 않게 한다.
         // 미국 접수 번호는 그 목록에 없어 저장 공시일 그대로다.
-        String from = krGate ? """
-                (SELECT g.fiscal_year, g.receipt_no, g.metric_key, g.value, g.stock_id,
+        // 보이는 날(관문 켬 · ReportingBasis.visibleFrom) — 국내는 그 접수번호의 DART 게시 시각, 미국은 도장(그 해 FY 판의 첫 공시일)이
+        // 가리키는 FY 판의 EDGAR 접수 시각이다(배당성향 분자 · 분모가 같은 봉에 보이게 — 재무만 옮기면 그 봉이 빈다).
+        String market = usGate || krGate ? marketOf(stockId) : null;
+        Opening opening = market == null ? Opening.NONE
+                : UsMarket.CODE.equals(market) ? (usGate ? Opening.US : Opening.NONE) : (krGate ? Opening.KR : Opening.NONE);
+        String from = switch (opening) {
+            case KR -> """
+                (SELECT g.fiscal_year, g.receipt_no, g.metric_key, g.value, g.stock_id, g.published_at,
                         coalesce((SELECT max(k.rcept_date) FROM kr_report_xbrl k
                                    WHERE k.rcept_no = g.receipt_no AND k.stock_id = g.stock_id AND k.rcept_date > g.published_at),
-                                 g.published_at) AS published_at
-                   FROM governance_fact g) governance_fact""" : "governance_fact";
+                                 g.published_at) AS published_effective,
+                        (SELECT t.opened_at FROM kr_filing_time t WHERE t.rcept_no = g.receipt_no) AS opened_at
+                   FROM governance_fact g) governance_fact""";
+            case US -> """
+                (SELECT g.fiscal_year, g.receipt_no, g.metric_key, g.value, g.stock_id, g.published_at,
+                        (SELECT CASE WHEN count(*) > 0 AND count(f.accepted_at) = count(*) THEN max(f.accepted_at) END
+                           FROM financial_statement f
+                          WHERE f.stock_id = g.stock_id AND f.fiscal_year = g.fiscal_year AND f.fiscal_period = 'FY'
+                            AND f.published_at = g.published_at) AS accepted_at
+                   FROM governance_fact g) governance_fact""";
+            case NONE -> "governance_fact";
+        };
+        // 국내 관문 켬 이전 동작(접수일)도 보이는 날로 옮겼다 — 정렬은 저장 공시일 · 접수번호 그대로다.
         String sql = """
-                SELECT fiscal_year, receipt_no, metric_key, value, published_at
+                SELECT *
                   FROM %s
                  WHERE stock_id = ? %s
                  ORDER BY fiscal_year DESC, published_at DESC, receipt_no DESC
                 """.formatted(from, publishedFilter);
+        ReportingBasis.SessionClose closes = opening == Opening.US ? usCloses() : null;
 
         Object[] args = visibility == FinancialVisibility.KNOWN_ON
                 ? new Object[]{stockId, asOf} : new Object[]{stockId};
@@ -739,7 +779,7 @@ public class IndicatorDataReader {
             yearOfReport.putIfAbsent(key, fiscalYear);
             byReport.computeIfAbsent(key, k -> new EnumMap<>(GovernanceMetric.class))
                     .put(metric, new GovernanceValue(rs.getBigDecimal("value"),
-                            rs.getObject("published_at", LocalDate.class)));
+                            rs.getObject("published_at", LocalDate.class), visibleFrom(rs, opening, closes)));
         }, args);
 
         List<GovernanceFigures> figures = new ArrayList<>(byReport.size());
@@ -765,7 +805,10 @@ public class IndicatorDataReader {
         ShareClassLine line = usGate && us ? shareClasses.line(stockId) : null;
         // 국내 보통주 몫(ADR-0192) — 국내 관문이 켜졌고 그 행이 국내일 때만(미국 행은 위 클래스 축 갈래).
         boolean krCommon = krGate && market != null && !us;
-        RowMapper<FinancialFigures> mapper = (rs, rowNum) -> mapFigures(rs, line, discontinued, krCommon, krCommon);
+        // 보이는 날(관문 켬 · ReportingBasis.visibleFrom) — 미국은 COMMON_COLUMNS가, 국내는 KR_PUBLISHED가 공개 시각을 싣는다.
+        Opening opening = line != null ? Opening.US : krCommon ? Opening.KR : Opening.NONE;
+        ReportingBasis.SessionClose closes = opening == Opening.US ? usCloses() : null;
+        RowMapper<FinancialFigures> mapper = (rs, rowNum) -> mapFigures(rs, line, discontinued, krCommon, krCommon, opening, closes);
         return switch (visibility) {
             case LATEST -> jdbcTemplate.query(
                     (krCommon ? SELECT_FINANCIALS_LATEST_COMMON_KR
@@ -805,9 +848,55 @@ public class IndicatorDataReader {
      * @param discontinued 그 행 시장의 관문이 켜졌는가 — 켜졌을 때만 질의가 중단영업 두 컬럼을 싣는다
      * @param krCommon 국내 관문 켬 · 국내 행 — 질의가 국내 보통주 몫 네 열을 싣는다(ADR-0192)
      */
-    /** @param effectivePublished 질의가 {@code published_effective}(국내 접수일)를 실었는가 */
+    /**
+     * @param effectivePublished 질의가 {@code published_effective}(국내 접수일)를 실었는가
+     * @param opening            그 행의 보이는 날을 지을 공개 시각 원자료(관문 켬) — {@link Opening#NONE}이면 보이는 날 = 공시일
+     */
     private static FinancialFigures mapFigures(ResultSet rs, ShareClassLine line, boolean discontinued, boolean krCommon,
-                                               boolean effectivePublished)
+                                               boolean effectivePublished, Opening opening, ReportingBasis.SessionClose closes)
+            throws SQLException {
+        return mapStoredFigures(rs, line, discontinued, krCommon, effectivePublished)
+                .withVisibleFrom(visibleFrom(rs, opening, closes));
+    }
+
+    /**
+     * 그 행의 보이는 날 — 공개 시각 뒤 처음 마감하는 세션({@link ReportingBasis#visibleFrom}). 국내는 공시 목록 접수일보다 이르지 않다.
+     * 저장 공시일(판 열쇠 · 주식수 앵커)은 안 바꾼다.
+     */
+    private static LocalDate visibleFrom(ResultSet rs, Opening opening, ReportingBasis.SessionClose closes) throws SQLException {
+        LocalDate published = rs.getObject("published_at", LocalDate.class);
+        return switch (opening) {
+            case NONE -> null;
+            case US -> ReportingBasis.visibleFrom(published, instant(rs, "accepted_at"), true, closes);
+            case KR -> {
+                LocalDate rule = ReportingBasis.visibleFrom(published, instant(rs, "opened_at"), false, null);
+                LocalDate listed = rs.getObject("published_effective", LocalDate.class);
+                yield listed != null && listed.isAfter(rule) ? listed : rule;
+            }
+        };
+    }
+
+    private static java.time.Instant instant(ResultSet rs, String column) throws SQLException {
+        java.time.OffsetDateTime at = rs.getObject(column, java.time.OffsetDateTime.class);
+        return at == null ? null : at.toInstant();
+    }
+
+    /** 보이는 날을 지을 공개 시각 원자료 — 미국 EDGAR 접수 시각 · 국내 DART 게시 시각 · 없음(관문 꺼짐). */
+    private enum Opening { NONE, US, KR }
+
+    /** 미국 세션 마감(NYSE {@code core_end} · 동부 시각) — 달력에 없는 날은 {@code null}(규칙이 가장 이른 마감으로 본다). */
+    private ReportingBasis.SessionClose usCloses() {
+        Map<LocalDate, java.time.LocalTime> closes = new HashMap<>();
+        jdbcTemplate.query("SELECT session_date, core_end FROM market_calendar WHERE exchange_code = 'NYSE'", rs -> {
+            closes.put(rs.getObject("session_date", LocalDate.class),
+                    rs.getObject("core_end", java.time.OffsetDateTime.class).atZoneSameInstant(java.time.ZoneId.of("America/New_York"))
+                            .toLocalTime());
+        });
+        return closes::get;
+    }
+
+    private static FinancialFigures mapStoredFigures(ResultSet rs, ShareClassLine line, boolean discontinued, boolean krCommon,
+                                                     boolean effectivePublished)
             throws SQLException {
         BigDecimal shares = rs.getBigDecimal("shares_outstanding");
         ShareClassLine.State state = null;
@@ -826,7 +915,8 @@ public class IndicatorDataReader {
                 FinancialFigures.FiscalPeriod.valueOf(rs.getString("fiscal_period")),
                 rs.getObject("period_start", LocalDate.class),
                 rs.getObject("period_end", LocalDate.class),
-                rs.getObject(effectivePublished ? "published_effective" : "published_at", LocalDate.class),
+                // 저장 공시일 — 판 열쇠 · 주식수 앵커. 보이는 날은 visibleFrom이 따로 싣는다(국내 접수일 · 공개 시각).
+                rs.getObject("published_at", LocalDate.class),
                 rs.getString("currency_code"),
                 rs.getBigDecimal("revenue"),
                 rs.getBigDecimal("operating_income"),
