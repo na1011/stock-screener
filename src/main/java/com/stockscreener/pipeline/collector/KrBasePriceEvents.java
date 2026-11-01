@@ -72,6 +72,11 @@ public class KrBasePriceEvents {
     }
 
     public Detection detect(SecurityRef security) throws DataSourceException {
+        return detect(security, LocalDate.MIN, LocalDate.MAX);
+    }
+
+    /** {@code [from, to]} 밖의 날은 짓지 않는다 — 구조 사건마다 소스를 부르므로 매일 도는 좁은 창이 지난 사건을 다시 묻지 않게. */
+    public Detection detect(SecurityRef security, LocalDate from, LocalDate to) throws DataSourceException {
         List<Bar> bars = jdbc.query("""
                 SELECT trade_date, open, close, volume, listed_shares, base_price, market_category
                 FROM price_daily WHERE stock_id = ? ORDER BY trade_date
@@ -90,6 +95,9 @@ public class KrBasePriceEvents {
         for (int i = 1; i < bars.size(); i++) {
             Bar bar = bars.get(i);
             Bar prev = bars.get(i - 1);
+            if (bar.date().isBefore(from) || bar.date().isAfter(to)) {
+                continue;
+            }
             if (bar.base() == null) {
                 missingBase++;
                 continue;

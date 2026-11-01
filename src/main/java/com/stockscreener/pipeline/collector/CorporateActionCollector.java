@@ -139,10 +139,7 @@ public class CorporateActionCollector {
         // 덮지 못하고(IGNORED) 며칠 어긋나면 근접 중복으로 조용히 빠진다(판정된 행과의 충돌과 같은 취급). 창 필터는 다른 사건과 같다.
         Result exchange = Result.empty();
         if (krGate && !com.stockscreener.pipeline.datasource.us.UsMarket.CODE.equals(security.marketCode())) {
-            KrBasePriceEvents.Detection base = basePriceEvents.detect(security);
-            exchange = recordAll(security, base.events().stream()
-                    .filter(action -> !action.effectiveDate().isBefore(from) && !action.effectiveDate().isAfter(to))
-                    .toList());
+            exchange = recordAll(security, basePriceEvents.detect(security, from, to).events());
         }
 
         CorporateActionDataSource source = registry.corporateActionSource(security.marketCode());

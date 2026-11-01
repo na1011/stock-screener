@@ -140,6 +140,11 @@ class KrBasePriceEventsTest {
 
         Mockito.when(resolver.resolve(Mockito.any(), Mockito.any(), Mockito.any())).thenReturn(Optional.empty());
         assertThat(events.detect(security()).events().get(0).type()).isEqualTo(CorporateAction.Type.UNKNOWN);
+
+        Mockito.clearInvocations(resolver);
+        assertThat(events.detect(security(), LocalDate.parse("2024-08-01"), LocalDate.parse("2024-08-31")).events())
+                .as("창 밖 구조 사건은 소스에 다시 묻지 않는다").isEmpty();
+        Mockito.verifyNoInteractions(resolver);
     }
 
     @Test
