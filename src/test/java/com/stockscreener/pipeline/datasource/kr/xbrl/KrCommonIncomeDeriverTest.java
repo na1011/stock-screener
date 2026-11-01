@@ -69,7 +69,8 @@ class KrCommonIncomeDeriverTest {
             LocalDate end = start.plusMonths(3).minusDays(1);
             LocalDate published = end.plusDays(45);
             row(2025, "Q" + q, start, end, published, QUARTER_NI[q - 1]);
-            filing("2025" + q + "0000000" + q, published, q == 2 ? "A002" : "A003", q == 1 ? "분기보고서 (2025.03)"
+            // 접수번호는 실물처럼 그 판 공시일로 시작한다(판독기가 앞 8자리를 날짜로 읽는다 · ADR-0204).
+            filing(published.format(java.time.format.DateTimeFormatter.BASIC_ISO_DATE) + "00000" + q, published, q == 2 ? "A002" : "A003", q == 1 ? "분기보고서 (2025.03)"
                     : q == 2 ? "반기보고서 (2025.06)" : "분기보고서 (2025.09)", start, end, QUARTER_NI[q - 1], QUARTER_EPS[q - 1]);
         }
         LocalDate fyPublished = LocalDate.of(2026, 3, 10);
