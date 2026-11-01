@@ -2547,6 +2547,7 @@ final class SecEdgarFacts {
         if (ownCover) {
             ownGrossMarginLine(anchor, window, tags, byColumn, values);
             faceLines(anchor, window, byColumn, faces, revenueLines, values);
+            unchosenFaceLines(anchor, window, byColumn, faces, values);
         }
         if (ownCover && values.get(SecEdgarColumn.NET_INCOME) == null
                 && values.get(SecEdgarColumn.NET_INCOME_TOTAL) == null
@@ -2581,8 +2582,8 @@ final class SecEdgarFacts {
             return;
         }
         for (SecEdgarColumn column : FACE_PREFERRED) {
-            // 고른 값이 없으면(기간마다 고정한 태그가 이 판에 없다) 그대로다 — 이 판의 그 줄만 바꾸면 앞 판에서 이은 같은 줄의 다른 칸과 기저가
-            // 섞인다(재작성 비교열: 원가 칸이 바뀐 127행 중 「매출 − 원가 = 총이익」이 85 → 77). 그 칸은 같은 공시 항등식으로 가르는 K4의 몫이다.
+            // 고른 값이 없으면(기간마다 고정한 태그가 이 판에 없다) 여기서는 그대로다 — 그 칸은 unchosenFaceLines가 같은 줄의 다른 칸이 이어지지
+            // 않을 때만 채운다(이어지면 한 행에 기저가 섞인다 · 재작성 비교열 원가 127행 중 「매출 − 원가 = 총이익」 85 → 77).
             BigDecimal chosen = values.get(column);
             if (chosen == null) {
                 continue;
@@ -2614,6 +2615,76 @@ final class SecEdgarFacts {
                 values.put(column, largest);
             }
         }
+    }
+
+    /**
+     * 관문 켬 — 기간마다 고정한 태그가 <b>이 판에 없어</b> 매출 · 원가 칸이 비었고(K4도 못 받았다) 이 판 공시의 손익계산서 본문에 그 열의 후보 줄이 있으면,
+     * 그 줄 중 가장 큰 것이 이 판의 값이다 — 비워 두면 이어받기가 앞 판의 옛 기저 값을 이 판에 앉힌다(DAL FY2017 ASC 606 재작성 10-K: 매출은 전 기저
+     * 41,244M 그대로 · 같은 판 영업이익은 재작성 5,966M · 그 공시 본문 41,138M).
+     *
+     * <p>MUST: 같은 줄(매출 · 원가 · 총이익)의 다른 칸이 앞 판에서 이어지면 받지 않는다 — 그 줄만 새 값이고 이어받은 칸은 옛 기저라 한 행에 기저가 섞인다
+     * (ADR-0203 §규칙 · 재작성 비교열 원가 127행 중 「매출 − 원가 = 총이익」 85 → 77). 다른 칸은 이 판이 내거나(고정 태그 · K4) 앞 판에 이을 값이 없어야
+     * 한다. 이 판이 다른 두 칸을 다 내면 같은 공시 항등식이 판별자다(K4 — {@link #ownGrossMarginLine}).
+     */
+    private static void unchosenFaceLines(Anchor anchor, Window window, Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn,
+                                          SecStatementFaceCollector.SecStatementFaces faces, Map<SecEdgarColumn, BigDecimal> values) {
+        if (window.start() == null) {
+            return;
+        }
+        List<SecEdgarColumn> line = List.of(SecEdgarColumn.REVENUE, SecEdgarColumn.COST_OF_SALES, SecEdgarColumn.GROSS_PROFIT);
+        for (SecEdgarColumn column : FACE_PREFERRED) {
+            if (values.get(column) != null) {
+                continue;
+            }
+            int own = 0;
+            boolean carried = false;
+            for (SecEdgarColumn other : line) {
+                if (other == column) {
+                    continue;
+                }
+                if (values.get(other) != null) {
+                    own++;
+                } else if (earlierAnyValue(anchor, other, window, byColumn)) {
+                    carried = true;
+                }
+            }
+            if (carried || own == line.size() - 1) {
+                continue;
+            }
+            BigDecimal largest = null;
+            for (Map.Entry<String, Map<Slot, Fact>> entry : byColumn.get(column).entrySet()) {
+                if (!column.competesForLargest(entry.getKey())) {
+                    continue;
+                }
+                Fact fact = entry.getValue().get(new Slot(anchor.accn(), window.start(), window.end()));
+                if (fact == null) {
+                    fact = nearStart(entry.getValue(), anchor, window);
+                }
+                if (fact == null || fact.value() == null || !Boolean.TRUE.equals(onIncomeStatement(faces, fact, faceNames(entry.getKey())))) {
+                    continue;
+                }
+                if (largest == null || fact.value().compareTo(largest) > 0) {
+                    largest = fact.value();
+                }
+            }
+            if (largest != null) {
+                values.put(column, largest);
+            }
+        }
+    }
+
+    /** 어느 후보 태그로든 이 창에 이 공시보다 먼저 제출된 값이 있는가 — 이어받기가 앉힐 값이 있는가. */
+    private static boolean earlierAnyValue(Anchor anchor, SecEdgarColumn column, Window window,
+                                           Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn) {
+        for (Map<Slot, Fact> slots : byColumn.getOrDefault(column, Map.of()).values()) {
+            for (Fact fact : slots.values()) {
+                if (fact.value() != null && fact.end().equals(window.end()) && startMatches(window, fact.start(), fact.end())
+                        && fact.filed().isBefore(anchor.filed())) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /**

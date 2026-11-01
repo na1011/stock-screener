@@ -113,6 +113,49 @@ class SecEdgarRevenueFaceTest {
         assertThat(off.openedJudged()).as("관문 꺼짐").isFalse();
     }
 
+    private static final String RESTATED = "0000000001-19-000001";
+
+    private static String restatedFact(String name, long first, long restated) {
+        return ("\"%s\":{\"units\":{\"USD\":[%s,"
+                + "{\"start\":\"2017-01-01\",\"end\":\"2017-12-31\",\"val\":%d,\"accn\":\"%s\",\"fy\":2018,\"fp\":\"FY\",\"form\":\"10-K\",\"filed\":\"2019-02-15\"}]}}")
+                .formatted(name, fact(first), restated, RESTATED);
+    }
+
+    private static RawFinancialReport latestFy2017(String usGaap, boolean usGate, SecStatementFaceCollector.SecStatementFaces faces) throws Exception {
+        JsonNode facts = new ObjectMapper().readTree("{\"facts\":{\"us-gaap\":{" + usGaap + "}}}").path("facts");
+        return SecEdgarFacts.build(facts, 2015, usGate, CoverUnitJudge.Result.NONE, IssuerProfile.Profile.UNKNOWN, faces).reports().stream()
+                .filter(r -> r.fiscalYear() == 2017 && "FY".equals(r.fiscalPeriod()))
+                .max(Comparator.comparing(RawFinancialReport::publishedAt)).orElseThrow();
+    }
+
+    /** 재작성 공시의 본문 — 매출 줄과 재작성 영업이익(본문에 없으면 ADR-0202가 그 공시의 영업이익을 버려 재작성 판이 안 생긴다). */
+    private static SecStatementFaceCollector.SecStatementFaces restatedFace(String concept, long value) {
+        return new SecStatementFaceCollector.SecStatementFaces(Map.of(RESTATED, new SecStatementFaceCollector.Face(
+                Set.of("us-gaap_" + concept, "us-gaap_OperatingIncomeLoss"),
+                Set.of(SecStatementFaceCollector.Face.key("20171231", 4, BigDecimal.valueOf(value)),
+                        SecStatementFaceCollector.Face.key("20171231", 4, BigDecimal.valueOf(5_966 * MILLION))))));
+    }
+
+    @Test
+    @DisplayName("고정 태그가 없는 재작성 판 — 그 공시 본문의 매출 줄을 받는다 · 같은 줄의 원가가 앞 판에서 이어지면 받지 않는다 · 관문 꺼짐은 이어받기(DAL FY2017)")
+    void restatedVintageTakesItsOwnFaceLine() throws Exception {
+        // DAL FY2017: 원 10-K `Revenues` 41,244 · 재작성 10-K(ASC 606)는 `RevenueFromContractWithCustomerExcludingAssessedTax` 41,138만 싣는다.
+        String json = String.join(",",
+                tag("Revenues", 41_244 * MILLION),
+                "\"RevenueFromContractWithCustomerExcludingAssessedTax\":{\"units\":{\"USD\":[{\"start\":\"2017-01-01\",\"end\":\"2017-12-31\","
+                        + "\"val\":41138000000,\"accn\":\"" + RESTATED + "\",\"fy\":2018,\"fp\":\"FY\",\"form\":\"10-K\",\"filed\":\"2019-02-15\"}]}}",
+                restatedFact("OperatingIncomeLoss", 6_114 * MILLION, 5_966 * MILLION));
+        SecStatementFaceCollector.SecStatementFaces face = restatedFace("RevenueFromContractWithCustomerExcludingAssessedTax", 41_138 * MILLION);
+        assertThat(latestFy2017(json, true, face).revenue()).isEqualByComparingTo("41138000000");
+        assertThat(latestFy2017(json, false, face).revenue()).as("관문 꺼짐은 옛 출력").isEqualByComparingTo("41244000000");
+        assertThat(latestFy2017(json, true, SecStatementFaceCollector.SecStatementFaces.NONE).revenue()).as("재료를 모르면 이어받기")
+                .isEqualByComparingTo("41244000000");
+
+        String withCarriedCost = json + "," + tag("CostOfRevenue", 30_000 * MILLION);
+        assertThat(latestFy2017(withCarriedCost, true, face).revenue()).as("원가가 앞 판에서 이어진다 — 한 행에 기저가 섞인다")
+                .isEqualByComparingTo("41244000000");
+    }
+
     @Test
     @DisplayName("원가도 같은 원칙 — 본문이 상품 · 용역 원가만 싣고 합계가 어느 본문에도 없으면(부분 개념 줄 + 후보 줄 = 고른 값) 그대로(WAT FY2016)")
     void costSplitFaceKeepsTheTotal() throws Exception {
