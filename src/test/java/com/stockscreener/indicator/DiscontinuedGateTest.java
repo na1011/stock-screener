@@ -184,6 +184,29 @@ class DiscontinuedGateTest {
                 .containsExactly(LocalDate.of(2026, 1, 30), LocalDate.of(2026, 4, 30));
     }
 
+    @Test
+    @DisplayName("국내 관문 켬 — 잇는 접수번호가 없는 판은 그 회사가 그 공시일 목록에 올린 정기 보고서의 게시 시각으로 본다")
+    void domesticUnlinkedVintageFallsBackToTheCompanysListing() {
+        long kr = insertStock("KOSPI", "999979", "국내 접수번호 없음");
+        jdbcTemplate.update("""
+                INSERT INTO financial_statement
+                    (stock_id, fiscal_year, fiscal_period, period_start, period_end, published_at, revision_no, is_latest,
+                     currency_code, report_code, net_income)
+                VALUES (?, 2025, 'Q1', '2025-01-01', '2025-03-31', '2025-05-14', 0, true, 'KRW', '11013', 100)
+                """, kr);
+        // 같은 종목의 다른 해 장부 줄 — 회사 고유번호만 준다.
+        jdbcTemplate.update("""
+                INSERT INTO kr_report_xbrl (rcept_no, stock_id, corp_code, detail_type, report_name, rcept_date, bsns_year, reprt_code)
+                VALUES ('20240515000111', ?, '00000005', 'A003', '분기보고서 (2024.03)', '2024-05-15', 2024, '11013')
+                """, kr);
+        jdbcTemplate.update("""
+                INSERT INTO kr_filing_time (rcept_no, corp_code, corp_name, report_name, listed_on, opened_at)
+                VALUES ('20250514000999', '00000005', '국내 접수번호 없음', '분기보고서 (2025.03)', '2025-05-14', '2025-05-14 17:02:59+09')
+                """);
+        assertThat(reader(false, true).readQuarterlyFigures(kr, LocalDate.of(2025, 6, 1), 4, FinancialVisibility.KNOWN_ON).get(0).visibleOn())
+                .isEqualTo(LocalDate.of(2025, 5, 15));
+    }
+
     private IndicatorDataReader reader(boolean usGate, boolean krGate) {
         return new IndicatorDataReader(jdbcTemplate, corporateActions, shareClasses, usGate, krGate);
     }

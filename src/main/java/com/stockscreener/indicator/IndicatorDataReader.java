@@ -263,7 +263,12 @@ public class IndicatorDataReader {
                                             AND k.reprt_code = fs.report_code AND k.rcept_date > fs.published_at
                                             AND k.rcept_no LIKE to_char(fs.published_at, 'YYYYMMDD') || '%%%%'), fs.published_at)
                           AS published_effective,
-                          (SELECT CASE WHEN count(*) > 0 AND count(t.opened_at) = count(*) THEN max(t.opened_at) END
+                          (SELECT CASE WHEN count(*) = 0
+                                       -- 잇는 접수번호가 없는 판(운영 59) — 그 회사가 그 공시일 목록에 올린 정기 보고서들의 가장 늦은 게시 시각
+                                       THEN (SELECT max(t2.opened_at) FROM kr_filing_time t2
+                                              WHERE t2.corp_code = (SELECT k2.corp_code FROM kr_report_xbrl k2 WHERE k2.stock_id = fs.stock_id LIMIT 1)
+                                                AND t2.listed_on = fs.published_at AND t2.report_name ~ '^(사업|반기|분기)보고서')
+                                       WHEN count(t.opened_at) = count(*) THEN max(t.opened_at) END
                              FROM kr_report_xbrl k LEFT JOIN kr_filing_time t ON t.rcept_no = k.rcept_no
                             WHERE k.stock_id = fs.stock_id AND k.bsns_year = fs.fiscal_year AND k.reprt_code = fs.report_code
                               AND k.rcept_no LIKE to_char(fs.published_at, 'YYYYMMDD') || '%%%%') AS opened_at
