@@ -37,6 +37,9 @@ import java.time.LocalDate;
  *                               하는 자리는 아직 없다. <b>그 파라미터를 {@code all}이나
  *                               {@code split}으로 바꾸는 순간 이 값을 읽는 코드가 필요해진다</b> —
  *                               바꾸면서 여기를 안 보면 계수가 두 번 적용된다.
+ * @param basePrice              거래소 기준가(국내 {@code clpr − vs} · ADR-0205). 직전 거래일 종가와 다르면 거래소가 그날 가격을
+ *                               조정한 것이다. 주지 않는 소스는 null.
+ * @param marketCategory         그 봉의 시장 구분(국내 {@code mrktCtg}). 직전 봉과 다르면 이전상장일이다. 주지 않는 소스는 null.
  */
 public record RawPriceBar(
         LocalDate tradeDate,
@@ -47,8 +50,16 @@ public record RawPriceBar(
         long volume,
         BigDecimal tradeValue,
         BigDecimal listedShares,
-        boolean splitAdjustedBySource
+        boolean splitAdjustedBySource,
+        BigDecimal basePrice,
+        String marketCategory
 ) {
+
+    /** 기준가 · 시장 구분을 주지 않는 소스의 봉. */
+    public RawPriceBar(LocalDate tradeDate, BigDecimal open, BigDecimal high, BigDecimal low, BigDecimal close, long volume,
+                       BigDecimal tradeValue, BigDecimal listedShares, boolean splitAdjustedBySource) {
+        this(tradeDate, open, high, low, close, volume, tradeValue, listedShares, splitAdjustedBySource, null, null);
+    }
 
     public RawPriceBar {
         if (tradeDate == null) {

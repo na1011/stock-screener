@@ -227,7 +227,14 @@ class KrCapitalEventProbeLiveTest {
                 }
                 java.math.BigDecimal prevClose = null;
                 String prevShares = null;
+                String prevMarket = null;
                 for (JsonNode item : rows) {
+                    // 시장 구분이 바뀐 날(코넥스 → 코스닥 이전상장 · 시장 이전) — 기준가 차이가 기업행위가 아니라 계열 경계다(기준가 축 v3).
+                    String market = item.path("mrktCtg").asString("");
+                    if (prevMarket != null && !market.equals(prevMarket)) {
+                        writer.printf("MKT\t%s\t%s\t%s\t%s\t\t\t\t\t%n", ticker, item.path("basDt").asString(""), prevMarket, market);
+                    }
+                    prevMarket = market;
                     java.math.BigDecimal close = decimalOf(item, "clpr");
                     java.math.BigDecimal base = close.subtract(decimalOf(item, "vs"));
                     String shares = item.path("lstgStCnt").asString("");
@@ -243,6 +250,154 @@ class KrCapitalEventProbeLiveTest {
             }
         }
         System.out.printf("%n기준가 조정 스윕 %d종목 → %s%n", tickers.size(), out);
+    }
+
+    /**
+     * 인적분할 재상장일마다 DART {@code cmpDvDecsn}의 신설회사 이름을 고유번호 목록(corpCode.xml) 법인명과 맞추고, 맞은 종목의 그날 봉을 찍는다
+     * (기준가 축 v4 규칙 4의 전제 — 이름이 정확히 같은가). {@code -Dprobe.spinoffs=002380:2020-01-21,003550:2021-05-27}.
+     * 사건마다 DART 1콜 · 맞은 신설회사마다 시세 1콜(+ 목록 1콜).
+     */
+    @Test
+    @DisplayName("[live][probe] 인적분할 신설회사를 이름으로 고유번호 목록에서 찾고 재상장일 봉을 찍는다")
+    void probeSpinOffChildren() throws Exception {
+        String events = System.getProperty("probe.spinoffs", "");
+        org.junit.jupiter.api.Assumptions.assumeFalse(events.isBlank(), "probe.spinoffs가 없어 건너뛴다");
+        RestClient dart = DartProbeSupport.client();
+        byte[] zip = dart.get().uri(u -> u.path("/corpCode.xml").queryParam("crtfc_key", DartProbeSupport.apiKey()).build())
+                .retrieve().body(byte[].class);
+        String xml;
+        try (java.util.zip.ZipInputStream in = new java.util.zip.ZipInputStream(new java.io.ByteArrayInputStream(zip))) {
+            in.getNextEntry();
+            xml = new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+        }
+        java.util.Map<String, List<String>> byName = new java.util.HashMap<>();
+        java.util.regex.Matcher block = java.util.regex.Pattern.compile("<list>(.*?)</list>", java.util.regex.Pattern.DOTALL).matcher(xml);
+        while (block.find()) {
+            String b = block.group(1);
+            String stock = tagOf(b, "stock_code");
+            if (stock == null || stock.isBlank()) {
+                continue;
+            }
+            byName.computeIfAbsent(normalizedCompanyName(tagOf(b, "corp_name")), k -> new java.util.ArrayList<>()).add(stock.strip());
+        }
+        System.out.printf("%n고유번호 목록 상장사 이름 %d개%n", byName.size());
+        DartCorpCodeCache cache = DartProbeSupport.corpCodeCache();
+        DataSourceProperties properties = new DataSourceProperties();
+        String key = System.getenv("DATA_GO_KR_SERVICE_KEY");
+        properties.getDataGoKr().setApiKey(key == null ? "" : key);
+        RestClient prices = new ExternalApiClientFactory().create(properties.getDataGoKr());
+        String serviceKey = ExternalApiClientFactory.normalizeServiceKey(key == null ? "" : key);
+        for (String event : events.split(",")) {
+            String[] parts = event.trim().split(":");
+            String ticker = parts[0];
+            LocalDate day = LocalDate.parse(parts[1]);
+            String corpCode = cache.findCorpCode(ticker).orElse(null);
+            JsonNode body = DartProbeSupport.get(dart, uri -> uri.path("/cmpDvDecsn.json")
+                    .queryParam("crtfc_key", DartProbeSupport.apiKey()).queryParam("corp_code", corpCode)
+                    .queryParam("bgn_de", day.minusDays(200).format(BAS_DT)).queryParam("end_de", day.format(BAS_DT)).build());
+            System.out.printf("%n===== %s %s status=%s%n", ticker, day, DartProbeSupport.describeStatus(body));
+            for (JsonNode row : body.path("list")) {
+                String listed = row.path("abcr_nstklstprd").asString("");
+                String name = row.path("dvfcmp_cmpnm").asString("");
+                String norm = normalizedCompanyName(name);
+                List<String> codes = byName.getOrDefault(norm, List.of());
+                System.out.printf("  상장예정 %s 재상장 %s 이름 [%s] → [%s] → %s%n", listed, row.path("dvfcmp_rlst_atn").asString(""),
+                        name.replace("\n", "⏎"), norm, codes);
+                for (String code : codes) {
+                    JsonNode payload = priceRows(prices, serviceKey, code, day.minusDays(10), day.plusDays(14));
+                    List<JsonNode> rows = sortedRowsOf(payload, code);
+                    if (rows.isEmpty()) {
+                        System.out.println("    봉 없음");
+                        continue;
+                    }
+                    JsonNode first = rows.get(0);
+                    System.out.printf("    첫 봉 %s 종가 %s 상장주식수 %s 시총 %s%n", first.path("basDt").asString(""),
+                            first.path("clpr").asString(""), first.path("lstgStCnt").asString(""), first.path("mrktTotAmt").asString(""));
+                }
+            }
+        }
+    }
+
+    /**
+     * 인적분할 재상장일에 새로 상장된 종목(그날 목록에 있고 전 거래일 목록에 없는 것)마다 DART 기업개황의 설립일을 묻고 {@code cmpDvDecsn}의
+     * 분할기일({@code dvdt})과 견준다 — 신설회사를 이름이 아니라 구조화된 사실로 고를 수 있는가(기준가 축 v4 규칙 4).
+     * {@code -Dprobe.spinoffs=티커:재상장일:전거래일,…}.
+     */
+    @Test
+    @DisplayName("[live][probe] 재상장일 신규 상장 종목의 설립일을 분할기일과 견준다")
+    void probeSpinOffChildByEstablishment() throws Exception {
+        String events = System.getProperty("probe.spinoffs", "");
+        org.junit.jupiter.api.Assumptions.assumeFalse(events.isBlank(), "probe.spinoffs가 없어 건너뛴다");
+        RestClient dart = DartProbeSupport.client();
+        DartCorpCodeCache cache = DartProbeSupport.corpCodeCache();
+        DataSourceProperties properties = new DataSourceProperties();
+        String key = System.getenv("DATA_GO_KR_SERVICE_KEY");
+        properties.getDataGoKr().setApiKey(key == null ? "" : key);
+        RestClient prices = new ExternalApiClientFactory().create(properties.getDataGoKr());
+        String serviceKey = ExternalApiClientFactory.normalizeServiceKey(key == null ? "" : key);
+        for (String event : events.split(",")) {
+            String[] parts = event.trim().split(":");
+            String ticker = parts[0];
+            LocalDate day = LocalDate.parse(parts[1]);
+            LocalDate before = LocalDate.parse(parts[2]);
+            String corpCode = cache.findCorpCode(ticker).orElse(null);
+            JsonNode body = DartProbeSupport.get(dart, uri -> uri.path("/cmpDvDecsn.json")
+                    .queryParam("crtfc_key", DartProbeSupport.apiKey()).queryParam("corp_code", corpCode)
+                    .queryParam("bgn_de", day.minusDays(365).format(BAS_DT)).queryParam("end_de", day.format(BAS_DT)).build());
+            System.out.printf("%n===== %s %s cmpDvDecsn=%s%n", ticker, day, DartProbeSupport.describeStatus(body));
+            for (JsonNode row : body.path("list")) {
+                System.out.printf("  분할기일 %s 상장예정 %s 재상장 %s%n", row.path("dvdt").asString(""),
+                        row.path("abcr_nstklstprd").asString(""), row.path("dvfcmp_rlst_atn").asString(""));
+            }
+            java.util.Set<String> earlier = dayCodes(prices, serviceKey, before).keySet();
+            java.util.Map<String, JsonNode> today = dayCodes(prices, serviceKey, day);
+            for (java.util.Map.Entry<String, JsonNode> e : today.entrySet()) {
+                if (earlier.contains(e.getKey())) {
+                    continue;
+                }
+                String childCorp = cache.findCorpCode(e.getKey()).orElse(null);
+                String est = "?";
+                if (childCorp != null) {
+                    JsonNode company = DartProbeSupport.get(dart, uri -> uri.path("/company.json")
+                            .queryParam("crtfc_key", DartProbeSupport.apiKey()).queryParam("corp_code", childCorp).build());
+                    est = company.path("est_dt").asString("");
+                }
+                System.out.printf("  새 상장 %s %s 시장 %s 설립일 %s 시총 %s%n", e.getKey(), e.getValue().path("itmsNm").asString(""),
+                        e.getValue().path("mrktCtg").asString(""), est, e.getValue().path("mrktTotAmt").asString(""));
+            }
+        }
+    }
+
+    /** 그날 시장 전 종목(공공데이터포털 basDt 1~2콜) — 종목코드 → 행. */
+    private static java.util.Map<String, JsonNode> dayCodes(RestClient client, String serviceKey, LocalDate day) {
+        java.util.Map<String, JsonNode> out = new java.util.LinkedHashMap<>();
+        for (int page = 1; page <= 3; page++) {
+            int p = page;
+            JsonNode body = DartProbeSupport.get(client, uri -> uri.path("/getStockPriceInfo")
+                    .queryParam("serviceKey", serviceKey).queryParam("resultType", "json").queryParam("numOfRows", 2000)
+                    .queryParam("pageNo", p).queryParam("basDt", day.format(BAS_DT)).build());
+            JsonNode payload = body.path("response").path("body");
+            JsonNode items = payload.path("items").path("item");
+            items.forEach(item -> out.put(item.path("srtnCd").asString(""), item));
+            if (out.size() >= payload.path("totalCount").asInt(0) || items.isEmpty()) {
+                break;
+            }
+        }
+        return out;
+    }
+
+    private static String tagOf(String block, String tag) {
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("<" + tag + ">(.*?)</" + tag + ">", java.util.regex.Pattern.DOTALL).matcher(block);
+        return m.find() ? m.group(1) : null;
+    }
+
+    /** 「주식회사」 · 「(주)」 · 「(가칭)」 · 라틴 문자 괄호 · 공백을 뺀다. */
+    private static String normalizedCompanyName(String raw) {
+        if (raw == null) {
+            return "";
+        }
+        return raw.replaceAll("\\([^)]*[A-Za-z][^)]*\\)", "").replace("(가칭)", "").replace("(주)", "").replace("주식회사", "")
+                .replaceAll("\\s+", "");
     }
 
     /**
@@ -365,6 +520,7 @@ class KrCapitalEventProbeLiveTest {
             String line = String.join(" ",
                     item.path("basDt").asString(""), item.path("srtnCd").asString(""),
                     item.path("itmsNm").asString(""), item.path("clpr").asString(""),
+                    "vs=" + item.path("vs").asString(""), "fltRt=" + item.path("fltRt").asString(""),
                     item.path("mkp").asString(""), item.path("hipr").asString(""),
                     item.path("lopr").asString(""), item.path("trqu").asString(""),
                     item.path("lstgStCnt").asString(""), item.path("mrktTotAmt").asString(""));

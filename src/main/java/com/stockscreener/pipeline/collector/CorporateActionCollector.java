@@ -45,11 +45,14 @@ public class CorporateActionCollector {
     private final SpinOffValuer spinOffValuer;
     private final PriceObservationWindow window;
     private final CorporateActionSupplement supplement;
+    private final KrBasePriceEvents basePriceEvents;
+    private final boolean krGate;
 
     public CorporateActionCollector(DataSourceRegistry registry, CorporateActionLedger ledger,
                                     AdjustmentRecalculator recalculator, PriceCalendar priceCalendar,
                                     SpinOffValuer spinOffValuer, PriceObservationWindow window,
-                                    CorporateActionSupplement supplement) {
+                                    CorporateActionSupplement supplement, KrBasePriceEvents basePriceEvents,
+                                    @org.springframework.beans.factory.annotation.Value("${stockscreener.gate.kr}") boolean krGate) {
         this.registry = registry;
         this.ledger = ledger;
         this.recalculator = recalculator;
@@ -57,6 +60,8 @@ public class CorporateActionCollector {
         this.spinOffValuer = spinOffValuer;
         this.window = window;
         this.supplement = supplement;
+        this.basePriceEvents = basePriceEvents;
+        this.krGate = krGate;
     }
 
     /**
@@ -130,6 +135,16 @@ public class CorporateActionCollector {
             return Result.empty();
         }
 
+        // 국내 관문 켬(ADR-0205): 거래소 기준가 사건을 먼저 적는다 — 날짜의 정본이라, 뒤에 오는 DART 행 · 휴리스틱 후보는 그 행과 같은 날이면
+        // 덮지 못하고(IGNORED) 며칠 어긋나면 근접 중복으로 조용히 빠진다(판정된 행과의 충돌과 같은 취급). 창 필터는 다른 사건과 같다.
+        Result exchange = Result.empty();
+        if (krGate && !com.stockscreener.pipeline.datasource.us.UsMarket.CODE.equals(security.marketCode())) {
+            KrBasePriceEvents.Detection base = basePriceEvents.detect(security);
+            exchange = recordAll(security, base.events().stream()
+                    .filter(action -> !action.effectiveDate().isBefore(from) && !action.effectiveDate().isAfter(to))
+                    .toList());
+        }
+
         CorporateActionDataSource source = registry.corporateActionSource(security.marketCode());
         CorporateActionDataSource.Fetched fetched = source.fetchCorporateActions(security, from, to);
         // 소스가 빠뜨린 사건을 SEC 원문으로 보충한다(ADR-0181) — 그 뒤는 소스 사건과 같은 경로다(가치 비율 · 적용 직전 가격 반증).
@@ -167,9 +182,11 @@ public class CorporateActionCollector {
                 .toList();
         Result heuristic = recordAll(security, detected);
 
-        List<NearDuplicate> conflicts = new ArrayList<>(disclosed.nearDuplicates());
+        List<NearDuplicate> conflicts = new ArrayList<>(exchange.nearDuplicates());
+        conflicts.addAll(disclosed.nearDuplicates());
         conflicts.addAll(heuristic.nearDuplicates());
-        List<PendingCandidate> pending = new ArrayList<>(disclosed.pending());
+        List<PendingCandidate> pending = new ArrayList<>(exchange.pending());
+        pending.addAll(disclosed.pending());
         pending.addAll(heuristic.pending());
 
         // MUST: 주석이 **새로 만든** 행을 판정 대기에 합친다. 붙일 자리가 없으면 annotate가
@@ -185,7 +202,7 @@ public class CorporateActionCollector {
         // MUST: 창 필터 **앞의** 수를 싣는다. detectCandidates의 SQL에 날짜 경계가 없어
         // 건너뛴 불연속은 실행 창과 무관하게 같은 수이고, 창으로 자르면 --from을 좁힌 실행이
         // 「결손이 줄었다」로 읽힌다.
-        return new Result(disclosed.recorded() + heuristic.recorded(), List.copyOf(conflicts),
+        return new Result(exchange.recorded() + disclosed.recorded() + heuristic.recorded(), List.copyOf(conflicts),
                 List.copyOf(pending), detection.skippedNoShares(), fetched.notStored());
     }
 

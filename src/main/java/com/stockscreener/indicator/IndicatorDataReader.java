@@ -535,14 +535,76 @@ public class IndicatorDataReader {
      * 있다 — 휴리스틱 후보에는 아예 없고 공시 경로와 사람의 판정에만 있다. 접으면 구간이
      * 공집합이 되어 <b>보정하지 않는 쪽</b>으로 떨어지며, 그것이 "모르는 것을 추측하지 않는다"의
      * 이 자리에서의 형태다. 액면분할·병합은 두 날짜가 실제로 같으므로 접어도 정확하다.
+     * 국내 관문 켬에서 상장일 없는 무상 요소 행은 접기 전에 저장 주식수 계단으로 짓는다({@link #derivedListings} · ADR-0205).
      */
     public List<ShareAdjustment> readShareAdjustments(long stockId) {
-        return corporateActions.findApplicable(stockId).stream()
+        List<CorporateActionLedger.Entry> entries = corporateActions.findApplicable(stockId);
+        java.util.Map<Long, LocalDate> derived = krGate && entries.stream().anyMatch(IndicatorDataReader::listingUnknownBonus)
+                && !UsMarket.CODE.equals(marketOf(stockId)) ? derivedListings(stockId, entries) : java.util.Map.of();
+        return entries.stream()
                 .map(entry -> new ShareAdjustment(
                         entry.effectiveDate(),
-                        entry.listingDate() != null ? entry.listingDate() : entry.effectiveDate(),
+                        entry.listingDate() != null ? entry.listingDate()
+                                : derived.getOrDefault(entry.id(), entry.effectiveDate()),
                         entry.ratio()))
                 .toList();
+    }
+
+    private static boolean listingUnknownBonus(CorporateActionLedger.Entry entry) {
+        return entry.listingDate() == null && entry.type() == com.stockscreener.pipeline.datasource.CorporateAction.Type.BONUS_ISSUE;
+    }
+
+    /** 신주 상장 계단을 찾는 창 — 주식배당은 배당락 뒤 110~117일에 상장한다(ADR-0205). */
+    static final int LISTING_LOOKAHEAD_DAYS = 150;
+    /** 기준가가 호가 단위로 반올림된 배수와 실제 주식수 배수의 차(최대 0.36%)를 덮는 폭. */
+    private static final BigDecimal LISTING_STEP_TOLERANCE = new BigDecimal("0.995");
+
+    /**
+     * 국내 관문 켬(ADR-0205) — 상장일을 모르는 무상 요소 사건(거래소 기준가가 지은 행)의 신주 상장일을 <b>저장 상장주식수 계단</b>으로 짓는다:
+     * 권리락 다음 날부터 {@value #LISTING_LOOKAHEAD_DAYS}일 안에 주식수가 배수 × 0.995 이상으로 오른 첫 계단. 계단 하나는 한 사건에만 쓴다 —
+     * 상장일을 아는 행의 계단은 먼저 비우고, 나머지는 권리락 순으로 고른다(무상증자 권리락 ~ 상장 사이에 유상증자 상장이 끼는 꼴 4건이 그래야
+     * 맞는다 · 원장 92건 대조 92/92). 계단이 아직 없고 창이 안 끝났으면 <b>아직 상장 전</b>이다(마지막 봉 다음 날로 둔다 — 그동안 봉의 주식수
+     * 보정이 맞고, 뒤에 계단이 오면 그 날로 닫힌다 · 이미 쓴 값이 안 바뀐다). 창이 끝나도 없으면 효력일로 접는다(모르는 것을 추측하지 않는다).
+     * 저장하지 않는다 — 계단은 저장 봉의 사실이라 늦게 와도 낡지 않는다.
+     */
+    private java.util.Map<Long, LocalDate> derivedListings(long stockId, List<CorporateActionLedger.Entry> entries) {
+        java.util.NavigableMap<LocalDate, BigDecimal> steps = new java.util.TreeMap<>();
+        LocalDate[] last = new LocalDate[1];
+        jdbcTemplate.query("""
+                SELECT trade_date, listed_shares / lag(listed_shares) OVER (ORDER BY trade_date) AS step
+                FROM price_daily WHERE stock_id = ? ORDER BY trade_date
+                """, rs -> {
+            LocalDate day = rs.getObject("trade_date", LocalDate.class);
+            BigDecimal step = rs.getBigDecimal("step");
+            last[0] = day;
+            if (step != null && step.compareTo(BigDecimal.ONE) > 0) {
+                steps.put(day, step);
+            }
+        }, stockId);
+        java.util.Set<LocalDate> used = new java.util.HashSet<>();
+        for (CorporateActionLedger.Entry entry : entries) {
+            if (entry.listingDate() != null) {
+                used.add(entry.listingDate());
+            }
+        }
+        java.util.Map<Long, LocalDate> out = new java.util.HashMap<>();
+        entries.stream().filter(IndicatorDataReader::listingUnknownBonus)
+                .sorted(java.util.Comparator.comparing(CorporateActionLedger.Entry::effectiveDate))
+                .forEach(entry -> {
+                    LocalDate until = entry.effectiveDate().plusDays(LISTING_LOOKAHEAD_DAYS);
+                    BigDecimal floor = entry.ratio().multiply(LISTING_STEP_TOLERANCE);
+                    for (java.util.Map.Entry<LocalDate, BigDecimal> step
+                            : steps.subMap(entry.effectiveDate(), false, until, true).entrySet()) {
+                        if (step.getValue().compareTo(floor) >= 0 && used.add(step.getKey())) {
+                            out.put(entry.id(), step.getKey());
+                            return;
+                        }
+                    }
+                    if (last[0] != null && last[0].isBefore(until)) {
+                        out.put(entry.id(), last[0].plusDays(1));
+                    }
+                });
+        return out;
     }
 
     /**

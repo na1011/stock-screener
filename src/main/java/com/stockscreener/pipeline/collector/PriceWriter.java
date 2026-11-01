@@ -79,12 +79,30 @@ public class PriceWriter {
                 updated_at    = now()
             """;
 
+    /**
+     * 국내 관문 켬(ADR-0205) — 기준가 · 시장 구분까지 쓴다. UPSERT가 덮는다(재적재가 과거 봉을 채운다 · 옛 jar가 쓴 NULL도 다음 창이 채운다).
+     * 미국 봉은 두 칸이 NULL이다. 관문 꺼짐은 {@link #UPSERT} 그대로 — V70_13 전 스키마에서도 돈다.
+     */
+    private static final String UPSERT_WITH_BASE = UPSERT
+            .replace("volume, trade_value, listed_shares, created_at, updated_at)",
+                    "volume, trade_value, listed_shares, base_price, market_category, created_at, updated_at)")
+            .replace("VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, now(), now())", "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, now(), now())")
+            .replace("    listed_shares = EXCLUDED.listed_shares,\n",
+                    "    listed_shares = EXCLUDED.listed_shares,\n    base_price    = EXCLUDED.base_price,\n"
+                            + "    market_category = EXCLUDED.market_category,\n");
+
     private final JdbcTemplate jdbcTemplate;
     private final PriceObservationWindow window;
+    private final boolean krGate;
 
-    public PriceWriter(JdbcTemplate jdbcTemplate, PriceObservationWindow window) {
+    public PriceWriter(JdbcTemplate jdbcTemplate, PriceObservationWindow window,
+                       @org.springframework.beans.factory.annotation.Value("${stockscreener.gate.kr}") boolean krGate) {
         this.jdbcTemplate = jdbcTemplate;
         this.window = window;
+        this.krGate = krGate;
+        if (krGate && (UPSERT_WITH_BASE.equals(UPSERT) || !UPSERT_WITH_BASE.contains("base_price    = EXCLUDED.base_price"))) {
+            throw new IllegalStateException("기준가 UPSERT를 짓지 못했다 — UPSERT 문장이 바뀌었다.");
+        }
     }
 
     /**
@@ -154,7 +172,7 @@ public class PriceWriter {
         }
 
         // 배치 크기를 나눠 넘기는 오버로드라 반환이 int[][]다 — 배치마다 한 배열이다.
-        int[][] results = jdbcTemplate.batchUpdate(UPSERT, valid, BATCH_SIZE, (ps, bar) -> {
+        int[][] results = jdbcTemplate.batchUpdate(krGate ? UPSERT_WITH_BASE : UPSERT, valid, BATCH_SIZE, (ps, bar) -> {
             // 저장될 정밀도로 먼저 접는다. 반올림은 단조라 ck_price_ohlc의 대소 관계는 보존된다.
             BigDecimal close = stored(bar.close());
             ps.setLong(1, stockId);
@@ -176,6 +194,14 @@ public class PriceWriter {
                 ps.setNull(11, Types.NUMERIC);
             } else {
                 ps.setBigDecimal(11, bar.listedShares());
+            }
+            if (krGate) {
+                if (bar.basePrice() == null) {
+                    ps.setNull(12, Types.NUMERIC);
+                } else {
+                    ps.setBigDecimal(12, stored(bar.basePrice()));
+                }
+                ps.setString(13, bar.marketCategory());
             }
         });
 
@@ -217,7 +243,8 @@ public class PriceWriter {
     private static RawPriceBar flattenToClose(RawPriceBar bar) {
         return new RawPriceBar(bar.tradeDate(),
                 bar.close(), bar.close(), bar.close(), bar.close(),
-                bar.volume(), BigDecimal.ZERO, bar.listedShares(), bar.splitAdjustedBySource());
+                bar.volume(), BigDecimal.ZERO, bar.listedShares(), bar.splitAdjustedBySource(),
+                bar.basePrice(), bar.marketCategory());
     }
 
     private static BigDecimal stored(BigDecimal price) {

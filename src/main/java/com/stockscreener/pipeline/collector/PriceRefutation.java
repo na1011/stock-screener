@@ -60,9 +60,15 @@ final class PriceRefutation {
     private static final int NOISE_EXCLUDE_AFTER_DAYS = 30;
 
     private final JdbcTemplate jdbc;
+    private final boolean krGate;
 
     PriceRefutation(JdbcTemplate jdbc) {
+        this(jdbc, false);
+    }
+
+    PriceRefutation(JdbcTemplate jdbc, boolean krGate) {
         this.jdbc = jdbc;
+        this.krGate = krGate;
     }
 
     enum Action { APPLY, DEFER, HOLD }
@@ -76,7 +82,8 @@ final class PriceRefutation {
             return events;
         }
         List<String> market = jdbc.queryForList("SELECT market_code FROM stock WHERE id = ?", String.class, stockId);
-        if (market.isEmpty() || !UsMarket.CODE.equals(market.get(0))) {
+        boolean us = !market.isEmpty() && UsMarket.CODE.equals(market.get(0));
+        if (market.isEmpty() || (!us && !krGate)) {
             return events;
         }
         // 사람이 본 행은 안 본다 — V69_3 뒤는 judged_at, 그 앞의 판정은 ADR-0090 펜스의 정의(「APPLIED ∧ note NULL = 사람이 안 본 것」).
@@ -96,7 +103,7 @@ final class PriceRefutation {
                 kept.add(entry);
                 continue;
             }
-            Verdict verdict = verdict(stockId, entry);
+            Verdict verdict = us ? verdict(stockId, entry) : exchangeVerdict(stockId, entry);
             switch (verdict.action()) {
                 case APPLY -> kept.add(entry);
                 case DEFER -> {
@@ -108,6 +115,41 @@ final class PriceRefutation {
             }
         }
         return kept;
+    }
+
+    /**
+     * 국내 관문 켬(ADR-0205) — 거래소가 그날 기준가를 조정하지 않았으면(기준가 = 직전 거래일 종가 · 직전 봉이 거래된 봉) 그날의 사건이 아니다:
+     * 보류한다(미국과 같은 판정 대기 · 값을 안 쓰고 걸친 창을 숨긴다). 실측 1행 — 알테오젠 id 10 2022-10-07 무상증자(진짜 권리락 10-25 ·
+     * DART 원값 10-11은 결정 · 정지일이었다). 자동 거절이 아닌 이유는 미국과 같다 — 증거 쪽이 틀릴 수 있다({@code vs = 0}이 진짜 사건에도
+     * 온다). 기준가가 없는 봉(관문 전 · 옛 jar가 쓴 봉) · 정지 뒤 봉 · 봉 구멍은 말하지 않는다(적용).
+     */
+    Verdict exchangeVerdict(long stockId, CorporateActionLedger.Entry entry) {
+        if (entry.type() == CorporateAction.Type.UNKNOWN) {
+            return new Verdict(Action.APPLY, null);
+        }
+        List<Map<String, Object>> rows = jdbc.queryForList("""
+                SELECT d.base_price, p.close AS prev_close, p.volume AS prev_volume, p.trade_date AS prev_date,
+                       EXISTS (SELECT 1 FROM price_daily q JOIN stock s ON s.id = q.stock_id
+                               WHERE q.trade_date > p.trade_date AND q.trade_date < d.trade_date
+                                 AND s.market_code IN ('KOSPI', 'KOSDAQ')) AS gap
+                FROM price_daily d
+                JOIN LATERAL (SELECT close, volume, trade_date FROM price_daily
+                              WHERE stock_id = d.stock_id AND trade_date < d.trade_date ORDER BY trade_date DESC LIMIT 1) p ON true
+                WHERE d.stock_id = ? AND d.trade_date = ?
+                """, stockId, entry.effectiveDate());
+        if (rows.isEmpty()) {
+            return new Verdict(Action.APPLY, null);
+        }
+        Map<String, Object> row = rows.get(0);
+        BigDecimal base = (BigDecimal) row.get("base_price");
+        BigDecimal prevClose = (BigDecimal) row.get("prev_close");
+        if (base == null || prevClose == null || ((Number) row.get("prev_volume")).longValue() == 0
+                || Boolean.TRUE.equals(row.get("gap")) || base.compareTo(prevClose) != 0) {
+            return new Verdict(Action.APPLY, null);
+        }
+        return new Verdict(Action.HOLD, "%s — 그날 기준가 %s = 직전 거래일(%s) 종가 · 거래소가 가격을 조정하지 않았다 · 원장 ×%s"
+                .formatted(NOTE_MARK, base.stripTrailingZeros().toPlainString(), row.get("prev_date"),
+                        entry.priceMultiple().stripTrailingZeros().toPlainString()));
     }
 
     Verdict verdict(long stockId, CorporateActionLedger.Entry entry) {

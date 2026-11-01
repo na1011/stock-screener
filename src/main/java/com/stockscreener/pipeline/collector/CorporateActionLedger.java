@@ -66,9 +66,17 @@ public class CorporateActionLedger {
 
     private final JdbcTemplate jdbcTemplate;
 
+    /** 관문 꺼짐 — 국내 기준가 반증을 안 한다(시험 · V70_13 전 스키마). */
     public CorporateActionLedger(JdbcTemplate jdbcTemplate) {
+        this(jdbcTemplate, false);
+    }
+
+    /** {@code krGate}: 국내 관문 켬이면 국내 소스 공시도 거래소 기준가로 반증한다(ADR-0205 · {@link PriceRefutation}). */
+    @org.springframework.beans.factory.annotation.Autowired
+    public CorporateActionLedger(JdbcTemplate jdbcTemplate,
+                                 @org.springframework.beans.factory.annotation.Value("${stockscreener.gate.kr}") boolean krGate) {
         this.jdbcTemplate = jdbcTemplate;
-        this.refutation = new PriceRefutation(jdbcTemplate);
+        this.refutation = new PriceRefutation(jdbcTemplate, krGate);
     }
 
     private final PriceRefutation refutation;

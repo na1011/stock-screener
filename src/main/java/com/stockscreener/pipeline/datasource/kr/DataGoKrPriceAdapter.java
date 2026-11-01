@@ -172,13 +172,27 @@ public class DataGoKrPriceAdapter implements PriceDataSource {
                     // 우선주는 별도 종목으로 세므로 이것이 보통주 수다.
                     decimal(item, "lstgStCnt"),
                     // 원주가를 준다. 수정주가는 우리가 adj_factor로 만든다.
-                    false);
+                    false,
+                    // 거래소 기준가 = 종가 − 대비(ADR-0205). 쓰기기가 국내 관문 켬에서만 저장한다.
+                    basePrice(item),
+                    blankToNull(item.path("mrktCtg").asText("")));
         } catch (RuntimeException e) {
             // 파싱 실패는 벤더 스펙 변경의 신호다. 조용히 건너뛰지 않는다.
             throw new DataSourceException(DataSourceException.Kind.MALFORMED,
                     DataGoKrResponse.SOURCE_NAME,
                     "시세 항목을 해석할 수 없다. " + context + " item=" + item, e);
         }
+    }
+
+    /** {@code clpr − vs}. 대비가 없으면 기준가를 모른다(null). */
+    private static BigDecimal basePrice(JsonNode item) {
+        BigDecimal close = decimal(item, "clpr");
+        BigDecimal change = decimal(item, "vs");
+        return close == null || change == null ? null : close.subtract(change);
+    }
+
+    private static String blankToNull(String raw) {
+        return raw == null || raw.isBlank() ? null : raw.strip();
     }
 
     private static BigDecimal decimal(JsonNode item, String field) {
