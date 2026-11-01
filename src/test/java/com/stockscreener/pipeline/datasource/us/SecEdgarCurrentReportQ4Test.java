@@ -109,15 +109,16 @@ class SecEdgarCurrentReportQ4Test {
     }
 
     @Test
-    @DisplayName("관문 켬: 다음 해 10-Q가 전년 1분기 비교열만 다시 쓰면 FY는 그대로라 옛 4분기를 지킨다 — 그날 새 판을 안 낸다(KO 2019 꼴)")
-    void partialQuarterRestatementKeepsTheFourthQuarter() throws Exception {
+    @DisplayName("관문 켬: 다음 해 10-Q가 전년 1분기 비교열을 1% 넘게 다시 쓰면 같은 해 뒤 분기 · 4분기는 그날부터 새 기저 전까지 모른다(KO 2019 꼴 · 재고 A6 두 시장 한 규칙)")
+    void partialQuarterRestatementMakesTheLaterQuartersUnknown() throws Exception {
         List<String> facts = base();
         facts.add(fact("2017-01-01", "2017-03-31", 150, "0000000001-18-000002", "10-Q", "Q1", 2018, "2018-05-01"));
         List<RawFinancialReport> on = build(facts, true);
 
         RawFinancialReport q4 = latest(on, 2017, "Q4");
-        assertThat(q4.publishedAt()).isEqualTo(LocalDate.parse("2018-02-15"));
-        assertThat(q4.revenue()).isEqualByComparingTo("400000000");
+        assertThat(q4.publishedAt()).isEqualTo(LocalDate.parse("2018-05-01"));
+        assertThat(q4.revenue()).as("옛 4분기는 옛 기저의 분기 셋과 짝이다 — 새 기저 1분기와 한 창에 섞지 않는다").isNull();
+        assertThat(latest(build(base(), true), 2017, "Q4").revenue()).as("대조군: 재작성 없음").isEqualByComparingTo("400000000");
     }
 
     @Test

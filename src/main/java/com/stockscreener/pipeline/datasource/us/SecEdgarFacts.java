@@ -408,6 +408,9 @@ final class SecEdgarFacts {
                     byColumn, reporting, tags, withheld, usGate, offStatement, usGate ? faces : SecStatementFaceCollector.SecStatementFaces.NONE,
                     revenueLines));
         }
+        if (usGate) {
+            reports.addAll(laterQuartersUnknown(reports, 3, byColumn));
+        }
         List<RawFinancialReport> fourthQuarters =
                 deriveFourthQuarters(reports, windows, fromFiscalYear, byColumn, usGate);
         // MUST: 같은 (회계연도, 기간, 공시일)이면 **병합본이 소스 판을 대체한다.**
@@ -423,6 +426,8 @@ final class SecEdgarFacts {
         if (usGate) {
             reports.replaceAll(r -> "Q4".equals(r.fiscalPeriod())
                     ? q4DiscontinuedAsVisible(r, fourthQuarters, reports, byColumn) : r);
+            // 4분기도 같은 규칙이다(국내 DartFlowBasis와 같다) — 유도가 짓고 난 뒤에 건다(유도는 앞 단계의 뒤 분기 「모른다」 판을 보고 옛 4분기를 둔다).
+            reports.addAll(laterQuartersUnknown(reports, 4, byColumn).stream().filter(r -> "Q4".equals(r.fiscalPeriod())).toList());
         }
         if (frame != null && frame.latestAnnualCurrency() != null
                 && !MARKET_CURRENCY.equals(frame.latestAnnualCurrency())) {
@@ -643,6 +648,140 @@ final class SecEdgarFacts {
             byTag.values().removeIf(Map::isEmpty);
         }
         return off;
+    }
+
+    /**
+     * 관문 켬 — <b>같은 해 앞 분기가 다른 기저로 다시 실린 날부터 뒤 분기는 새 기저가 확인될 때까지 모른다</b>(재고 A6 · 두 시장 한 규칙 — 국내
+     * {@code DartFlowBasis}의 「3개월 열의 신호는 그 분기와 그 뒤 분기」와 같다). 한 분기 판의 손익 유량이 앞 판보다 1% 넘게 바뀐 공시일에(다음 해 10-Q
+     * 비교열 · 정정) 같은 해 뒤 분기 중 그날 다시 실리지 않은 것은 그 열을 부재 판정으로 비운 판을 그날 낸다 — 안 내면 그날 뒤 TTM 창이 새 기저의
+     * 앞 분기와 옛 기저의 뒤 분기를 섞는다(KO 2019). 그 분기의 재작성 판이 오면 값이 다시 선다. 4분기는 유도가 맡는다(분기 칸이 비면 옛 4분기를 둔다 —
+     * 4분기 끝 창은 FY 대체). 문턱 1%는 같은 세대 판정(`keepSameGeneration`)과 같다.
+     */
+    private static List<RawFinancialReport> laterQuartersUnknown(List<RawFinancialReport> reports, int lastQuarter,
+                                                                 Map<SecEdgarColumn, Map<String, Map<Slot, Fact>>> byColumn) {
+        // 열 · 기간 → 그 기간 사실을 실은 공시일들(값과 무관 — 다시 실렸는가만 본다).
+        Map<String, java.util.TreeSet<LocalDate>> carried = new HashMap<>();
+        for (String column : RawFinancialReport.STALE_FLOWS) {
+            byColumn.getOrDefault(SecEdgarColumn.valueOf(column.toUpperCase(java.util.Locale.ROOT)), Map.of()).values()
+                    .forEach(slots -> slots.forEach((slot, fact) -> {
+                        if (slot.start() != null && fact.filed() != null) {
+                            carried.computeIfAbsent(column + "|" + slot.start() + "|" + slot.end(), k -> new java.util.TreeSet<>()).add(fact.filed());
+                        }
+                    }));
+        }
+        Map<Integer, Map<String, List<RawFinancialReport>>> byYear = new HashMap<>();
+        for (RawFinancialReport r : reports) {
+            if (List.of("Q1", "Q2", "Q3", "Q4", "FY").contains(r.fiscalPeriod())) {
+                byYear.computeIfAbsent(r.fiscalYear(), k -> new HashMap<>()).computeIfAbsent(r.fiscalPeriod(), k -> new ArrayList<>()).add(r);
+            }
+        }
+        List<RawFinancialReport> out = new ArrayList<>();
+        BigDecimal tolerance = new BigDecimal("0.01");
+        for (Map<String, List<RawFinancialReport>> year : byYear.values()) {
+            year.values().forEach(list -> list.sort(Comparator.comparing(RawFinancialReport::publishedAt)));
+            java.util.TreeMap<LocalDate, Map<Integer, Set<String>>> events = new java.util.TreeMap<>();
+            Map<LocalDate, String> codes = new HashMap<>();
+            for (int k = 1; k <= Math.min(3, lastQuarter - 1); k++) {
+                List<RawFinancialReport> vintages = year.getOrDefault("Q" + k, List.of());
+                for (int i = 1; i < vintages.size(); i++) {
+                    RawFinancialReport prev = vintages.get(i - 1);
+                    RawFinancialReport cur = vintages.get(i);
+                    for (String column : RawFinancialReport.STALE_FLOWS) {
+                        BigDecimal a = prev.flow(column);
+                        BigDecimal b = cur.flow(column);
+                        if (a != null && b != null && b.subtract(a).abs().compareTo(a.abs().multiply(tolerance)) > 0) {
+                            events.computeIfAbsent(cur.publishedAt(), d -> new HashMap<>()).computeIfAbsent(k, q -> new HashSet<>()).add(column);
+                            codes.putIfAbsent(cur.publishedAt(), cur.reportCode());
+                        }
+                    }
+                }
+            }
+            for (Map.Entry<LocalDate, Map<Integer, Set<String>>> event : events.entrySet()) {
+                LocalDate day = event.getKey();
+                for (int j = 2; j <= lastQuarter; j++) {
+                    final int quarter = j;
+                    Set<String> signalled = new java.util.TreeSet<>();
+                    event.getValue().forEach((k, columns) -> {
+                        if (k < quarter) {
+                            signalled.addAll(columns);
+                        }
+                    });
+                    List<RawFinancialReport> later = year.getOrDefault("Q" + j, List.of());
+                    if (signalled.isEmpty() || later.stream().anyMatch(r -> r.publishedAt().equals(day))) {
+                        continue;   // 신호가 없거나 그날 다시 실렸다 — 그 판이 그 분기의 값이다
+                    }
+                    RawFinancialReport before = later.stream().filter(r -> r.publishedAt().isBefore(day)).reduce((x, y) -> y).orElse(null);
+                    if (before == null) {
+                        continue;   // 그 분기는 그날 뒤에 처음 나온다 — 처음부터 새 기저다
+                    }
+                    Set<String> columns = new java.util.LinkedHashSet<>();
+                    for (String column : signalled) {
+                        if (before.flow(column) != null) {
+                            columns.add(column);
+                        }
+                    }
+                    if (columns.isEmpty()) {
+                        continue;
+                    }
+                    // 그 분기의 다음 원 판(재작성 판)까지만 — 그 판이 그 분기의 새 값이다.
+                    LocalDate limit = later.stream().map(RawFinancialReport::publishedAt).filter(d -> d.isAfter(day)).findFirst().orElse(null);
+                    // 모른다가 풀리는 날 — 뒤 분기는 그 기간이 다시 실린 날(값이 같아도 — 같은 값이면 판 조립이 접어 새 판이 안 난다 · JPM 2019),
+                    // 4분기는 그 해 FY가 다시 실린 날의 FY − 분기 셋(하나라도 모르면 계속 모른다).
+                    java.util.TreeMap<LocalDate, Map<String, BigDecimal>> restore = new java.util.TreeMap<>();
+                    RawFinancialReport fy = year.getOrDefault("FY", List.of()).stream().findFirst().orElse(null);
+                    for (String column : columns) {
+                        LocalDate start = quarter == 4 ? (fy == null ? null : fy.periodStart()) : before.periodStart();
+                        LocalDate end = quarter == 4 ? (fy == null ? null : fy.periodEnd()) : before.periodEnd();
+                        java.util.TreeSet<LocalDate> dates = start == null ? null : carried.get(column + "|" + start + "|" + end);
+                        LocalDate again = dates == null ? null : dates.higher(day);
+                        if (again == null || (limit != null && !again.isBefore(limit))) {
+                            continue;
+                        }
+                        BigDecimal value = quarter == 4 ? fourthOn(year, column, again) : before.flow(column);
+                        if (value != null) {
+                            restore.computeIfAbsent(again, d -> new HashMap<>()).put(column, value);
+                        }
+                    }
+                    out.add(before.withFlowsUnknown(columns, day, codes.get(day)));
+                    Map<String, BigDecimal> known = new HashMap<>();
+                    for (Map.Entry<LocalDate, Map<String, BigDecimal>> r : restore.entrySet()) {
+                        known.putAll(r.getValue());
+                        Map<String, BigDecimal> values = new HashMap<>();
+                        for (String column : columns) {
+                            values.put(column, known.get(column));
+                        }
+                        out.add(before.withFlows(values, r.getKey(), before.reportCode()));
+                    }
+                }
+            }
+        }
+        return out;
+    }
+
+    /** 그날 보이는 FY − 그날 보이는 분기 셋(그 열) — 하나라도 모르면 {@code null}. */
+    private static BigDecimal fourthOn(Map<String, List<RawFinancialReport>> year, String column, LocalDate day) {
+        BigDecimal value = latestOn(year.get("FY"), column, day);
+        for (String q : List.of("Q1", "Q2", "Q3")) {
+            BigDecimal part = latestOn(year.get(q), column, day);
+            if (value == null || part == null) {
+                return null;
+            }
+            value = value.subtract(part);
+        }
+        return value;
+    }
+
+    private static BigDecimal latestOn(List<RawFinancialReport> vintages, String column, LocalDate day) {
+        if (vintages == null) {
+            return null;
+        }
+        RawFinancialReport seen = null;
+        for (RawFinancialReport r : vintages) {
+            if (!r.publishedAt().isAfter(day)) {
+                seen = r;
+            }
+        }
+        return seen == null ? null : seen.flow(column);
     }
 
     /**

@@ -2,6 +2,7 @@ package com.stockscreener.pipeline.datasource;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -271,6 +272,63 @@ public record RawFinancialReport(
                 benefitsLossesAndExpenses, grossProfit, operatingExpenses, costsAndExpenses, incomeTaxExpense, profitBeforeTax,
                 derived, assertedAbsent, discontinuedIncome, discontinuedIncomeControlling, discontinuedRule, sharesSuperseded,
                 null, false);
+    }
+
+    /** 기저가 갈린 분기의 손익 유량 열(DB 컬럼명) — {@link #withFlowsUnknown}이 비울 수 있는 열. */
+    public static final java.util.Set<String> STALE_FLOWS = java.util.Set.of("revenue", "operating_income", "net_income",
+            "net_income_controlling", "cost_of_sales", "gross_profit", "profit_before_tax", "income_tax_expense");
+
+    /**
+     * 그 열들을 「모른다」로 둔 사본(값 비움 + 부재 판정 · 미국 관문 켬 · 재고 A6) — 같은 해 앞 분기가 다른 기저로 다시 실린 날부터 이 분기의 새 기저
+     * 값을 원장이 아직 안 줬다. 공시일 · 공시 코드는 그 신호를 준 판의 것으로 바꾼다.
+     */
+    public RawFinancialReport withFlowsUnknown(Set<String> columns, LocalDate on, String signalCode) {
+        Map<String, BigDecimal> unknown = new java.util.HashMap<>();
+        columns.forEach(c -> unknown.put(c, null));
+        return withFlows(unknown, on, signalCode);
+    }
+
+    /**
+     * 그 손익 유량 열들을 주어진 값으로 둔 사본 — 값이 {@code null}인 열은 「모른다」(부재 판정), 값이 있는 열은 부재 판정에서 뺀다. 공시일 · 공시
+     * 코드를 바꾼다(재고 A6 — 모른다 · 되살림 · 그날의 FY − 분기 셋).
+     */
+    public RawFinancialReport withFlows(Map<String, BigDecimal> values, LocalDate on, String code) {
+        Set<String> absent = new java.util.LinkedHashSet<>(assertedAbsent);
+        values.forEach((c, v) -> {
+            if (!STALE_FLOWS.contains(c)) {
+                throw new IllegalArgumentException("손익 유량 열이 아니다: " + c);
+            }
+            if (v == null) {
+                absent.add(c);
+            } else {
+                absent.remove(c);
+            }
+        });
+        java.util.function.BiFunction<String, BigDecimal, BigDecimal> pick = (c, current) -> values.containsKey(c) ? values.get(c) : current;
+        return new RawFinancialReport(fiscalYear, fiscalPeriod, periodStart, periodEnd, on, code, currencyCode,
+                pick.apply("revenue", revenue), pick.apply("operating_income", operatingIncome), pick.apply("net_income", netIncome),
+                totalAssets, totalEquity, totalEquityControlling, totalLiabilities, currentAssets, currentLiabilities, retainedEarnings,
+                operatingCashFlow, sharesOutstanding, eps, bps, pick.apply("cost_of_sales", costOfSales), cashAndEquivalents, capex,
+                inventories, pick.apply("net_income_controlling", netIncomeControlling), interestAndDividendIncome, noninterestIncome,
+                interestExpense, noninterestExpense, benefitsLossesAndExpenses, pick.apply("gross_profit", grossProfit), operatingExpenses,
+                costsAndExpenses, pick.apply("income_tax_expense", incomeTaxExpense), pick.apply("profit_before_tax", profitBeforeTax),
+                derived, absent, discontinuedIncome, discontinuedIncomeControlling, discontinuedRule, sharesSuperseded, acceptedAt,
+                openedJudged);
+    }
+
+    /** 그 손익 유량 열의 값(DB 컬럼명 · {@link #STALE_FLOWS}). */
+    public BigDecimal flow(String column) {
+        return switch (column) {
+            case "revenue" -> revenue;
+            case "operating_income" -> operatingIncome;
+            case "net_income" -> netIncome;
+            case "net_income_controlling" -> netIncomeControlling;
+            case "cost_of_sales" -> costOfSales;
+            case "gross_profit" -> grossProfit;
+            case "profit_before_tax" -> profitBeforeTax;
+            case "income_tax_expense" -> incomeTaxExpense;
+            default -> throw new IllegalArgumentException("손익 유량 열이 아니다: " + column);
+        };
     }
 
     /** 같은 행에 공개 시각 판정을 단다(관문 켬 미국 어댑터가 판을 다 지은 뒤 · {@code null} = 모른다). */
