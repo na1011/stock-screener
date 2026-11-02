@@ -608,10 +608,11 @@ public class FinancialWriter {
         Set<Amount> managed = EnumSet.noneOf(Amount.class);
         for (RawFinancialReport report : reports) {
             for (Amount amount : Amount.values()) {
-                // 관문 컬럼은 「없다」 판정만 실은 호출도 관할이다 — 지배 몫이 한 판도 안 정해진 발행사에서 옛 값을 지우려면
-                // 그 칸이 SELECT에 들어야 한다. 관문 밖 컬럼의 관할 판정은 그대로다(값이 난 적 있는가 · 594칸 실측).
-                if (amount.of(report) != null
-                        || (amount.gated() && report.assertedAbsent().contains(amount.column))) {
+                // 어댑터가 그 칸을 판정했으면(값이든 「없다」든) 관할이다 — 「없다」 판정만 실은 호출에서 옛 값을 지우려면 그 칸이
+                // 관할이어야 한다. 594칸 왕복은 「안 다루는 소스가 지운다」였는데, 「없다」는 그 칸을 다루는 어댑터만 낸다.
+                // 실측(2026-11-03 관문): 본문 밖 영업이익을 전부 버린 발행사(ADR-0202)에서 이 칸이 관할 밖이 되어 옛 부문 합계 값이
+                // 최신 행에 남았다(부재 표와 모순 21건 · 뒤 판이 지운 값을 앞 판이 든 FY 18행).
+                if (amount.of(report) != null || report.assertedAbsent().contains(amount.column)) {
                     managed.add(amount);
                 }
             }

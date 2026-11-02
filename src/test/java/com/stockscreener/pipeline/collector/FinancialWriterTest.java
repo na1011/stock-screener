@@ -1096,25 +1096,20 @@ class FinancialWriterTest {
     }
 
     /**
-     * 관할 가드가 <b>처방보다 먼저</b> 선다는 것. {@code managed}에 없는 컬럼은 판정이 있어도
-     * 안 지운다 — 그 컬럼을 채운 것이 <b>다른 소스</b>일 수 있고, 지우면 수요일이 채우고
-     * 목요일이 지우는 왕복이 된다({@code managedColumns}의 594칸 실측).
+     * 관할 가드 — 이 호출에서 값도 「없다」 판정도 안 난 컬럼은 안 지운다. 그 컬럼을 채운 것이 <b>다른 소스</b>일 수 있고, 지우면 수요일이
+     * 채우고 목요일이 지우는 왕복이 된다({@code managedColumns}의 594칸 실측 — 판정 없는 상수 {@code null}이었다). 「없다」 판정은 그 칸을
+     * 다루는 어댑터만 내므로 관할이다({@link #absenceOnlyCallStillManagesTheColumn}).
      */
     @Test
-    @DisplayName("판정이 있어도 이 호출의 관할이 아닌 컬럼은 안 지운다")
-    void assertedAbsenceStillRespectsManagedColumns() {
+    @DisplayName("값도 판정도 안 난 컬럼은 이 호출의 관할이 아니라 안 지운다")
+    void unjudgedNullIsOutsideTheManagedColumns() {
         writer.write(stockId, List.of(report(2025, "FY", "2026-03-15", "1000")),
                 FinancialWriter.WriteMode.FILL_MISSING);
         assertThat(storedNetIncome()).isEqualByComparingTo("1000");
 
-        // 형제 행이 없다 — 이 호출에서 net_income이 한 번도 값이 안 났으므로 관할이 아니다.
-        writer.write(stockId, List.of(
-                        sourceRowWithoutNetIncome(
-                                java.util.Set.of(RawFinancialReport.NET_INCOME))),
+        writer.write(stockId, List.of(sourceRowWithoutNetIncome(java.util.Set.of())),
                 FinancialWriter.WriteMode.FILL_MISSING);
-        assertThat(storedNetIncome())
-                .as("관할 밖이면 판정이 있어도 안 지운다")
-                .isEqualByComparingTo("1000");
+        assertThat(storedNetIncome()).as("판정 없는 null은 관할 밖").isEqualByComparingTo("1000");
     }
 
     @Test
@@ -1328,6 +1323,33 @@ class FinancialWriterTest {
                 null,
                 null, null, null, null, null, null, null, null, null, null,
                 derived, java.util.Set.of());
+    }
+
+    @Test
+    @DisplayName("「없다」 판정만 실은 호출도 그 칸의 관할이다 — 호출 전체에 값이 한 번도 안 나도 옛 값을 지운다(ADR-0202 본문 밖 영업이익)")
+    void absenceOnlyCallStillManagesTheColumn() {
+        writer.write(stockId, List.of(report(2025, "FY", "2026-03-15", "1000")));
+        assertThat((BigDecimal) latestRow().get("operating_income")).isEqualByComparingTo("1200");
+
+        RawFinancialReport withdrawn = new RawFinancialReport(
+                2025, "FY",
+                LocalDate.of(2025, 1, 1), LocalDate.of(2025, 12, 31),
+                LocalDate.parse("2026-03-15"),
+                "11011", "KRW",
+                new BigDecimal("5000"), null, new BigDecimal("1000"),
+                new BigDecimal("20000"), new BigDecimal("12000"), null, new BigDecimal("8000"),
+                null, null, null,
+                null, new BigDecimal("100"),
+                null, null,
+                null,
+                null, null, null,
+                null,
+                null, null, null, null, null, null, null, null, null, null,
+                false, java.util.Set.of("operating_income"));
+        writer.write(stockId, List.of(withdrawn), WriteMode.FILL_MISSING);
+
+        assertThat(latestRow().get("operating_income")).isNull();
+        assertThat((BigDecimal) latestRow().get("net_income")).isEqualByComparingTo("1000");
     }
 
     /**

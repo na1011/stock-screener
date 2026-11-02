@@ -123,6 +123,24 @@ class SecEdgarRevenueFaceTest {
         assertThat(off.openedJudged()).as("관문 꺼짐").isFalse();
     }
 
+    @Test
+    @DisplayName("앞 판이 본문 밖 영업이익을 거뒀으면 그 열을 안 실은 뒤 판도 「없다」를 잇는다 — 판정 없는 null은 저장이 옛 값을 안 지운다(CAG 2015)")
+    void withdrawnColumnStaysAbsentInLaterVintages() throws Exception {
+        // 첫 10-K: 영업이익 100은 본문 밖(부문 합계) · 본문은 매출 1,000과 순이익 50. 이듬해 공시가 2017 매출만 900으로 다시 싣는다.
+        String json = String.join(",",
+                restatedFact("Revenues", 1_000 * MILLION, 900 * MILLION),
+                tag("OperatingIncomeLoss", 100 * MILLION),
+                tag("NetIncomeLoss", 50 * MILLION));
+        SecStatementFaceCollector.SecStatementFaces faces = new SecStatementFaceCollector.SecStatementFaces(Map.of(ACCN,
+                new SecStatementFaceCollector.Face(Set.of("us-gaap_Revenues", "us-gaap_NetIncomeLoss"),
+                        Set.of(SecStatementFaceCollector.Face.key("20171231", 4, BigDecimal.valueOf(1_000 * MILLION)),
+                                SecStatementFaceCollector.Face.key("20171231", 4, BigDecimal.valueOf(50 * MILLION))))));
+        RawFinancialReport latest = latestFy2017(json, true, faces);
+        assertThat(latest.revenue()).isEqualByComparingTo("900000000");
+        assertThat(latest.operatingIncome()).isNull();
+        assertThat(latest.assertedAbsent()).as("뒤 판도 거둔 열을 「없다」로 싣는다").contains("operating_income");
+    }
+
     private static final String RESTATED = "0000000001-19-000001";
 
     private static String restatedFact(String name, long first, long restated) {

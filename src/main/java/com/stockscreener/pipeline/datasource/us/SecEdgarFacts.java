@@ -1852,6 +1852,8 @@ final class SecEdgarFacts {
         List<RawFinancialReport> out = new ArrayList<>();
         Map<SecEdgarColumn, BigDecimal> baseline = null;
         RawFinancialReport last = null;
+        // 앞 판이 거둔 열(ADR-0202) — 그 열을 안 실은 뒤 판은 값을 잇듯 「없다」도 잇는다.
+        Set<String> withdrawnBefore = Set.of();
         // MUST: 같은 날 제출된 판들을 **하나로 접는다.** 저장의 판 단위는 accn이 아니라
         // 공시일이다 — FinancialWriter는 publishedAt이 같으면 정정이 아니라 fillMissing으로
         // 보내 덮고, 덮을 때마다 지표를 무효화한다. 그래서 같은 날 제출된 accn 둘이 같은 창을
@@ -1936,6 +1938,13 @@ final class SecEdgarFacts {
                     withdrawn.add(column.columnName());
                 }
             }
+            // 앞 판이 그 열을 거뒀고 이 판도 그 열을 안 실었다 — 판정 없는 null이면 저장이 그 기간의 옛 값(거두기 전 본문 밖 값)을 안 지운다
+            // (CAG 2015 10-Q 날짜 FY 판 r1~r3이 10-K 값 181.5M을 그대로 들었다 · 2026-11-03 관문 ADR-0102 13행).
+            for (SecEdgarColumn column : HEADLINE) {
+                if (values.get(column) == null && carried.get(column) == null && withdrawnBefore.contains(column.columnName())) {
+                    withdrawn.add(column.columnName());
+                }
+            }
             RawFinancialReport candidate = toReport(label, window, reporter, currency, carried,
                     byColumn.getOrDefault(SecEdgarColumn.MINORITY_INTEREST, Map.of()).isEmpty(),
                     noNoncontrollingIncomeBy(lastNoncontrolling, window),
@@ -1993,6 +2002,7 @@ final class SecEdgarFacts {
                 continue;
             }
             baseline = carried;
+            withdrawnBefore = Set.copyOf(withdrawn);
             last = candidate;
             out.add(candidate);
         }
