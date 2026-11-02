@@ -49,6 +49,8 @@ applies_to:
 ```
 
 ```premise 통화가 갈린 회계연도의 유도 4분기에 손익이 남아 있지 않다
+# 판 단위로 짝짓는다 — 4분기는 같은 공시일의 FY 판에서 지어진다. 해 단위로 짝지으면 그 해 다른 판(라벨이 다른 통화인 10-K)이 USD 판끼리 뺀
+# 4분기를 신고한다(2026-11-03 CODA 2024 · 2025 · 그 4분기는 USD FY − USD 분기 셋).
 psql -d stock_screener -At -c "
 WITH crossing AS (
   SELECT q4.id, q4.stock_id, q4.fiscal_year
@@ -57,7 +59,7 @@ WITH crossing AS (
     AND EXISTS (
         SELECT 1 FROM financial_statement fy
         WHERE fy.stock_id = q4.stock_id AND fy.fiscal_period = 'FY'
-          AND fy.fiscal_year = q4.fiscal_year
+          AND fy.fiscal_year = q4.fiscal_year AND fy.published_at = q4.published_at
           AND EXISTS (
               SELECT 1 FROM financial_statement q
               WHERE q.stock_id = fy.stock_id AND q.fiscal_period NOT IN ('FY','Q4')
