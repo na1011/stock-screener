@@ -47,11 +47,16 @@ public class DartFinancialAdapter implements FinancialDataSource {
     private static final Logger log = LoggerFactory.getLogger(DartFinancialAdapter.class);
 
     /** 보고서 코드 → 우리 회계기간 라벨. Q4는 별도 보고서가 없어 유도한다. */
-    private static final Map<String, String> REPORT_CODES = new LinkedHashMap<>(Map.of(
-            "11013", "Q1",
-            "11012", "Q2",
-            "11014", "Q3",
-            "11011", "FY"));
+    // 순서는 Q1 → Q2 → Q3 → FY로 고정한다 — Map.of는 순서가 없어 LinkedHashMap으로 감싸도 JVM마다 조회 · 출력 순서가 바뀌었다(2026-11-03
+    // 국내 녹화 스윕 두 판이 값은 같은데 행 순서만 달라 바이트 대조가 안 섰다).
+    private static final Map<String, String> REPORT_CODES = new LinkedHashMap<>();
+
+    static {
+        REPORT_CODES.put("11013", "Q1");
+        REPORT_CODES.put("11012", "Q2");
+        REPORT_CODES.put("11014", "Q3");
+        REPORT_CODES.put("11011", "FY");
+    }
 
     private final RestClient client;
     private final RateLimiter rateLimiter;
