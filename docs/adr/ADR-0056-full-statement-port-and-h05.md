@@ -117,7 +117,9 @@ P20 축②가 *「편입 행은 유니버스의 활성 여부와 무관하게 �
 
 ```premise 정정공시라 채우지 못한 연간 결손
 psql -d stock_screener -At -c "WITH x AS (
-    SELECT s.ticker, s.market_code, count(*) FILTER (WHERE f.operating_cash_flow IS NULL) miss
+    -- 유량을 하나라도 실은 FY 행만 센다 — 매출 · 순이익이 다 빈 행은 잔액 전용 라벨이다(첫 USD 공시의 비교 잔액만으로 생긴 해 ·
+    -- 2026-11-03 OR · RTO FY2022 · 원 공시 CAD · GBP). 그 해 유량을 USD로 실은 공시가 없어 OCF 결손이 아니다.
+    SELECT s.ticker, s.market_code, count(*) FILTER (WHERE f.operating_cash_flow IS NULL AND (f.revenue IS NOT NULL OR f.net_income IS NOT NULL)) miss
     FROM stock s JOIN universe_membership m ON m.stock_id=s.id AND m.effective_to IS NULL
     JOIN universe u ON u.code = m.universe_code AND u.is_active
     JOIN financial_statement f ON f.stock_id=s.id AND f.is_latest AND f.fiscal_period='FY'
