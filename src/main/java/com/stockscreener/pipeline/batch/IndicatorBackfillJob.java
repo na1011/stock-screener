@@ -357,6 +357,12 @@ public class IndicatorBackfillJob {
             Map<String, NavigableMap<LocalDate, BigDecimal>> marketIndexes =
                     indicatorRunner.marketIndexesFor(asOf);
             fanOutStocks(pool, execution, targets, asOf, retentionCutoffs, marketIndexes, deleted);
+            if (tickers == null || tickers.isEmpty()) {
+                // 이 판이 유지하지 않는 종목의 지표는 남기지 않는다 — 창 안 편입을 잃은 종목(짧은 편입이 창 앞으로 밀려남 · 복원이 뺀 구간)은
+                // 원본층 대상 밖이라 아무도 안 걷었다(2026-11-03 국내 16 · 미국 4 · 37.6만 행). 파생층 ②가 뒤따라 그날 모집단과 색인을 다시 짓는다.
+                execution.stage("창 밖 종목 지표 걷기");
+                deleted.add(cullOutsideWindow(ids));
+            }
         } catch (DataSourceException e) {
             // run()과 같은 자리다 — 외부 호출이 없어 정상적으로는 오지 않는다.
             execution.failFatally(e);
@@ -370,6 +376,21 @@ public class IndicatorBackfillJob {
         // 쓴·지운 행이 둘 다 0이면 이 판은 아무것도 안 바꿨다 — 관문 대조군(두 번째 화해 = 0)이 이것을 읽는다.
         return execution.finish("원본층 %d종목 · 쓴 %d · 지운 %d"
                 .formatted(targets.size(), execution.writtenRowCount(), deleted.sum()));
+    }
+
+    /** 지표가 있는데 {@code members}(이 판의 원본층 대상 = 보존 창 편입 전원)에 없는 종목의 지표를 전부 지운다 — 지운 행 수. */
+    private long cullOutsideWindow(List<Long> members) {
+        List<Long> stale = jdbcTemplate.queryForList("""
+                SELECT s.id FROM stock s
+                 WHERE EXISTS (SELECT 1 FROM indicator_value v WHERE v.stock_id = s.id)
+                   AND NOT (s.id = ANY (?))
+                """, Long.class, (Object) members.toArray(Long[]::new));
+        if (stale.isEmpty()) {
+            return 0;
+        }
+        int rows = jdbcTemplate.update("DELETE FROM indicator_value WHERE stock_id = ANY (?)", (Object) stale.toArray(Long[]::new));
+        log.info("보존 창 편입이 없는 종목의 지표를 걷었다. 종목={}개 행={}", stale.size(), rows);
+        return rows;
     }
 
     /**

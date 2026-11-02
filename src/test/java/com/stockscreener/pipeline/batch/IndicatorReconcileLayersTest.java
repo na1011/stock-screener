@@ -240,6 +240,24 @@ class IndicatorReconcileLayersTest {
     }
 
     @Test
+    @DisplayName("① 전원 판은 창 안 편입이 없는 종목의 지표를 걷는다 — 티커로 좁힌 판은 안 건드린다")
+    void originLayerCullsStocksOutsideTheWindow() {
+        // 창 앞에서 편출한 종목에 옛 판이 쓴 지표가 남아 있다(2026-11-03 운영 국내 16 · 미국 4의 꼴).
+        jdbcTemplate.update("""
+                INSERT INTO indicator_value (stock_id, trade_date, indicator_code, value)
+                VALUES (?, ?, ?, 7), (?, ?, ?, 7)
+                """, departedBefore, D1, PerCalculator.CODE, departedBefore, D2, PerCalculator.CODE);
+
+        job.rewriteOriginLayer(D3, BatchExecutionRecorder.TriggeredBy.MANUAL, List.of("910001"));
+        assertThat(rowsOf(departedBefore, PerCalculator.CODE)).as("티커로 좁힌 판은 그 종목만").isEqualTo(2);
+
+        job.rewriteOriginLayer(D3, BatchExecutionRecorder.TriggeredBy.MANUAL, List.of());
+        assertThat(rowsOf(departedBefore, PerCalculator.CODE)).as("유지하지 않는 종목의 지표는 남기지 않는다").isZero();
+        assertThat(rowsOf(current10, "ADJ_CLOSE")).isEqualTo(3);
+        assertThat(latestRun(IndicatorBackfillJob.ORIGIN_JOB_NAME).get("note").toString()).contains("지운 2");
+    }
+
+    @Test
     @DisplayName("① 은 휴장일 asOf에도 그 전 마지막 봉까지 쓴다 — 주말·공휴일 손 실행이 헛돌지 않는다")
     void originLayerOnAClosedDayWritesUpToTheLastBar() {
         LocalDate saturday = LocalDate.of(2026, 7, 4);
