@@ -171,12 +171,18 @@ class CandidateSplitJobTest {
         when(source.fetchCorporateActions(org.mockito.ArgumentMatchers.any(),
                 org.mockito.ArgumentMatchers.eq(com.stockscreener.pipeline.datasource.us.listing.DepositaryRatioJudge.LEDGER_FROM),
                 org.mockito.ArgumentMatchers.eq(AS_OF)))
-                .thenReturn(com.stockscreener.pipeline.datasource.CorporateActionDataSource.Fetched.of(List.of(reverse(event))));
+                .thenReturn(com.stockscreener.pipeline.datasource.CorporateActionDataSource.Fetched.of(List.of(reverse(event),
+                        // 가치를 못 매긴 분배(봉 없는 후보) · 미상 종류 — 예탁 경로는 비율 사건만 적는다(2026-11-03 관문 17종목).
+                        CorporateAction.unresolvedSpinOff(LocalDate.of(2023, 3, 1), LocalDate.of(2023, 3, 1), BigDecimal.ONE,
+                                new com.stockscreener.pipeline.datasource.Distribution(List.of(
+                                        new com.stockscreener.pipeline.datasource.Distribution.Child("KID", null, new BigDecimal("0.5"), null)),
+                                        LocalDate.of(2023, 3, 1), null, null), "spin_off"),
+                        CorporateAction.named(LocalDate.of(2023, 6, 1), LocalDate.of(2023, 6, 1), BigDecimal.ONE, "unit_split"))));
         CandidateSplitJob gateOn = new CandidateSplitJob(source, shareCounts, stockRegistrar, collector,
                 new BatchExecutions(executor, recorder, alerts::add, context), jdbc, true);
 
         assertThat(gateOn.runDepositaryHistory(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL)).isEqualTo(BatchStatus.SUCCESS);
-        assertThat(statusesOf(candidate)).hasSize(1);
+        assertThat(statusesOf(candidate)).as("비율 사건 하나만 — 분배 · 미상은 안 적는다").hasSize(1);
         assertThat(statusesOf(member)).hasSize(1);
         assertThat(statusesOf(alreadyReflected)).as("예탁 표지 없는 등록인").isEmpty();
         assertThatThrownBy(() -> job.runDepositaryHistory(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL))

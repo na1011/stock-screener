@@ -166,10 +166,15 @@ public class CandidateSplitJob {
             execution.plan(CollectionPhase.ADJUSTMENT, targets.size());
             execution.stage("예탁 사건 기록");
             for (SecurityRef target : targets) {
+                // 비율 사건만 적는다 — 분배(분사)는 가치를 같은 날 두 종가로 매기고 미상 종류는 원장 행이 아니라 이름만 기여하는데(collect()),
+                // 이 경로는 그 분류를 안 거쳐 봉 없는 후보에 「가치 미측정」 분사를 판정 대기로 적었다(2026-11-03 관문 17종목). 분배 · 미상은
+                // 그 종목에 봉이 생기면 정기 수집이 봉 위에서 적는다 · ADS 비율 판정(k)이 읽는 것은 비율 사건이다.
                 execution.process(target, CollectionPhase.ADJUSTMENT, security -> collector.recordAll(security,
                         source.fetchCorporateActions(security,
                                 com.stockscreener.pipeline.datasource.us.listing.DepositaryRatioJudge.LEDGER_FROM, asOf)
-                                .actions()).recorded());
+                                .actions().stream()
+                                .filter(a -> a.distribution() == null && a.type() != CorporateAction.Type.UNKNOWN)
+                                .toList()).recorded());
             }
         } catch (DataSourceException e) {
             execution.failFatally(e);
