@@ -172,9 +172,10 @@ stale AS (
     -- 주식수를 채운 행)은 못 센다 — 그래서 fin은 하한이다. 판정이 옛 행의 상태를 APPLIED로 바꾼 것도 못 센다
     -- (2026-10-05 HON 2026-06-29 병합 0.5 · 국내 인적분할 5행). 그날 HON의 고친 시총 순위는
     -- 168~175이고 경계(1,000위)가 약 55억 달러라 미국 명부는 안 바뀐다. 국내 복원은 원장을
-    -- 안 읽는다(원장 보정은 JdbcStoredShareCounts 안에 있고 그것을 읽는 것은 미국 어댑터 하나다).
+    -- 안 읽는다(원장 보정은 JdbcStoredShareCounts 안에 있고 그것을 읽는 것은 미국 어댑터 하나다) — 그래서 원장 항은 미국만 센다
+    -- (2026-11-03 국내 관문의 원장 137건이 국내 복원을 낡은 것으로 신고했다 · 국내 복원은 격자 날짜마다 소스 시총으로 순위를 매긴다).
     (SELECT count(*) FROM corporate_action ca JOIN stock s ON s.id = ca.stock_id
-     WHERE s.market_code = mk.mc AND ca.status = 'APPLIED'
+     WHERE s.market_code = mk.mc AND mk.mc = 'US' AND ca.status = 'APPLIED'
        AND ca.ratio IS NOT NULL AND ca.ratio <> 1 AND ca.created_at > r.restored_at
        AND ca.effective_date <= r.grid_to) ledger,
     -- 미국 관문(V70) 뒤에는 클래스 축 판정도 순위 재료다(보류 · 숨김 · N_L). 복원 뒤에 다시 유도된 판정을 센다. 판정 표가

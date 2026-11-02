@@ -248,8 +248,8 @@ psql -d stock_screener -At -c "SELECT CASE WHEN current_setting('default_transac
 psql -d stock_screener -At -c "SELECT CASE WHEN count(*) FILTER (WHERE NOT is_active) = 0 THEN 'OK stock ' || count(*) || '행이 전부 활성이다 — 폐지 종목이 없어 미충족 집단 평균이 위로 당겨진다(실측 편향 0.57~2.47%p/6개월, 임계 3.5%p)' ELSE '비활성 종목이 ' || count(*) FILTER (WHERE NOT is_active) || '행 생겼다 — 폐지 이력이 들어왔다면 생존편향 하한을 다시 재고 부호 서술을 고친다' END FROM stock"
 ```
 
-```premise 수익률에서 제외할 종목이 아직 6이다
-psql -d stock_screener -At -c "WITH bad AS (SELECT DISTINCT stock_id FROM corporate_action WHERE status = 'UNSUPPORTED' AND effective_date >= DATE '2020-01-01'), pending AS (SELECT DISTINCT stock_id FROM corporate_action WHERE status = 'OBSERVED' AND effective_date >= DATE '2020-01-01') SELECT CASE WHEN (SELECT count(*) FROM corporate_action) = 0 THEN '잴 것이 없었다 — 기업행위 원장이 비었다' WHEN (SELECT count(*) FROM bad) = 6 THEN 'OK 미보정 기업행위 6종목(국내 2 · 미국 4 — 2026-10-31 기준)' || CASE WHEN (SELECT count(*) FROM pending) > 0 THEN ' · 판정 대기 ' || (SELECT count(*) FROM pending) || '종목' ELSE '' END ELSE '미보정 기업행위가 ' || (SELECT count(*) FROM bad) || '종목이다(기준 6) — 수익률 제외 목록이 낡았다' END"
+```premise 수익률에서 제외할 종목이 아직 5이다
+psql -d stock_screener -At -c "WITH bad AS (SELECT DISTINCT stock_id FROM corporate_action WHERE status = 'UNSUPPORTED' AND effective_date >= DATE '2020-01-01'), pending AS (SELECT DISTINCT stock_id FROM corporate_action WHERE status = 'OBSERVED' AND effective_date >= DATE '2020-01-01') SELECT CASE WHEN (SELECT count(*) FROM corporate_action) = 0 THEN '잴 것이 없었다 — 기업행위 원장이 비었다' WHEN (SELECT count(*) FROM bad) = 5 THEN 'OK 미보정 기업행위 5종목(국내 1 · 미국 4 — 2026-11-03 기준)' || CASE WHEN (SELECT count(*) FROM pending) > 0 THEN ' · 판정 대기 ' || (SELECT count(*) FROM pending) || '종목' ELSE '' END ELSE '미보정 기업행위가 ' || (SELECT count(*) FROM bad) || '종목이다(기준 5) — 수익률 제외 목록이 낡았다' END"
 ```
 
 ## 배경
@@ -364,11 +364,11 @@ ADR-0044의 *"손잡이를 푸는 것은 사용자 결정이다"*와 ADR-0061의
 KR 0.9950/0.9844 · US 0.9873이고 사전등록한 합격선(0.95 · 0.90)을 넘었다(ADR-0135 §결과).
 **창 밖(2022-04~)은 그대로 복원되지 않는다** — 이 하네스의 앵커 여덟 중 **일곱이 거기 있다.**
 
-**수익률의 정본에도 구멍이 있다.** 2020 이후 `UNSUPPORTED` 6종목(국내 2 · 미국 4 — 2026-10-19에 CORZ 2024-01-24 분사(효력일 앞 봉이 체결 없는 채움이라 가격 배수를 못 잼) · WOLF 2025-09-29 미해석 분사가 더해졌다)은 비율을 낼 수
-없어 원장이 포기한 것이라 `adj_close`가 실제로 끊겨 있다 — 아시아나항공 **+327.6%**(2021-01-15),
-DN오토모티브 **−81.2%**(2024-10-08), CNH −13.8%(2022-01-03 Iveco 분사 · 자식 값을 못 구함),
+**수익률의 정본에도 구멍이 있다.** 2020 이후 `UNSUPPORTED` 5종목(국내 1 · 미국 4 — 2026-10-19에 CORZ 2024-01-24 분사(효력일 앞 봉이 체결 없는 채움이라 가격 배수를 못 잼) · WOLF 2025-09-29 미해석 분사가 더해졌다)은 비율을 낼 수
+없어 원장이 포기한 것이라 `adj_close`가 실제로 끊겨 있다 — 아시아나항공 **+327.6%**(2021-01-15), CNH −13.8%(2022-01-03 Iveco 분사 · 자식 값을 못 구함),
 DNTH −7.7%(2023-09-11 CVR)와 이튿날 **+1,472%**(원장에 없는 1:16 병합 — 억제 창이 함께 덮는다).
-국내 인적분할 5종목(SK텔레콤 등)은 ADR-0168로 가격 배수를 받아 더는 끊겨 있지 않다.
+국내 인적분할 5종목(SK텔레콤 등)은 ADR-0168로 가격 배수를 받아 더는 끊겨 있지 않다. DN오토모티브(2024-10-08)는 거래소 기준가가
+1:5 분할을 가리켜(ADR-0205) `SPLIT` 5로 판정해 끊김이 닫혔다.
 `REJECTED`는 실제 주가 변동으로 판정한 것이라 **제외 대상이 아니다.**
 
 ## 측정 결과 (2026-08-18)

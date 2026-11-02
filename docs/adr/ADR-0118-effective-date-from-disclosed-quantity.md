@@ -75,13 +75,16 @@ applies_to:
 3건뿐**이라서다. 지금은 사람이 그 자리를 본다.
 
 ```premise 수량 폴백이 올린 후보가 판정되지 않은 채 쌓이지 않았다
+# 봉이 있는 종목만 센다 — 억제(ADR-0055)는 값을 내는 종목에만 해가 있고, 봉 없는 종목의 미판정 행은 봉이 생기면 정기 수집이
+# 봉 위에서 다시 적는다(2026-11-03 관문 예탁 경로가 봉 0행 후보 17종목에 「가치 미측정」 분사를 적었다 · 그 경로는 고쳤다).
 psql -d stock_screener -At -c "SELECT CASE
   WHEN count(*) = 0 THEN 'OK 수량 폴백이 올린 미판정 후보가 없다'
   ELSE count(*) || '건이 판정을 기다린다: ' || string_agg(id::text, ', ')
        || ' — 판정 전까지 그 종목의 장기창 지표가 억제된다(ADR-0055). '
        || 'corporate-action-review --ca-id=<id>가 증거를 낸다.'
   END FROM corporate_action
- WHERE status = 'OBSERVED' AND detection_source = 'SOURCE_DISCLOSURE'"
+ WHERE status = 'OBSERVED' AND detection_source = 'SOURCE_DISCLOSURE'
+   AND EXISTS (SELECT 1 FROM price_daily p WHERE p.stock_id = corporate_action.stock_id)"
 ```
 
 **모집단을 `SOURCE_DISCLOSURE` + `OBSERVED`로 좁힌 이유**는 그 조합이 이 결정 이전에는

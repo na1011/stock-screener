@@ -55,6 +55,8 @@ applies_to:
 둘째 시험은 **음수 매출을 그대로 내는 것**을 단언한다.
 
 ```premise 유도된 4분기가 FY 판의 공시일에 찍혀 있다
+# 면제 셋째(관문 켬 P3a · 2026-11-03): 4분기가 같은 해 FY 행의 공시 코드를 달고 그 FY 판보다 뒤에 찍혔으면 「FY가 같은 값으로 다시 실린
+# 날」 사건이다 — 값이 같은 FY 판은 접혀 그날 FY 행이 없다(관문 07 326행 · 캐시로 321행이 그날 FY 팩트 재제출 확인 · 5행은 캐시 없음).
 psql -d stock_screener -At -c "WITH q4 AS (
   SELECT q.stock_id, q.fiscal_year, q.published_at, q.report_code FROM financial_statement q
   WHERE q.fiscal_period = 'Q4' AND q.stock_id IN (
@@ -71,7 +73,10 @@ bad AS (
       AND EXISTS (SELECT 1 FROM financial_statement p WHERE p.stock_id = q4.stock_id
         AND p.fiscal_year = q4.fiscal_year AND p.fiscal_period IN ('Q1', 'Q2', 'Q3') AND p.published_at = q4.published_at))
     AND NOT (q4.report_code LIKE '8-K%' AND NOT EXISTS (SELECT 1 FROM financial_statement f8
-      WHERE f8.stock_id = q4.stock_id AND f8.report_code = q4.report_code AND f8.fiscal_period = 'FY')))
+      WHERE f8.stock_id = q4.stock_id AND f8.report_code = q4.report_code AND f8.fiscal_period = 'FY'))
+    AND NOT EXISTS (SELECT 1 FROM financial_statement fr WHERE fr.stock_id = q4.stock_id
+      AND fr.fiscal_year = q4.fiscal_year AND fr.fiscal_period = 'FY' AND fr.report_code = q4.report_code
+      AND fr.published_at < q4.published_at))
 SELECT CASE
   WHEN (SELECT count(*) FROM q4) = 0 THEN '잴 것이 없었다 — 미국 4분기 행이 없다'
   WHEN (SELECT count(*) FROM bad) = 0 THEN 'OK 세대가 맞는 4분기 ' || (SELECT count(*) FROM q4) || '행'

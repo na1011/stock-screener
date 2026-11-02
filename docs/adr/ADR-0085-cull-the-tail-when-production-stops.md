@@ -81,7 +81,34 @@ applies_to:
 날짜에 값이 없다」이므로 **비교 대상이 정의상 없다** — 무조건 통과하면서 반증 가능해 보인다.
 
 ```premise 앵커가 적자 연도로 옮겨간 뒤에도 남은 배당성향 행이 없다
-psql -d stock_screener -At -c "WITH RECURSIVE days AS (SELECT min(trade_date) d FROM indicator_value UNION ALL SELECT (SELECT min(trade_date) FROM indicator_value WHERE trade_date > days.d) FROM days WHERE days.d IS NOT NULL), anchored AS (SELECT v.stock_id, v.trade_date, (SELECT g.fiscal_year FROM governance_fact g WHERE g.stock_id = v.stock_id AND g.metric_key = 'CASH_DIVIDEND_TOTAL' AND g.published_at <= v.trade_date ORDER BY g.fiscal_year DESC, g.published_at DESC LIMIT 1) fy FROM days JOIN indicator_value v ON v.trade_date = days.d AND v.indicator_code = 'DIVIDEND_PAYOUT'), bad AS (SELECT a.stock_id, count(*) n FROM anchored a JOIN financial_statement f ON f.stock_id = a.stock_id AND f.fiscal_year = a.fy AND f.fiscal_period = 'FY' AND f.is_latest AND COALESCE(f.net_income_controlling, f.net_income) <= 0 GROUP BY 1) SELECT CASE WHEN (SELECT count(*) FROM anchored WHERE fy IS NOT NULL) = 0 THEN '잴 것이 없었다 — 앵커가 잡히는 배당성향 행이 하나도 없다' WHEN (SELECT count(*) FROM bad) = 0 THEN 'OK 앵커 회계연도가 적자인 배당성향 행이 없다(' || (SELECT count(*) FROM anchored WHERE fy IS NOT NULL) || '행 검사)' ELSE (SELECT sum(n)::text FROM bad) || '행이 적자 앵커 위에 남아 있다 — 꼬리 걷기가 안 도는 것이다(ADR-0085)' END"
+# 앵커는 계산기와 같은 「보이는 날」로 잡는다(ReportingBasis.visibleFrom · 두 관문 켬) — 국내는 공시 목록 접수일과 DART 게시 시각, 미국은 그 해
+# FY 판들의 EDGAR 접수 시각 · 시각이 장 마감 뒤이거나 모르면 다음 날. 공시일로 잡으면 마감 뒤 접수 공시의 당일 값(직전 앵커의 정상값)을
+# 적자 앵커 위로 센다(2026-11-03 41행 · 종목마다 공시일 하루). 다음 날로 잡으면 장중 접수 공시(AIG 2026-02-12)를 거꾸로 센다.
+psql -d stock_screener -At -c "
+WITH deficit AS (SELECT DISTINCT g.stock_id FROM governance_fact g JOIN financial_statement f ON f.stock_id = g.stock_id AND f.fiscal_year = g.fiscal_year
+              AND f.fiscal_period = 'FY' AND f.is_latest AND COALESCE(f.net_income_controlling, f.net_income) <= 0 WHERE g.metric_key = 'CASH_DIVIDEND_TOTAL'),
+g0 AS (SELECT g.stock_id, g.fiscal_year, g.published_at, s.market_code = 'US' us,
+         CASE WHEN s.market_code = 'US' THEN g.published_at
+              ELSE coalesce((SELECT max(k.rcept_date) FROM kr_report_xbrl k WHERE k.rcept_no = g.receipt_no AND k.stock_id = g.stock_id AND k.rcept_date > g.published_at), g.published_at) END pub,
+         CASE WHEN s.market_code = 'US' THEN (SELECT CASE WHEN count(*) > 0 AND count(f.accepted_at) = count(*) THEN max(f.accepted_at) END FROM financial_statement f
+                                               WHERE f.stock_id = g.stock_id AND f.fiscal_year = g.fiscal_year AND f.fiscal_period = 'FY' AND f.published_at = g.published_at)
+              ELSE (SELECT t.opened_at FROM kr_filing_time t WHERE t.rcept_no = g.receipt_no) END opened
+       FROM governance_fact g JOIN deficit d ON d.stock_id = g.stock_id JOIN stock s ON s.id = g.stock_id WHERE g.metric_key = 'CASH_DIVIDEND_TOTAL'),
+g1 AS (SELECT g0.*, (opened AT TIME ZONE CASE WHEN us THEN 'America/New_York' ELSE 'Asia/Seoul' END) loc FROM g0),
+gv AS MATERIALIZED (SELECT g1.stock_id, g1.fiscal_year, g1.published_at,
+         CASE WHEN g1.opened IS NULL THEN g1.pub + 1
+              ELSE greatest(g1.pub, CASE WHEN g1.loc::time < CASE WHEN g1.us THEN coalesce((SELECT (c.core_end AT TIME ZONE 'America/New_York')::time FROM market_calendar c
+                                                                                            WHERE c.exchange_code = 'NYSE' AND c.session_date = g1.loc::date), time '13:00')
+                                                              WHEN g1.loc::date < date '2016-08-01' THEN time '15:00' ELSE time '15:30' END
+                                         THEN g1.loc::date ELSE g1.loc::date + 1 END) END vis
+       FROM g1),
+anchored AS (SELECT DISTINCT ON (v.stock_id, v.trade_date) v.stock_id, v.trade_date, gv.fiscal_year fy
+             FROM indicator_value v JOIN deficit d ON d.stock_id = v.stock_id
+             LEFT JOIN gv ON gv.stock_id = v.stock_id AND gv.vis <= v.trade_date
+             WHERE v.indicator_code = 'DIVIDEND_PAYOUT'
+             ORDER BY v.stock_id, v.trade_date, gv.fiscal_year DESC NULLS LAST, gv.published_at DESC),
+bad AS (SELECT a.stock_id, count(*) n FROM anchored a JOIN financial_statement f ON f.stock_id = a.stock_id AND f.fiscal_year = a.fy AND f.fiscal_period = 'FY' AND f.is_latest AND COALESCE(f.net_income_controlling, f.net_income) <= 0 GROUP BY 1)
+SELECT CASE WHEN (SELECT count(*) FROM indicator_value WHERE indicator_code = 'DIVIDEND_PAYOUT') = 0 THEN '잴 것이 없었다 — 배당성향 행이 하나도 없다' WHEN (SELECT count(*) FROM bad) = 0 THEN 'OK 앵커 회계연도가 적자인 배당성향 행이 없다(적자 해가 있는 ' || (SELECT count(*) FROM deficit) || '종목 ' || (SELECT count(*) FROM anchored WHERE fy IS NOT NULL) || '행 검사)' ELSE (SELECT sum(n)::text FROM bad) || '행이 적자 앵커 위에 남아 있다 — 꼬리 걷기가 안 도는 것이다(ADR-0085)' END"
 ```
 
 **적자 판정은 배당성향의 실제 분모로 한다** — 2026-08-30부터 그것이

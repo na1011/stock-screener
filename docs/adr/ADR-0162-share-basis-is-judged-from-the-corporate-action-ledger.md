@@ -74,22 +74,30 @@ applies_to:
 # MUST: 모집단을 편입이 아니라 **판정이 붙은 종목**으로 잡는다. 편입으로 잡으면 리밸런싱이
 # 돌기 전까지 계속 붉고, 상시 붉은 펜스는 무시된다 — 이 결정이 거는 불변식은 「값을 안 낸다」이지
 # 「명부에서 빠졌다」가 아니다(명부는 그 결과이고 주에 한 번 따라온다).
+# MUST: 불변식은 「그날 고른 판의 기저가 미확정이면 그날 시총이 없다」다 — 종목 단위로 「미확정 판이 하나라도 있고 시총이 하루라도
+# 있으면」으로 재면 관문 켬 예탁 판정이 공시마다 미확정을 쓰는 순간(2026-11-03 1 → 151종목) 확정 판 위의 정상 시총이 신고된다(16종목 ·
+# 미확정 판 위 시총 0일). sharesOf 처럼 그날 고른 판(공시가 그날 앞 · 주식수 있음 · 기말이 가장 늦은 것)으로 최신 지표일 하루를 잰다.
 psql -d stock_screener -At -c "
-WITH u AS (SELECT DISTINCT f.stock_id FROM financial_statement f
-           WHERE f.share_basis_status = 'UNRESOLVED'),
-     bad AS (SELECT DISTINCT s.ticker FROM indicator_value iv
-             JOIN u ON u.stock_id = iv.stock_id JOIN stock s ON s.id = iv.stock_id
-             WHERE iv.indicator_code = 'MARKET_CAP')
+WITH u AS (SELECT DISTINCT f.stock_id FROM financial_statement f WHERE f.share_basis_status = 'UNRESOLVED'),
+d AS (SELECT max(trade_date) d FROM indicator_trade_date WHERE market_code = 'US'),
+mc AS (SELECT iv.stock_id FROM indicator_value iv JOIN u ON u.stock_id = iv.stock_id, d
+       WHERE iv.indicator_code = 'MARKET_CAP' AND iv.trade_date = d.d),
+pick AS (SELECT mc.stock_id, ch.share_basis_status st FROM mc, d CROSS JOIN LATERAL (
+           SELECT v.share_basis_status FROM (
+             SELECT DISTINCT ON (f.fiscal_year, f.fiscal_period) f.* FROM financial_statement f
+             WHERE f.stock_id = mc.stock_id AND f.published_at < d.d
+             ORDER BY f.fiscal_year, f.fiscal_period, f.revision_no DESC) v
+           WHERE v.shares_outstanding > 0 ORDER BY v.period_end DESC, v.published_at DESC LIMIT 1) ch),
+bad AS (SELECT s.ticker FROM pick JOIN stock s ON s.id = pick.stock_id WHERE pick.st = 'UNRESOLVED')
 SELECT CASE
   WHEN (SELECT count(*) FROM financial_statement WHERE share_basis_status IS NOT NULL) = 0
     THEN '잴 것이 없었다 — 기저 판정이 한 행도 없다(share-basis-derive 를 안 돌렸다)'
-  WHEN (SELECT count(*) FROM u) = 0
-    THEN 'OK 기저 미확정 종목이 없다'
+  WHEN (SELECT count(*) FROM u) = 0 THEN 'OK 기저 미확정 종목이 없다'
   WHEN (SELECT count(*) FROM bad) = 0
-    THEN 'OK 기저 미확정 ' || (SELECT count(*) FROM u) || '종목이 시총 값을 안 낸다'
-  ELSE (SELECT count(*) FROM bad) || '종목이 기저 미확정인데 시총 값이 남아 있다: '
+    THEN 'OK 기저 미확정 판이 있는 ' || (SELECT count(*) FROM u) || '종목 중 최신일(' || (SELECT d FROM d) || ')에 고른 판이 미확정인데 시총을 낸 것이 없다(시총 낸 ' || (SELECT count(*) FROM mc) || '종목은 확정 판 위)'
+  ELSE (SELECT count(*) FROM bad) || '종목이 최신일에 고른 판의 기저가 미확정인데 시총 값이 있다: '
        || (SELECT string_agg(ticker, ' ' ORDER BY ticker) FROM bad)
-       || ' — 백필이 옛 행을 안 걷었거나 sharesOf 의 UNRESOLVED 갈래가 깨진 것이다' END"
+       || ' — sharesOf 의 UNRESOLVED 갈래가 깨졌거나 백필이 옛 행을 안 걷었다' END"
 ```
 
 ```premise 클래스 축이 숨긴 판의 종목이 최신일 시가총액 값을 갖고 있지 않다
