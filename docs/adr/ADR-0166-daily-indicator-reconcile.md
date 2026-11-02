@@ -8,7 +8,6 @@ applies_to:
   - "src/main/java/**/pipeline/batch/IndicatorBackfillJob.java"
   - "src/main/java/**/pipeline/batch/JobFreshnessPolicy.java"
   - "src/main/java/**/pipeline/batch/BatchExecutionSweeper.java"
-  - "src/main/java/**/pipeline/GateSettingGuard.java"
 ---
 
 # ADR-0166. 무효화마다 상한 백필하던 것을 매 평일 지표 화해로 바꾼다
@@ -25,7 +24,7 @@ applies_to:
 - **상한은 없다.** ADR-0116의 「사슬 백필」·「목요일 refill 뒤 백필」과 그 상한(기업 행위 10 · 재무 100)을 대체한다.
   무거운 잡(14:15)은 적재만 하고, 그 뒤의 유도·기저 판정·지표 채우기는 14:18·14:20이 진다.
 - **관문**: 관문의 전체 백필은 `--job=indicator-reconcile`이고, 무변화 대조는 같은 명령의 **두 번째 판의 쓴·지운 0 · 두 판 모두 실패 0**이다.
-- **관문 설정**: `stockscreener.gate.us`는 classpath `application*.yaml`과 명령줄 인자로만 정해진다(`GateSettingGuard`).
+- **관문 설정**: 두 관문(미국 · 국내)은 2026-11-03에 켜고 설정과 꺼진 갈래를 걷었다(`9e53b11a`) — 화해는 켬 갈래 하나로 돈다.
 
 ## 규칙
 
@@ -40,7 +39,7 @@ applies_to:
 
 ## 검증
 
-- `./gradlew test --tests "*PipelineSchedulerChainTest" --tests "*PipelineSchedulerTest" --tests "*IndicatorReconcileLayersTest" --tests "*GateSettingGuardTest" --tests "*BatchExecutionClosingTest"`
+- `./gradlew test --tests "*PipelineSchedulerChainTest" --tests "*PipelineSchedulerTest" --tests "*IndicatorReconcileLayersTest" --tests "*BatchExecutionClosingTest"`
 - 운영: 평일 14:20 뒤 `batch_execution`의 `indicator-origin-rewrite`·`indicator-derived-rebuild` SCHEDULER 행과 note.
   값이 안 바뀐 날의 note는 「쓴 0 · 지운 0」에 가깝고, 0이 아닌 칸은 그날 원자료(늦은 봉·정정·기업 행위)로 귀속된다.
 

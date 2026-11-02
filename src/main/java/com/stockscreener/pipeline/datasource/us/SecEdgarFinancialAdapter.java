@@ -218,6 +218,8 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
         // companyfacts가 빠뜨린 정기 공시를 그 공시의 인스턴스로 채운다(ADR-0173). 실패는 종목을 세우지 않고 판 보호로 낸다.
         // IFRS로 실린 공시도 「덮였다」로 센다(ADR-0182). 보충 쪽 인자는 READER_VERSION 판 범위 파일(ReaderVersionPinTest)이라 그대로 둔다 —
         // 걷으면 판을 올려 저장 행을 다시 받는다.
+        // 마지막 인자는 걷힌 관문 설정의 자리다(늘 켬). 보충 쪽 두 파일이 판독기 판 고정(ReaderVersionPinTest) 범위라 인자를 걷으면
+        // READER_VERSION을 올려 저장 행을 다시 받아야 해서 남겼다 — 다음에 그 판을 올릴 때 함께 걷는다.
         SecFilingSupplement.Outcome supplement = supplementer.supplement(cik.get(), tree, fromFiscalYear, context, true);
         if (supplement.fromStore() + supplement.fetched() > 0 || !supplement.failed().isEmpty()
                 || supplement.vintagesUncertain()) {

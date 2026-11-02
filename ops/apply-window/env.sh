@@ -17,9 +17,10 @@ PROD=${GATE_PROD:-$LIVE}         # 드라이런은 GATE_PROD=<작은 DB>로 운�
 RETRYABLE='TRANSIENT RATE_LIMITED'
 # 기대 실패 — 티커<TAB>종류<TAB>근거 한 줄. 드라이런·후보 스윕이 낸 것을 사람이 근거와 함께 옮긴다. 없으면 기대 실패 0이다.
 EXPECTED="$A/expected-failures.tsv"
-# 관문 설정이 명령줄에서 왔다는 앱의 말(GateSettingGuard). 이 줄이 없으면 그 실행은 관문 실행이 아니다.
-GATE_LINE='관문 설정 stockscreener.gate.us=true (출처: commandLineArgs)'
-GATE_ARGS='--stockscreener.gate.us=true --stockscreener.gate.kr=true'  # 국내 관문(k1~k9)을 05 앞에 돌렸다 — 그 뒤 잡이 국내를 꺼진 갈래로 되돌리지 않게 둘 다 켠다
+# 두 관문은 2026-11-03에 켰고 설정과 꺼진 갈래는 걷었다(9e53b11a) — 켬 갈래가 유일한 코드다. 이 실행기는 그날의 기록이고, 다시 쓰면
+# 관문 인자 · 관문 줄 검사가 할 일이 없다(빈 인자 · 검사 없음). 다음 관문이 새 설정을 들이면 그때 이 두 자리를 다시 짓는다.
+GATE_ARGS=''
+KR_GATE_RAN=1   # 07 ① — 국내 관문을 이 실행기의 창(2026-11-03)에서 돌렸다
 q() { command psql -d "$1" -v ON_ERROR_STOP=1 -At -F $'\t' -c "$2"; }
 die() { echo "[멈춤] $*" >&2; exit 1; }
 abspath() { case "$1" in /*) echo "$1";; *) echo "$A/$1";; esac; }
@@ -52,7 +53,7 @@ boot() { local db="$1"; shift
       ALERT_WEBHOOK_URL= MAIL_USERNAME= SENTRY_DSN= ./gradlew bootRun -PskipFrontend --args="--spring.profiles.active=bootstrap $*")
   fi; }
 # 관문 실행의 로그에 관문 설정 줄이 있는가. 인자를 빼먹은 실행은 꺼진 갈래로 돌아 V70 표를 안 쓰고도 성공한다.
-gate_line() { grep -qF "$GATE_LINE" "$1" || die "$1에 「${GATE_LINE}」이 없다 — 관문 인자 없이 돌았다"; }
+gate_line() { :; }   # 관문 설정이 없어졌다(위) — 확인할 줄이 없다
 max_exec_id() { q "$1" "select coalesce(max(id),0) from batch_execution"; }
 # 이번 실행 행 하나를 찾아 단언하고 그 id를 낸다. 가장 마지막 행이 아니라 「P 뒤 · 그 job · MANUAL」 정확히 1행이다.
 new_exec() { # <db> <이전 max id> <job> <기대 target | ->

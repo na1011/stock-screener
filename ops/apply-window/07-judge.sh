@@ -10,9 +10,9 @@ source "$(dirname "$0")/env.sh"
 PA=$(abspath "$1"); PB=$(abspath "$2"); SA=""; [ -z "${3:-}" ] || SA=$(abspath "$3")
 for d in "$PA" "$PB" ${SA:+"$SA"}; do for f in preset.tsv rank.tsv groups.tsv fs.tsv stock-market.tsv membership.tsv kr-fs-hash.txt fences-cmp.tsv adjclose-counts.tsv; do [ -s "$d/$f" ] || die "$d/${f}가 비었거나 없다"; done; done
 FAIL=()
-# ①은 국내 관문이 이 창에서 안 돌았을 때만 단언이다 — 같은 창에서 국내 관문(GATE_ARGS의 gate.kr=true)을 돌렸으면 국내가 바뀌는 것이
-#   그 관문의 목적이라 차이를 귀속 재료로만 낸다(2026-11-03 두 관문을 한 창에서 돌렸다).
-KR_RAN=0; case " $GATE_ARGS " in *" --stockscreener.gate.kr=true "*) KR_RAN=1;; esac
+# ①은 국내 관문이 이 창에서 안 돌았을 때만 단언이다 — 같은 창에서 국내 관문을 돌렸으면(env.sh의 KR_GATE_RAN) 국내가 바뀌는 것이
+#   그 관문의 목적이라 차이를 귀속 재료로만 낸다(2026-11-03 두 관문을 한 창에서 돌렸다 · env.sh의 KR_GATE_RAN).
+KR_RAN="${KR_GATE_RAN:-0}"
 k1() { if [ "$KR_RAN" = 1 ]; then echo "  (국내 관문을 이 창에서 돌렸다 — $1 차이는 귀속 재료)"; else FAIL+=("$1"); fi; }
 echo "===== ① 국내 불변"
 cmp -s "$PB/kr-fs-hash.txt" "$PA/kr-fs-hash.txt" && echo "  같음 국내 재무 해시" || k1 "① 국내 재무 해시"
