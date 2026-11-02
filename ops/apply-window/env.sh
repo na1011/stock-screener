@@ -19,7 +19,7 @@ RETRYABLE='TRANSIENT RATE_LIMITED'
 EXPECTED="$A/expected-failures.tsv"
 # 관문 설정이 명령줄에서 왔다는 앱의 말(GateSettingGuard). 이 줄이 없으면 그 실행은 관문 실행이 아니다.
 GATE_LINE='관문 설정 stockscreener.gate.us=true (출처: commandLineArgs)'
-GATE_ARGS='--stockscreener.gate.us=true'
+GATE_ARGS='--stockscreener.gate.us=true --stockscreener.gate.kr=true'  # 국내 관문(k1~k9)을 05 앞에 돌렸다 — 그 뒤 잡이 국내를 꺼진 갈래로 되돌리지 않게 둘 다 켠다
 q() { command psql -d "$1" -v ON_ERROR_STOP=1 -At -F $'\t' -c "$2"; }
 die() { echo "[멈춤] $*" >&2; exit 1; }
 abspath() { case "$1" in /*) echo "$1";; *) echo "$A/$1";; esac; }
