@@ -298,6 +298,11 @@ public class SecFilingClient {
      * 같은 실행 안에서 다시 받는 것은 끊긴 전송이 5xx와 같은 일시 실패라서다 — 한 번 끊겼다고 그 공시를 다음 FR까지 비우지
      * 않는다(v9 반증: 503은 3콜 뒤 TRANSIENT인데 끊긴 고정 길이 본문은 1콜로 끝났다). 크기가 빈 항목은 맞춰 볼 수 없어 받지
      * 않는다(같은 캐시의 인스턴스 0개).
+     *
+     * <p><b>빈 본문(200 · 0바이트)은 끊긴 전송이 아니라 원장의 답이다(NOT_FOUND)</b> — 원장이 크기 있는 파일을 {@code Content-Length: 0}으로
+     * 준다. 2026-11-02 관문 후보 재적재(약 6천 종목)에서 빈 본문은 정확히 세 파일이었고 그 셋은 두 실행(실행 안 재시도 포함)과 탐침
+     * (평문 · gzip · Range) 어디서나 비었다 — 다시 받아 채워진 빈 본문은 0이다. 일시로 두면 그 공시 하나가 종목 재무 전체를 실행마다
+     * 실패시킨다(WF · ATXS). 소비자가 「그 파일 없음」으로 다루고 캐시하지 않으므로 원장이 채우면 다음 실행이 받는다.
      */
     public byte[] instance(long cik, String accession, FolderItem item) throws DataSourceException {
         String folder = accession.replace("-", "");
@@ -309,7 +314,7 @@ public class SecFilingClient {
                 .retrieve().toEntity(byte[].class), received -> {
                     byte[] body = received.getBody();
                     if (body == null || body.length == 0) {
-                        return "200인데 본문이 없다.";
+                        return null;
                     }
                     return body.length == expected ? null
                             : "받은 길이 %d가 색인 크기 %d와 다르다 — 받다 만 본문이거나 오류 본문이다.".formatted(body.length, expected);
@@ -317,6 +322,10 @@ public class SecFilingClient {
         if (!response.getStatusCode().is2xxSuccessful()) {
             throw new DataSourceException(SecEdgarResponse.kindOf(response.getStatusCode().value()),
                     SecEdgarResponse.SOURCE_NAME, "HTTP %d. %s".formatted(response.getStatusCode().value(), context));
+        }
+        if (response.getBody() == null || response.getBody().length == 0) {
+            throw new DataSourceException(DataSourceException.Kind.NOT_FOUND, SecEdgarResponse.SOURCE_NAME,
+                    "200인데 본문이 비었다 — 색인 크기 %d인 파일을 원장이 비워서 준다. %s".formatted(expected, context));
         }
         return response.getBody();
     }

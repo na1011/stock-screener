@@ -492,7 +492,7 @@ class SecFilingSupplementTest {
     }
 
     @Test
-    @DisplayName("200인데 본문이 빈 인스턴스는 해석 실패가 아니라 받기 실패다 — 다음 실행이 다시 받는다(빈 색인의 짝)")
+    @DisplayName("200인데 본문이 빈 인스턴스는 해석 실패가 아니라 원장의 답(NOT_FOUND)이다 — 굳지 않고 다음 실행이 다시 받는다")
     void emptyInstanceBodyIsAFetchFailureNotUnreadable() throws Exception {
         // RestClient는 빈 200 본문을 null로 낸다 — 가드의 `body == null`이 받는다. `length == 0` 갈래는 이 길로 안 닿는다
         // (2026-10-06 변이: 그 갈래만 빼면 초록 · 가드를 통째로 빼면 NPE로 붉다).
@@ -502,7 +502,9 @@ class SecFilingSupplementTest {
 
         assertThat(outcome.failed()).containsExactly(MISSING);
         assertThat(storedStatus(MISSING)).isEqualTo("FAILED");
-        assertThat(failureKind(MISSING)).isEqualTo("TRANSIENT");
+        assertThat(failureKind(MISSING)).isEqualTo("NOT_FOUND");
+        assertThat(paths).filteredOn(p -> p.equals(instancePath(MISSING, "abt-20260630_htm.xml")))
+                .as("빈 본문은 실행 안에서 다시 묻지 않는다 — 다시 받아 채워진 적이 없다(2026-11-02)").hasSize(1);
 
         paths.clear();
         bodyOf.put(instancePath(MISSING, "abt-20260630_htm.xml"), instanceXml());

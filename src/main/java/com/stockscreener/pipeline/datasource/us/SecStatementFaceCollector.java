@@ -141,6 +141,13 @@ public class SecStatementFaceCollector {
                 // 링크베이스가 같은 본문 재료다. 그것도 없으면 아래에서 「모름」이 된다.
                 log.warn("MetaLinks.json을 읽지 못해 링크베이스로 읽는다. CIK {} {} — {}", cik, accession, e.getOriginalMessage());
                 meta = null;
+            } catch (DataSourceException e) {
+                if (e.kind() != DataSourceException.Kind.NOT_FOUND) {
+                    throw e;
+                }
+                // 원장이 MetaLinks.json을 비워서 준다(ATXS 2023 · 2026-11-02) — 위와 같은 까닭으로 링크베이스로 읽는다.
+                log.warn("MetaLinks.json을 받지 못해 링크베이스로 읽는다. CIK {} {} — {}", cik, accession, e.getMessage());
+                meta = null;
             }
         }
         if (meta == null) {

@@ -83,6 +83,27 @@ class SecStatementFaceTest {
     }
 
     @Test
+    @DisplayName("원장이 MetaLinks.json을 비워서 주면(NOT_FOUND) 같은 폴더의 링크베이스로 읽는다(ATXS 2026-11-02)")
+    void emptyMetaLinksFallsBackToLinkbase(@TempDir Path cache) throws Exception {
+        SecFilingClient client = mock(SecFilingClient.class);
+        var meta = new SecFilingClient.FolderItem("MetaLinks.json", "1");
+        var summary = new SecFilingClient.FolderItem("FilingSummary.xml", "1");
+        var pre = new SecFilingClient.FolderItem("x_pre.xml", "1");
+        when(client.folder(1L, "a")).thenReturn(List.of(meta, summary, pre));
+        when(client.instance(1L, "a", meta)).thenThrow(new DataSourceException(DataSourceException.Kind.NOT_FOUND, "sec-edgar", "200인데 본문이 비었다"));
+        when(client.instance(1L, "a", summary)).thenReturn(("<FilingSummary><MyReports><Report><MenuCategory>Statements</MenuCategory>"
+                + "<Role>http://x/role/StatementOfIncome</Role></Report></MyReports></FilingSummary>").getBytes(StandardCharsets.UTF_8));
+        when(client.instance(1L, "a", pre)).thenReturn("""
+                <link:linkbase xmlns:link="http://www.xbrl.org/2003/linkbase" xmlns:xlink="http://www.w3.org/1999/xlink">
+                  <link:presentationLink xlink:type="extended" xlink:role="http://x/role/StatementOfIncome">
+                    <link:loc xlink:type="locator" xlink:href="us-gaap.xsd#us-gaap_NetIncomeLoss" xlink:label="a"/>
+                  </link:presentationLink>
+                </link:linkbase>""".getBytes(StandardCharsets.UTF_8));
+        var faces = new SecStatementFaceCollector(client, cache.toString()).faces(1L, Set.of("a"), "t");
+        assertThat(faces.carries("a", Set.of("us-gaap_NetIncomeLoss"))).isTrue();
+    }
+
+    @Test
     @DisplayName("공시 폴더가 없으면(404) 그 공시는 본문 모름 · 캐시하지 않는다 — 일시 실패는 종목 실패로 던진다(VOD 2026-11-02)")
     void missingFolderIsUnknownButTransientThrows(@TempDir Path cache) throws Exception {
         SecFilingClient client = mock(SecFilingClient.class);

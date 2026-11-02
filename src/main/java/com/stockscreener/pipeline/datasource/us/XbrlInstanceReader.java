@@ -67,9 +67,11 @@ final class XbrlInstanceReader {
      * {@code ifrs-full} 네임스페이스도 싣는다 — companyfacts가 IFRS 공시를 빠뜨린다(182 IFRS 발행사 · 2023 뒤 6-K 97/375 · 20-F
      * 27/567 · 40-F 5/145). 관문 설정의 함수로 두지 않은 이유: 읽기는 늘 하고 쓰기(어댑터가 트리의 {@code ifrs-full}을 읽는 것)만
      * 관문 뒤라, 꺼진 출력은 그대로이고 관문 날 다시 받을 행이 생기지 않는다. 판 10(같은 날): 2023년 판부터의 https 네임스페이스도
-     * 받는다 — 판 9는 http만 봐서 실제 IFRS 공시(TRI · AZN · NU 인스턴스)를 하나도 못 읽었다(B 드라이런 3이 잡았다).
+     * 받는다 — 판 9는 http만 봐서 실제 IFRS 공시(TRI · AZN · NU 인스턴스)를 하나도 못 읽었다(B 드라이런 3이 잡았다). 판 11(2026-11-02):
+     * 빈 인스턴스 본문(200 · 0바이트)을 받기 실패(TRANSIENT)가 아니라 원장의 답(NOT_FOUND)으로 — 다시 받아 채워진 빈 본문이 0이다
+     * ({@code SecFilingClient#instance}). 보충의 저장 상태는 그대로(FAILED · 다음 실행이 다시 받는다)이고 실패 종류 글자만 바뀐다.
      */
-    static final int READER_VERSION = 10;
+    static final int READER_VERSION = 11;
 
     private static final String XBRLI = "http://www.xbrl.org/2003/instance";
     private static final String XBRLDI = "http://xbrl.org/2006/xbrldi";
