@@ -58,7 +58,7 @@ class SecEdgarCurrentReportQ4Test {
      * 원가는 증인이다 — 등록인의 재표시 8-K는 안 바뀐 줄(여기서는 FY 원가 600)도 함께 실어, 그 공시가 정기 공시와 같은 실체의 재무임을 보인다
      * ({@code SecEdgarFacts.keepRegistrantCurrentReports}).
      */
-    private static List<RawFinancialReport> build(List<String> revenue, boolean usGate) throws Exception {
+    private static List<RawFinancialReport> build(List<String> revenue) throws Exception {
         String cost = String.join(",",
                 fact("2017-01-01", "2017-12-31", 600, "0000000001-18-000001", "10-K", "FY", 2017, "2018-02-15"),
                 fact("2017-01-01", "2017-12-31", 600, "0000000001-18-000009", "8-K", "FY", 2017, "2018-04-02"),
@@ -67,7 +67,7 @@ class SecEdgarCurrentReportQ4Test {
                 {"facts":{"us-gaap":{"Revenues":{"units":{"USD":[%s]}},"CostOfRevenue":{"units":{"USD":[%s]}}}}}"""
                 .formatted(String.join(",", revenue), cost);
         JsonNode facts = new ObjectMapper().readTree(json).path("facts");
-        return SecEdgarFacts.build(facts, 2015, usGate).reports();
+        return SecEdgarFacts.build(facts, 2015).reports();
     }
 
     private static RawFinancialReport latest(List<RawFinancialReport> reports, int year, String period) {
@@ -82,56 +82,54 @@ class SecEdgarCurrentReportQ4Test {
     }
 
     @Test
-    @DisplayName("관문 켬: 8-K가 재표시한 FY를 그 날 받고, 분기 셋이 다 같은 기준으로 다시 나온 날 4분기를 새 FY − 새 분기로 다시 짓는다")
+    @DisplayName("8-K가 재표시한 FY를 그 날 받고, 분기 셋이 다 같은 기준으로 다시 나온 날 4분기를 새 FY − 새 분기로 다시 짓는다")
     void recastYearThenRestatedQuartersRederiveTheFourthQuarter() throws Exception {
-        List<RawFinancialReport> on = build(recastThenQuarters(), true);
+        List<RawFinancialReport> on = build(recastThenQuarters());
 
         assertThat(at(on, "FY", "2018-04-02").revenue()).as("8-K 판").isEqualByComparingTo("1100000000");
         assertThat(at(on, "Q4", "2018-04-02").revenue()).as("FY만 새 기준 — 분기가 아직 옛 기준이라 비운다").isNull();
         assertThat(at(on, "Q4", "2018-11-01").revenue()).as("분기 셋이 다 새 기준").isEqualByComparingTo("440000000");
         assertThat(at(on, "Q4", "2018-11-01").reportCode()).as("FY 판의 공시 코드 — 보통주 몫이 같은 코드의 FY 행으로 잇는다")
                 .isEqualTo(at(on, "FY", "2018-04-02").reportCode());
-        assertThat(latest(build(recastThenQuarters(), false), 2017, "Q4").revenue())
-                .as("관문 꺼짐은 옛 출력 그대로 — 8-K를 안 읽고 FY 판 날에만 짓는다").isEqualByComparingTo("400000000");
     }
 
     @Test
-    @DisplayName("관문 켬: 분기 셋은 앞 물결에서, FY는 뒤 물결(8-K)에서 다시 쓰였으면 4분기를 비운다(FMC 2016 꼴)")
+    @DisplayName("분기 셋은 앞 물결에서, FY는 뒤 물결(8-K)에서 다시 쓰였으면 4분기를 비운다(FMC 2016 꼴)")
     void rewritesFromDifferentWavesDoNotMix() throws Exception {
         List<String> facts = recastThenQuarters();
         facts.add(fact("2017-01-01", "2017-12-31", 1_100, "0000000001-19-000001", "10-K", "FY", 2018, "2019-02-15"));
         facts.add(fact("2018-01-01", "2018-12-31", 1_200, "0000000001-19-000001", "10-K", "FY", 2018, "2019-02-15"));
         facts.add(fact("2017-01-01", "2017-12-31", 800, "0000000001-20-000009", "8-K", "FY", 2019, "2020-08-03"));
-        List<RawFinancialReport> on = build(facts, true);
+        List<RawFinancialReport> on = build(facts);
 
         assertThat(at(on, "Q4", "2018-11-01").revenue()).isEqualByComparingTo("440000000");
         assertThat(latest(on, 2017, "Q4").revenue()).as("8-K 2020이 FY만 다시 썼다").isNull();
     }
 
     @Test
-    @DisplayName("관문 켬: 다음 해 10-Q가 전년 1분기 비교열을 1% 넘게 다시 쓰면 같은 해 뒤 분기 · 4분기는 그날부터 새 기저 전까지 모른다(KO 2019 꼴 · 재고 A6 두 시장 한 규칙)")
+    @DisplayName("다음 해 10-Q가 전년 1분기 비교열을 1% 넘게 다시 쓰면 같은 해 뒤 분기 · 4분기는 그날부터 새 기저 전까지 모른다(KO 2019 꼴 · 재고 A6 두 시장 한 규칙)")
     void partialQuarterRestatementMakesTheLaterQuartersUnknown() throws Exception {
         List<String> facts = base();
         facts.add(fact("2017-01-01", "2017-03-31", 150, "0000000001-18-000002", "10-Q", "Q1", 2018, "2018-05-01"));
-        List<RawFinancialReport> on = build(facts, true);
+        List<RawFinancialReport> on = build(facts);
 
         RawFinancialReport q4 = latest(on, 2017, "Q4");
         assertThat(q4.publishedAt()).isEqualTo(LocalDate.parse("2018-05-01"));
         assertThat(q4.revenue()).as("옛 4분기는 옛 기저의 분기 셋과 짝이다 — 새 기저 1분기와 한 창에 섞지 않는다").isNull();
-        assertThat(latest(build(base(), true), 2017, "Q4").revenue()).as("대조군: 재작성 없음").isEqualByComparingTo("400000000");
+        assertThat(latest(build(base()), 2017, "Q4").revenue()).as("대조군: 재작성 없음").isEqualByComparingTo("400000000");
     }
 
     @Test
-    @DisplayName("관문 켬: 정기 공시 값과 하나도 안 맞는 8-K는 등록인 재무가 아니라 안 받는다(WTRG 2026-03-25 · 합병 상대의 수치)")
+    @DisplayName("정기 공시 값과 하나도 안 맞는 8-K는 등록인 재무가 아니라 안 받는다(WTRG 2026-03-25 · 합병 상대의 수치)")
     void currentReportWithoutWitnessIsIgnored() throws Exception {
         List<String> facts = base();
         facts.add(fact("2017-01-01", "2017-12-31", 3_000, "0000000001-18-000077", "8-K", "FY", 2017, "2018-04-02"));
 
-        assertThat(build(facts, true)).noneMatch(r -> r.reportCode().endsWith("0000000001-18-000077"));
+        assertThat(build(facts)).noneMatch(r -> r.reportCode().endsWith("0000000001-18-000077"));
     }
 
     @Test
-    @DisplayName("관문 켬: 첫 FY가 이미 새 기준이고 분기는 다음 해에 다시 쓰이면, 다음 10-K가 FY를 다시 실은 날 4분기를 새 세대로 다시 짓는다(DHR 2016 꼴)")
+    @DisplayName("첫 FY가 이미 새 기준이고 분기는 다음 해에 다시 쓰이면, 다음 10-K가 FY를 다시 실은 날 4분기를 새 세대로 다시 짓는다(DHR 2016 꼴)")
     void yearConfirmedAfterQuarterRestatementsRederivesTheFourthQuarter() throws Exception {
         List<String> facts = new ArrayList<>(List.of(
                 fact("2017-01-01", "2017-03-31", 300, "0000000001-17-000001", "10-Q", "Q1", 2017, "2017-05-01"),
@@ -148,7 +146,7 @@ class SecEdgarCurrentReportQ4Test {
         }
         facts.add(fact("2017-01-01", "2017-12-31", 1_000, "0000000001-19-000001", "10-K", "FY", 2018, "2019-02-15"));
         facts.add(fact("2018-01-01", "2018-12-31", 1_500, "0000000001-19-000001", "10-K", "FY", 2018, "2019-02-15"));
-        List<RawFinancialReport> on = build(facts, true);
+        List<RawFinancialReport> on = build(facts);
 
         assertThat(at(on, "Q4", "2018-02-15").revenue()).as("그날 원장으로는 섞인 값").isEqualByComparingTo("100000000");
         assertThat(latest(on, 2017, "Q4").publishedAt()).isEqualTo(LocalDate.parse("2019-02-15"));
@@ -156,21 +154,21 @@ class SecEdgarCurrentReportQ4Test {
     }
 
     @Test
-    @DisplayName("관문 켬: 같은 날 정기 공시가 같은 칸을 다르게 말한 8-K는 안 받는다(UWMC FY2020 꼴)")
+    @DisplayName("같은 날 정기 공시가 같은 칸을 다르게 말한 8-K는 안 받는다(UWMC FY2020 꼴)")
     void currentReportContradictingTheSameDayPeriodicIsIgnored() throws Exception {
         List<String> facts = base();
         facts.add(fact("2017-01-01", "2017-12-31", 3_000, "0000000001-18-000088", "8-K", "FY", 2017, "2018-02-15"));
         facts.add(fact("2017-01-01", "2017-03-31", 200, "0000000001-18-000088", "8-K", "Q1", 2017, "2018-02-15"));
 
-        assertThat(build(facts, true)).noneMatch(r -> r.reportCode().endsWith("0000000001-18-000088"));
+        assertThat(build(facts)).noneMatch(r -> r.reportCode().endsWith("0000000001-18-000088"));
     }
 
     @Test
-    @DisplayName("관문 켬: 8-K는 정기 공시가 지은 라벨에만 값을 댄다 — 정기 공시가 안 보고한 기간의 라벨을 열지 않는다")
+    @DisplayName("8-K는 정기 공시가 지은 라벨에만 값을 댄다 — 정기 공시가 안 보고한 기간의 라벨을 열지 않는다")
     void currentReportOpensNoLabel() throws Exception {
         List<String> facts = base();
         facts.add(fact("2016-01-01", "2016-12-31", 900, "0000000001-18-000009", "8-K", "FY", 2017, "2018-04-02"));
 
-        assertThat(build(facts, true)).noneMatch(r -> r.fiscalYear() == 2016);
+        assertThat(build(facts)).noneMatch(r -> r.fiscalYear() == 2016);
     }
 }

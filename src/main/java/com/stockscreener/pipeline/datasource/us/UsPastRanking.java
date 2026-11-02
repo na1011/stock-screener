@@ -33,7 +33,7 @@ import java.util.TreeMap;
 
 /**
  * 과거 날짜의 미국 시총 순위 — 복원 격자일마다 그날 상위 N의 <b>행</b>(탐색 {@code US-PAST-LISTING-PLAN-1017.md} D4 · 구현 계획 U4).
- * 미국 관문 설정({@code stockscreener.gate.us})이 켜졌을 때 복원({@code UniverseRestoreJob})만 부른다.
+ * 복원({@code UniverseRestoreJob})만 부른다.
  *
  * <p>오늘 순위({@link UsMarketCapUniverseAdapter#fetchConstituents})와 갈리는 셋:
  * <ul>

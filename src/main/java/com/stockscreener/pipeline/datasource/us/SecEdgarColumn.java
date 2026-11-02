@@ -574,8 +574,8 @@ enum SecEdgarColumn {
     }
 
     /**
-     * 이 컬럼이 볼 태그 전부. <b>경쟁 후보가 앞, 마지막 수단이 뒤</b>이고 이 순서가
-     * {@code SecEdgarFacts}의 태그 맵 순서가 된다.
+     * 이 컬럼이 선언한 태그 전부. <b>경쟁 후보가 앞, 마지막 수단이 뒤</b>다. 수집({@code SecEdgarFacts.collect})은
+     * {@link #candidates(String)}를 쓴다 — 이 순서는 주식수의 옛 추출 값({@code sharesSuperseded})과 부재 판정이 쓴다.
      */
     List<String> candidates() {
         if (fallbackCandidates.isEmpty()) {
@@ -587,24 +587,19 @@ enum SecEdgarColumn {
     }
 
     /**
-     * 관문 설정에 따른 후보 순서. 관문 켬의 주식수만 다르다 — 가중평균 폴백에서 <b>기본이 희석보다 앞</b>이다(탐색
+     * 수집하는 후보 순서. {@link #candidates()}와 주식수 · 매출만 다르다. 주식수는 가중평균 폴백에서 <b>기본이 희석보다 앞</b>이다(탐색
      * {@code SHARES-TIE-PLAN-1023.md} v1.1): 축 없는 dei 표지가 있는 정기 공시 49,941에서 같은 공시의 가장 짧은 창 가중평균을
      * 표지에 대면 기본이 가까운 것 35,000 · 희석 7,625 · 같음 7,316이고 상대차 중앙 0.48% 대 1.28%다(2026-10-23 · `.factcache`).
      * 희석은 반희석 판정이 기간마다 바뀌어 Up-C에서 교환 단위를 넣고 뺀다(TKO 2026 Q2 3개월 75.9M · 누계 193.3M · 기본 74.8M).
-     */
-    List<String> candidates(boolean usGate) {
-        return candidates(usGate, null);
-    }
-
-    /**
-     * @param sic 제출인 정보의 업종 SIC({@code stock.sic_code}) — 관문 켬 매출의 업종 총매출 후보({@link #INDUSTRY_REVENUE})가 그 업종
+     *
+     * @param sic 제출인 정보의 업종 SIC({@code stock.sic_code}) — 매출의 업종 총매출 후보({@link #INDUSTRY_REVENUE})가 그 업종
      *            발행사에서만 선다. 없으면 그 후보를 안 쓴다
      */
-    List<String> candidates(boolean usGate, String sic) {
-        if (usGate && this == SHARES_OUTSTANDING) {
+    List<String> candidates(String sic) {
+        if (this == SHARES_OUTSTANDING) {
             return GATED_SHARES_ORDER;
         }
-        if (usGate && this == REVENUE) {
+        if (this == REVENUE) {
             List<String> all = new java.util.ArrayList<>(candidates());
             // 이자비용을 뺀 순수익 총계 — 금융 발행사의 매출 총계(RKT 매출 전 연도 빔 · PFSI 계약 매출 27M이 순수익 1,594M 자리에 앉음 · P5).
             // 같은 공시가 그 창에 이것을 냈으면 다른 후보 팩트를 빼 이것이 매출이 된다(SecEdgarFacts.preferNetRevenue — 은행형 유도와 같은 기저).
@@ -622,7 +617,7 @@ enum SecEdgarColumn {
     }
 
     /**
-     * 관문 켬 매출의 <b>업종 총매출 후보</b>(탐색 {@code P2-NOTES.md} 「P2-R 매출 폴백 층」 · 2026-10-31 다시 잼) — 값 = 그 태그가 총매출인 SIC
+     * 매출의 <b>업종 총매출 후보</b>(탐색 {@code P2-NOTES.md} 「P2-R 매출 폴백 층」 · 2026-10-31 다시 잼) — 값 = 그 태그가 총매출인 SIC
      * 중분류 앞자리. 유틸리티(49)는 총매출을 {@code RegulatedAndUnregulatedOperatingRevenue} · {@code RegulatedOperatingRevenue}로 싣고 계약 매출 태그
      * ({@code RevenueFromContractWithCustomer…} — ASC 606의 부분집합)는 그 일부만 담는다(NJR FY2019 782M 대 2,592M · NI FY2024 5,282.9M + 기타 규제
      * 매출 172.2M = 5,455.1M). 그래서 <b>최댓값 경쟁에 든다</b> — 마지막 수단으로만 두면 계약 매출이 덮는 창은 부분값이고 계약 매출 없는 Q4만 총액이라
@@ -639,7 +634,7 @@ enum SecEdgarColumn {
      */
     private static final java.util.SequencedMap<String, String> INDUSTRY_REVENUE = orderedIndustryRevenue();
 
-    /** 관문 켬 매출의 순수익 총계 후보({@link #candidates(boolean, String)}). */
+    /** 매출의 순수익 총계 후보({@link #candidates(String)}). */
     static final String NET_REVENUE_TAG = "RevenuesNetOfInterestExpense";
 
     /** 순서를 못 박는다 — 같은 값으로 비기면 후보 순서가 이긴다({@code SecEdgarFacts.coveringTag}의 「엄격히 클 때만 바꾼다」). */
@@ -815,8 +810,8 @@ enum SecEdgarColumn {
     }
 
     /**
-     * <b>미국 관문 뒤 재료인가</b>(F2b). 관문이 꺼졌으면 수집하지 않는다({@code SecEdgarFacts.collect}) — 그러면 판 판정 ·
-     * 태그 선택 · 통화 · 부재 목록이 이 컬럼들이 생기기 전과 같다.
+     * <b>미국 관문(2026-11-03)과 함께 들어온 판정 재료인가</b>(F2b). 값만 댄다 — 구조(앵커 · 회계연도 창 · 라벨) 탐색
+     * ({@code SecEdgarFacts.withoutGated})과 부재 목록에 안 넣는다.
      */
     boolean gated() {
         return this == DISCONTINUED_INCOME_TOTAL

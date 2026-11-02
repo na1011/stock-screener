@@ -139,7 +139,6 @@ public class FinancialBasisReader {
             }
             IndicatorContext context = new IndicatorContext(stockId, List.of(), figures.annual(), figures.quarterly(), Map.of())
                     .withEarningsReleaseDates(releaseDates.getOrDefault(stockId, List.of()))
-                    .withGateOn(indicatorDataReader.gateOn(facts.get(stockId).marketCode()))
                     .withSpinOffDates(spinOffs.getOrDefault(stockId, List.of()));
             ReportingBasis.of(context).ifPresent(basis -> {
                 bases.put(stockId, basis);
@@ -225,13 +224,11 @@ public class FinancialBasisReader {
         Map<Long, List<LocalDate>> out = new HashMap<>();
         Timestamp bound = writtenBy == null ? null : Timestamp.from(writtenBy);
         jdbc.query(con -> {
-            // 국내 관문 켬 — 국내 발표는 DART 게시 시각으로 막는 날을 정한다(지표 판독기와 같은 함수 · ReportingBasis.domesticReleaseEffective).
-            boolean kr = indicatorDataReader.gateOn("KOSPI");
+            // 국내 발표는 DART 게시 시각으로 막는 날을 정한다(지표 판독기와 같은 함수 · ReportingBasis.domesticReleaseEffective).
             var ps = con.prepareStatement("""
-                    SELECT r.stock_id, r.market, r.effective_on, %s AS opened_at FROM earnings_release r %s
-                    WHERE r.stock_id = ANY(?) AND r.effective_on <= ? AND """.formatted(
-                    kr ? "t.opened_at" : "NULL::timestamptz",
-                    kr ? "LEFT JOIN kr_filing_time t ON r.market = 'KR' AND t.rcept_no = r.filing_no" : "")
+                    SELECT r.stock_id, r.market, r.effective_on, t.opened_at AS opened_at FROM earnings_release r
+                      LEFT JOIN kr_filing_time t ON r.market = 'KR' AND t.rcept_no = r.filing_no
+                    WHERE r.stock_id = ANY(?) AND r.effective_on <= ? AND """
                     + EarningsReleaseStore.IS_EARNINGS_RELEASE + """
                       AND (CAST(? AS timestamptz) IS NULL OR coalesce(r.resolved_at, r.first_seen_at) <= CAST(? AS timestamptz))
                     """);

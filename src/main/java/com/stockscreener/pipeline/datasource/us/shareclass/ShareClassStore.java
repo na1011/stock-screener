@@ -15,9 +15,6 @@ import java.util.Map;
 /**
  * 클래스 축의 세 표(관문 마이그레이션 {@code V70__share_class_axis.sql}) — 받은 재료 둘과 판정.
  *
- * <p><b>MUST: 관문 설정({@code stockscreener.gate.us})이 켜진 갈래에서만 부른다.</b> 꺼진 jar의 DB에는 이 표가 없다 —
- * 부르는 자리가 설정을 보고 막는다(이 클래스는 설정을 모른다 · 빈이 있는 것만으로는 아무 질의도 안 나간다).
- *
  * <p>호출자의 트랜잭션에 그대로 참여한다(전파 지정 없음) — 받기는 종목별 {@code REQUIRES_NEW} 안에서 재무 쓰기와 함께
  * 커밋되고({@code SecFilingSupplementStore}와 같은 자리), 판정은 유도 단계가 종목마다 쓴다.
  */

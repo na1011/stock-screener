@@ -160,7 +160,7 @@ class CandidateSplitJobTest {
     }
 
     @Test
-    @DisplayName("예탁 사건 손 잡 — 예탁 표지를 받은 등록인의 행이면 편입이든 후보든 2019 뒤 사건을 종목 조회로 적고, 관문 꺼짐이면 서지 않는다")
+    @DisplayName("예탁 사건 손 잡 — 예탁 표지를 받은 등록인의 행이면 편입이든 후보든 2019 뒤 사건을 종목 조회로 적는다")
     void depositaryHistoryRecordsSince2019() throws Exception {
         jdbc.update("UPDATE stock SET sec_cik = 919191 WHERE id IN (?, ?)", candidate, member);
         jdbc.update("""
@@ -179,14 +179,12 @@ class CandidateSplitJobTest {
                                         LocalDate.of(2023, 3, 1), null, null), "spin_off"),
                         CorporateAction.named(LocalDate.of(2023, 6, 1), LocalDate.of(2023, 6, 1), BigDecimal.ONE, "unit_split"))));
         CandidateSplitJob gateOn = new CandidateSplitJob(source, shareCounts, stockRegistrar, collector,
-                new BatchExecutions(executor, recorder, alerts::add, context), jdbc, true);
+                new BatchExecutions(executor, recorder, alerts::add, context), jdbc);
 
         assertThat(gateOn.runDepositaryHistory(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL)).isEqualTo(BatchStatus.SUCCESS);
         assertThat(statusesOf(candidate)).as("비율 사건 하나만 — 분배 · 미상은 안 적는다").hasSize(1);
         assertThat(statusesOf(member)).hasSize(1);
         assertThat(statusesOf(alreadyReflected)).as("예탁 표지 없는 등록인").isEmpty();
-        assertThatThrownBy(() -> job.runDepositaryHistory(AS_OF, BatchExecutionRecorder.TriggeredBy.MANUAL))
-                .isInstanceOf(IllegalStateException.class);
     }
 
     private static CorporateAction reverse(LocalDate exDate) {

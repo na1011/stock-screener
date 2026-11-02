@@ -145,7 +145,7 @@ class VolumeIndicatorsTest {
     }
 
     @Test
-    @DisplayName("관문 켬의 60일 회전율은 창 60봉 전부에 주식수가 있어야 값을 낸다 — 꺼짐은 빈 날을 빼고 평균한다(지금 그대로)")
+    @DisplayName("60일 회전율은 창 60봉 전부에 주식수가 있어야 값을 낸다")
     void turnoverRatio60NeedsTheFullWindowWhenGateIsOn() {
         List<PriceBar> bars = new ArrayList<>();
         LocalDate start = LocalDate.of(2026, 1, 2);
@@ -156,9 +156,8 @@ class VolumeIndicatorsTest {
         }
         TurnoverRatio60Calculator calculator = new TurnoverRatio60Calculator();
 
-        assertThat(calculator.calculate(context(bars))).as("꺼짐: 첫 창(59봉)도 값").hasSize(2);
-        assertThat(calculator.calculate(context(bars).withGateOn(true)))
-                .as("켬: 주식수가 빈 첫 봉이 든 창은 값 없음").hasSize(1);
+        assertThat(calculator.calculate(context(bars)))
+                .as("주식수가 빈 첫 봉이 든 창은 값 없음").hasSize(1);
     }
 
     private static IndicatorContext context(List<PriceBar> bars) {

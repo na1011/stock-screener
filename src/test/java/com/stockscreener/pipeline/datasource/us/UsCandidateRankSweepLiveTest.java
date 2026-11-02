@@ -54,15 +54,13 @@ import java.util.TreeSet;
  *   <li><b>받기</b>: 모집단마다 companyfacts와 앵커 후보 공시의 인스턴스를 {@link ShareClassCollector}로 받아 재료 폴더
  *       ({@link ShareClassFileStore})에 둔다 — 관문 재적재가 운영 표에 둘 것과 같은 재료다. 폴더가 남아 있으면 이어 받는다.</li>
  *   <li><b>유도</b>: {@link ShareClassDeriver}를 그 폴더 위에서 돈다(판정은 메모리).</li>
- *   <li><b>순위</b>: 같은 날 {@link UsMarketCapUniverseAdapter#rank}를 꺼짐(지금 판독기)과 켬(클래스 축 판독기 · 보류 포함)으로 두 번
- *       돈다 — 앞 편입은 지금 운영 명부다.</li>
+ *   <li><b>순위</b>: 같은 날 {@link UsMarketCapUniverseAdapter#rank}를 클래스 축 판독기(보류 포함)로 돈다 — 앞 편입은 지금 운영 명부다.
+ *       관문 설정을 걷은 뒤(2026-11-03)라 꺼짐(옛 판독기) 쪽 열은 비어 있다 — 그 판독기가 코드에 없다.</li>
  * </ol>
  *
  * <p><b>켬 순위는 「오늘 재무 행 위의 클래스 축」이다.</b> 재적재가 더할 새 행(오늘 행이 없는 공시)은 못 본다. 다만 재무 행이 창 안에 하나도
  * 없는 줄은 재료의 판정(그날 서 있던 판의 N_L)으로 더한다 — 재적재가 처음 행을 만드는 후보다(출처 「재료만」). 후보의 공시 보충 판
  * (ADR-0173)은 재적재가 처음 받으므로 여기서 앵커 후보에 안 든다(운영 {@code sec_filing_supplement}에 후보 행이 거의 없다).
- *
- * <p><b>대조군</b>: 재료 없는 켬 판독기의 주식수가 꺼짐 판독기와 같다(0콜). 다르면 켬 판독기 자체의 차이라 스윕 수를 읽기 전에 본다.
  *
  * <pre>
  * 작은 DB(관문 표를 넣은 {@code stock_screener_gate_…})에서 판정을 재려면 {@code CLASS_SWEEP_DB=<그 DB>}를 주고
@@ -138,22 +136,9 @@ class UsCandidateRankSweepLiveTest {
         Files.write(dir.resolve("verdicts.tsv"), verdictRows);
 
         LocalDate oldest = asOf.minusYears(SHARES_MAX_AGE_YEARS);
-        StoredShareCounts offCounts = new JdbcStoredShareCounts(jdbc);
-        JdbcStoredShareCounts onRows = new JdbcStoredShareCounts(jdbc, store, true);
-        Map<String, ShareCount> off = byTicker(offCounts.activeByMarket(UsMarket.CODE, oldest, asOf));
-
-        // 대조군 — 재료 없는 켬 판독기는 꺼짐과 같아야 한다.
-        Map<String, ShareCount> control = byTicker(new JdbcStoredShareCounts(jdbc,
-                new ShareClassFileStore(jdbc, emptyMaterials), true).activeByMarket(UsMarket.CODE, oldest, asOf));
-        List<String> controlDiff = new ArrayList<>();
-        new TreeSet<>(union(off.keySet(), control.keySet())).forEach(t -> {
-            ShareCount a = off.get(t);
-            ShareCount b = control.get(t);
-            if (a == null || b == null || a.shares().compareTo(b.shares()) != 0) {
-                controlDiff.add(t + "(" + (a == null ? "-" : fmt(a.shares())) + "→" + (b == null ? "-" : fmt(b.shares())) + ")");
-            }
-        });
-        System.out.println("SWEEP 대조군 재료없는켬−꺼짐 주식수 차이=" + controlDiff.size() + " " + head(controlDiff, 30));
+        JdbcStoredShareCounts onRows = new JdbcStoredShareCounts(jdbc, store);
+        // 꺼짐(옛 판독기)은 관문 설정과 함께 걷혔다 — 그 쪽 열은 빈다.
+        Map<String, ShareCount> off = Map.of();
 
         Map<Long, ShareClassLine> lines = store.lines(UsMarket.CODE);
         WithMaterialOnly on = new WithMaterialOnly(onRows, lines, noRowStocks(jdbc, asOf, oldest), stocks, oldest, asOf);
@@ -170,16 +155,12 @@ class UsCandidateRankSweepLiveTest {
         // 예탁증권 표지 판정은 운영과 같은 조회로 — 안 주면 해외 양식 후보에서 AUTH로 선다.
         DepositaryCovers covers = new SecDepositaryCovers(new SecListingFormClient(null,
                 new SecFilingClient(factory, properties, secLimiter), factory, properties, secLimiter));
-        UsMarketCapUniverseAdapter.Ranking rOff = new UsMarketCapUniverseAdapter(listing, offCounts, cikCache, names, factory,
-                properties, alpacaLimiter, false, covers).rank(UsMarketCapUniverseAdapter.UNIVERSE_CODE, asOf, previous);
         UsMarketCapUniverseAdapter.Ranking rOn = new UsMarketCapUniverseAdapter(listing, on, cikCache, names, factory,
-                properties, alpacaLimiter, true, covers).rank(UsMarketCapUniverseAdapter.UNIVERSE_CODE, asOf, previous);
-        Map<String, Integer> rankOff = ranks(rOff);
+                properties, alpacaLimiter, covers).rank(UsMarketCapUniverseAdapter.UNIVERSE_CODE, asOf, previous);
+        Map<String, Integer> rankOff = Map.of();
         Map<String, Integer> rankOn = ranks(rOn);
-        Map<String, BigDecimal> capOff = caps(rOff);
+        Map<String, BigDecimal> capOff = Map.of();
         Map<String, BigDecimal> capOn = caps(rOn);
-        System.out.printf("SWEEP 꺼짐 후보=%d 문턱시총=%s 제외=%s%n", rOff.candidates(),
-                fmt(rOff.deduped().get(TOP_N - 1).marketCap()), rOff.excluded());
         System.out.printf("SWEEP 켬 후보=%d 문턱시총=%s 제외=%s%n", rOn.candidates(),
                 fmt(rOn.deduped().get(TOP_N - 1).marketCap()), rOn.excluded());
 

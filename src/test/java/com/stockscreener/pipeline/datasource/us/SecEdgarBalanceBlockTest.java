@@ -32,7 +32,7 @@ class SecEdgarBalanceBlockTest {
                 .formatted(start, end, val, accn, form, filed);
     }
 
-    private static RawFinancialReport latestFy(boolean usGate) throws Exception {
+    private static RawFinancialReport latestFy() throws Exception {
         String first = "0000000001-18-000001";
         String later = "0000000001-18-000009";
         // 10-K: 자산 1,000 · 부채 600 · 자본 400(섬). 뒤 10-K/A는 자본만 900으로 싣는다 — 이으면 부채 600 + 자본 900 > 자산 1,000.
@@ -49,17 +49,16 @@ class SecEdgarBalanceBlockTest {
                 fact("2017-12-31", 400_000_000L, first, "10-K", "2018-02-15"),
                 fact("2017-12-31", 900_000_000L, later, "10-K/A", "2018-05-01"));
         JsonNode facts = new ObjectMapper().readTree(json).path("facts");
-        List<RawFinancialReport> reports = SecEdgarFacts.build(facts, 2015, usGate).reports();
+        List<RawFinancialReport> reports = SecEdgarFacts.build(facts, 2015).reports();
         return reports.stream().filter(r -> r.fiscalYear() == 2017 && "FY".equals(r.fiscalPeriod()))
                 .max(Comparator.comparing(RawFinancialReport::publishedAt)).orElseThrow();
     }
 
     @Test
-    @DisplayName("관문 켬: 새 판이 잔액 블록을 깨면 앞 판 블록을 잇고 손익은 새 판 값을 받는다")
+    @DisplayName("새 판이 잔액 블록을 깨면 앞 판 블록을 잇고 손익은 새 판 값을 받는다")
     void brokenBalanceBlockKeepsThePreviousBlock() throws Exception {
-        RawFinancialReport on = latestFy(true);
+        RawFinancialReport on = latestFy();
         assertThat(on.totalEquity()).isEqualByComparingTo("400000000");
         assertThat(on.revenue()).isEqualByComparingTo("510");
-        assertThat(latestFy(false).totalEquity()).as("관문 꺼짐은 옛 출력 그대로").isEqualByComparingTo("900000000");
     }
 }

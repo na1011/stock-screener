@@ -114,7 +114,7 @@ class SecFilingSupplementWriteContractTest {
                 new SecFilingClient(factory, properties, limiter, base, base),
                 new SecFilingSupplementStore(jdbcTemplate));
         SecEdgarFinancialAdapter adapter = new SecEdgarFinancialAdapter(factory, properties, limiter,
-                new SecTickerCikCache(factory, properties, limiter, base, 1), base, false, supplement);
+                new SecTickerCikCache(factory, properties, limiter, base, 1), base, supplement);
         DataSourceRegistry registry = new DataSourceRegistry(List.of(), List.of(adapter), List.of(), List.of(),
                 List.of(), List.of(), List.of(), List.of(), List.of(), List.of());
         collector = new FinancialCollector(registry, writer, absenceWriter, jdbcTemplate);

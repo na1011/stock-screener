@@ -255,7 +255,7 @@ class DartFinancialAdapterTest {
     }
 
     @Test
-    @DisplayName("국내 관문 켬: 연결 FY와 별도 3분기 누계는 빼지 않는다 — 그 해 안에서 연결 대상이 생긴 회사")
+    @DisplayName("국내 연결 FY와 별도 3분기 누계는 빼지 않는다 — 그 해 안에서 연결 대상이 생긴 회사")
     void doesNotDeriveFourthQuarterAcrossStatementBases() throws Exception {
         server.setDispatcher(new Dispatcher() {
             @NotNull
@@ -277,13 +277,11 @@ class DartFinancialAdapterTest {
         properties.getDart().setApiKey("test-key");
         DartFinancialAdapter gated = new DartFinancialAdapter(new ExternalApiClientFactory(), properties,
                 new TokenBucketRateLimiter("dart", 0, 0), DartDailyQuota.unlimited(),
-                new StubCorpCodeCache(Optional.of("00126380")), true);
+                new StubCorpCodeCache(Optional.of("00126380")));
 
         RawFinancialReport q4 = findReport(gated.fetchReports(SAMSUNG, 2025).reports(), 2025, "Q4");
         assertThat(q4.revenue()).as("손익은 안 낸다").isNull();
         assertThat(q4.totalAssets()).as("잔액은 연말 잔액이라 그대로").isNotNull();
-        assertThat(findReport(newAdapter().fetchReports(SAMSUNG, 2025).reports(), 2025, "Q4").revenue())
-                .as("관문 꺼짐은 옛 출력 그대로").isNotNull();
     }
 
     /** reprt_code에 따라 연간·3분기 fixture를 나눠 준다. 나머지 기간은 데이터 없음. */

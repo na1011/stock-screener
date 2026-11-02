@@ -46,7 +46,7 @@ class StockReaderRestatedFlowTest {
                         CAST(? AS jsonb))
                 """, stockId, """
                 {"revenue": {"since": "2026-03-13", "restated": [["2026-03-13", "900"]]}, "operating_income": "2026-03-13"}""");
-        StockReader reader = new StockReader(jdbc, corporateActions, aliasIndex, false, true);
+        StockReader reader = new StockReader(jdbc, corporateActions, aliasIndex);
 
         List<StockReader.FinancialRow> rows = reader.financialsOf(stockId, 4);
 

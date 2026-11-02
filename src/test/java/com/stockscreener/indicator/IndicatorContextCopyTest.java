@@ -36,7 +36,6 @@ class IndicatorContextCopyTest {
             "withMarketIndex", "marketIndex",
             "withGovernanceFacts", "governanceFacts",
             "withEarningsReleaseDates", "earningsReleaseDates",
-            "withGateOn", "gateOn",
             "withSpinOffDates", "spinOffDates");
 
     @Test
@@ -45,13 +44,6 @@ class IndicatorContextCopyTest {
         IndicatorContext base = fullyPopulated();
         assertCarriesEverythingExcept(base, base.withDependencies(Map.of("OTHER", new TreeMap<>())),
                 "withDependencies");
-    }
-
-    @Test
-    @DisplayName("withGateOn이 나머지 필드를 전부 나른다")
-    void withGateOnCarriesEveryOtherField() throws Exception {
-        IndicatorContext base = fullyPopulated();
-        assertCarriesEverythingExcept(base, base.withGateOn(false), "withGateOn");
     }
 
     @Test
@@ -186,8 +178,6 @@ class IndicatorContextCopyTest {
                         new GovernanceValue(BigDecimal.valueOf(9), LocalDate.of(2026, 3, 10))))),
                 Map.of("PARENT", new TreeMap<>(index)),
                 List.of(LocalDate.of(2026, 4, 7)))
-                // 기본값(꺼짐)이 아닌 쪽으로 채워야 사본이 이 필드를 떨어뜨렸을 때 드러난다.
-                .withGateOn(true)
                 .withSpinOffDates(List.of(LocalDate.of(2024, 4, 2)));
     }
 

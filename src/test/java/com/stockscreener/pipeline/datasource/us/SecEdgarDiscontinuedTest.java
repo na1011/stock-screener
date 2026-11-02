@@ -26,10 +26,10 @@ class SecEdgarDiscontinuedTest {
 
     private static final int FROM = 2024;
 
-    private static List<RawFinancialReport> build(String fixture, boolean usGate) throws Exception {
+    private static List<RawFinancialReport> build(String fixture) throws Exception {
         Path path = Path.of("src/test/resources/fixtures/sec", fixture);
         JsonNode facts = new ObjectMapper().readTree(Files.readString(path, StandardCharsets.UTF_8)).path("facts");
-        return SecEdgarFacts.build(facts, FROM, usGate).reports();
+        return SecEdgarFacts.build(facts, FROM).reports();
     }
 
     private static RawFinancialReport latest(List<RawFinancialReport> reports, int fiscalYear, String period) {
@@ -40,20 +40,9 @@ class SecEdgarDiscontinuedTest {
     }
 
     @Test
-    @DisplayName("관문이 꺼지면 중단영업을 판정하지 않는다 — 세 칸이 비고 행은 이 축이 없던 때와 같다")
-    void gateOffLeavesTheAxisUnread() throws Exception {
-        assertThat(build("companyfacts-mlm-discontinued.json", false))
-                .allSatisfy(r -> {
-                    assertThat(r.discontinuedRule()).isNull();
-                    assertThat(r.discontinuedIncome()).isNull();
-                    assertThat(r.discontinuedIncomeControlling()).isNull();
-                });
-    }
-
-    @Test
     @DisplayName("Q4 중단영업은 FY − 같은 해 9개월 누계다 — 분기 원 공시에 중단 줄이 없어도 재분류 몫이 Q4로 몰리지 않는다(MLM 2025)")
     void fourthQuarterIsFiscalYearMinusNineMonths() throws Exception {
-        List<RawFinancialReport> reports = build("companyfacts-mlm-discontinued.json", true);
+        List<RawFinancialReport> reports = build("companyfacts-mlm-discontinued.json");
 
         RawFinancialReport q4 = latest(reports, 2025, "Q4");
         assertThat(q4.discontinuedRule()).isEqualByComparingTo("1");
@@ -66,7 +55,7 @@ class SecEdgarDiscontinuedTest {
     @Test
     @DisplayName("10-K 분기 표가 연결 몫만 쪼개면 지배 몫은 같은 기간의 잔차(FY − 9개월) 것이다(PAA 2025 Q4)")
     void controllingShareComesFromTheResidualWhenTheQuarterlyTableOmitsIt() throws Exception {
-        List<RawFinancialReport> reports = build("companyfacts-paa-discontinued.json", true);
+        List<RawFinancialReport> reports = build("companyfacts-paa-discontinued.json");
 
         RawFinancialReport q4 = latest(reports, 2025, "Q4");
         assertThat(q4.discontinuedIncome()).isEqualByComparingTo("102000000");
@@ -77,7 +66,7 @@ class SecEdgarDiscontinuedTest {
     @Test
     @DisplayName("중단 재료가 하나도 없는 라벨은 0이다 — 「읽었고 줄이 없다」")
     void noDiscontinuedLineIsZero() throws Exception {
-        RawFinancialReport q1 = build("companyfacts-mlm-discontinued.json", true).stream()
+        RawFinancialReport q1 = build("companyfacts-mlm-discontinued.json").stream()
                 .filter(r -> r.fiscalYear() == 2024 && "Q1".equals(r.fiscalPeriod()))
                 .findFirst().orElseThrow();
 

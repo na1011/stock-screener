@@ -104,20 +104,16 @@ class KrCommonIncomeDeriverTest {
     }
 
     @Test
-    @DisplayName("판독기 — 국내 관문 켬은 보통주 몫을 읽고 · 행이 바뀌면(스냅숏 갈림) 붙은 것 없음 · 관문 꺼짐은 이 규칙으로 안 읽는다")
+    @DisplayName("판독기 — 보통주 몫을 읽고 · 행이 바뀌면(스냅숏 갈림) 붙은 것 없음")
     void readerHonoursTheGateAndTheSnapshot() {
         deriver.derive();
-        IndicatorDataReader on = new IndicatorDataReader(jdbc, ledger, shareClasses, false, true);
-        IndicatorDataReader off = new IndicatorDataReader(jdbc, ledger, shareClasses, false, false);
+        IndicatorDataReader on = new IndicatorDataReader(jdbc, ledger, shareClasses);
         LocalDate asOf = LocalDate.of(2026, 4, 1);
 
         List<FinancialFigures> read = on.readQuarterlyFigures(stockId, asOf, 1, FinancialVisibility.LATEST);
         FinancialFigures q4 = read.stream().filter(f -> f.fiscalPeriod() == FinancialFigures.FiscalPeriod.Q4).findFirst().orElseThrow();
         assertThat(q4.readsCommonIncome()).isTrue();
         assertThat(q4.commonContinuingIncome()).isEqualByComparingTo("3600000000");
-
-        assertThat(off.readQuarterlyFigures(stockId, asOf, 1, FinancialVisibility.LATEST))
-                .allSatisfy(f -> assertThat(f.readsCommonIncome()).isFalse());
 
         // 같은 행의 지배 NI를 매퍼 교정이 바꿨는데 유도가 아직 안 돌았다 — 옛 몫을 안 읽는다.
         jdbc.update("UPDATE financial_statement SET net_income_controlling = 3100000000 WHERE stock_id = ? AND fiscal_period = 'Q3'",

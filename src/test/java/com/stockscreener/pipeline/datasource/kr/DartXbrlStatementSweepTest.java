@@ -60,7 +60,7 @@ class DartXbrlStatementSweepTest {
         TokenBucketRateLimiter limiter = new TokenBucketRateLimiter("dart", Integer.MAX_VALUE / 2, 0);
         DartDailyQuota quota = new DartDailyQuota(0, Clock.systemDefaultZone());
         DartFullStatementAdapter full = new DartFullStatementAdapter(http, properties, limiter, quota,
-                new DartCorpCodeCache(http, properties, limiter, quota), true);
+                new DartCorpCodeCache(http, properties, limiter, quota));
         ObjectMapper json = new ObjectMapper();
         Map<String, int[]> tally = new TreeMap<>();
         int[] files = new int[6];
@@ -183,7 +183,7 @@ class DartXbrlStatementSweepTest {
         TokenBucketRateLimiter limiter = new TokenBucketRateLimiter("dart", Integer.MAX_VALUE / 2, 0);
         DartDailyQuota quota = new DartDailyQuota(0, Clock.systemDefaultZone());
         DartFullStatementAdapter full = new DartFullStatementAdapter(http, properties, limiter, quota,
-                new DartCorpCodeCache(http, properties, limiter, quota), true, instances);
+                new DartCorpCodeCache(http, properties, limiter, quota), instances);
         Map<String, String> column = new java.util.LinkedHashMap<>();
         for (String c : List.of("revenue", "operating_income", "net_income", "total_assets", "total_equity", "total_equity_controlling",
                 "total_liabilities", "current_assets", "current_liabilities", "retained_earnings", "operating_cash_flow", "cost_of_sales",

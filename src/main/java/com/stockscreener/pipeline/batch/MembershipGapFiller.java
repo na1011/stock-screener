@@ -138,7 +138,6 @@ public class MembershipGapFiller {
     private final BatchExecutionReader batchExecutionReader;
     private final KrXbrlCollectJob krXbrlCollectJob;
     private final KrCommonIncomeDeriver krCommonIncomeDeriver;
-    private final boolean krGate;
 
     public MembershipGapFiller(StockRegistrar stockRegistrar, InitialLoadJob initialLoadJob,
                                CompanyProfileJob companyProfileJob,
@@ -148,11 +147,9 @@ public class MembershipGapFiller {
                                UniverseIntegrityAlerter alerter, AlertPort alertPort,
                                BatchExecutionReader batchExecutionReader,
                                KrXbrlCollectJob krXbrlCollectJob,
-                               KrCommonIncomeDeriver krCommonIncomeDeriver,
-                               @org.springframework.beans.factory.annotation.Value("${stockscreener.gate.kr}") boolean krGate) {
+                               KrCommonIncomeDeriver krCommonIncomeDeriver) {
         this.krXbrlCollectJob = krXbrlCollectJob;
         this.krCommonIncomeDeriver = krCommonIncomeDeriver;
-        this.krGate = krGate;
         this.stockRegistrar = stockRegistrar;
         this.initialLoadJob = initialLoadJob;
         this.companyProfileJob = companyProfileJob;
@@ -426,12 +423,12 @@ public class MembershipGapFiller {
             // 보존 창 전체를 다시 쓰기 때문이다. 백필을 붙이면 그 일을 두 번 한다.
             fullStatementRefillJob.run(asOf, triggeredBy, null, cashFlowTickers, true, false);
         }
-        // 방금 재무를 채운 국내 새 편입의 보통주 몫 재료(ADR-0192)를 받고, 관문이 켜졌으면 그 자리에서 붙인다 — 안 그러면 다음 평일
+        // 방금 재무를 채운 국내 새 편입의 보통주 몫 재료(ADR-0192)를 받고 그 자리에서 붙인다 — 안 그러면 다음 평일
         // 14:16 받기 · 14:18 유도까지 그 종목의 주당 지표가 13:30 일일 갱신에서 빈다. 재료 받기는 값을 안 바꾼다.
         Set<String> statementTickers = new LinkedHashSet<>(financialTickers);
         statementTickers.addAll(cashFlowTickers);
         if (!statementTickers.isEmpty()
-                && krXbrlCollectJob.runForLoadedStatements(asOf, triggeredBy, List.copyOf(statementTickers)) != null && krGate) {
+                && krXbrlCollectJob.runForLoadedStatements(asOf, triggeredBy, List.copyOf(statementTickers)) != null) {
             krCommonIncomeDeriver.derive();
         }
 

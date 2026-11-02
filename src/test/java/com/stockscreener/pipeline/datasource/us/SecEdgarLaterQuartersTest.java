@@ -26,7 +26,7 @@ class SecEdgarLaterQuartersTest {
                 .formatted(start, end, val, accn, fy, fp, form, filed);
     }
 
-    private static List<RawFinancialReport> build(boolean usGate) throws Exception {
+    private static List<RawFinancialReport> build() throws Exception {
         String revenues = String.join(",",
                 fact("2017-01-01", "2017-03-31", 1_200 * M, "0000000001-17-000001", "10-Q", "Q1", 2017, "2017-04-25"),
                 fact("2017-04-01", "2017-06-30", 1_265 * M, "0000000001-17-000002", "10-Q", "Q2", 2017, "2017-07-25"),
@@ -38,18 +38,16 @@ class SecEdgarLaterQuartersTest {
                 fact("2017-01-01", "2017-03-31", 700 * M, "0000000001-18-000001", "10-Q", "Q1", 2018, "2018-04-24"));
         JsonNode facts = new ObjectMapper().readTree("{\"facts\":{\"us-gaap\":{\"Revenues\":{\"units\":{\"USD\":[" + revenues + "]}}}}}")
                 .path("facts");
-        return SecEdgarFacts.build(facts, 2015, usGate).reports();
+        return SecEdgarFacts.build(facts, 2015).reports();
     }
 
     @Test
-    @DisplayName("앞 분기가 1% 넘게 다시 실린 날 — 같은 해 뒤 분기의 그 열은 그날부터 모른다(부재 판정) · 관문 꺼짐은 옛 기저 그대로")
+    @DisplayName("앞 분기가 1% 넘게 다시 실린 날 — 같은 해 뒤 분기의 그 열은 그날부터 모른다(부재 판정)")
     void laterQuarterIsUnknownFromTheRestatementDay() throws Exception {
-        RawFinancialReport q2 = build(true).stream()
+        RawFinancialReport q2 = build().stream()
                 .filter(r -> r.fiscalYear() == 2017 && "Q2".equals(r.fiscalPeriod()) && r.publishedAt().equals(LocalDate.of(2018, 4, 24)))
                 .findFirst().orElseThrow();
         assertThat(q2.revenue()).isNull();
         assertThat(q2.assertedAbsent()).contains("revenue");
-        assertThat(build(false)).as("관문 꺼짐")
-                .noneMatch(r -> r.fiscalYear() == 2017 && "Q2".equals(r.fiscalPeriod()) && r.publishedAt().equals(LocalDate.of(2018, 4, 24)));
     }
 }

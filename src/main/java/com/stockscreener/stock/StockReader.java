@@ -42,19 +42,12 @@ public class StockReader {
     private final JdbcTemplate jdbcTemplate;
     private final CorporateActionLedger corporateActions;
     private final StockAliasIndex aliasIndex;
-    /** 시장마다 관문(F2b) — 그 종목 시장의 관문이 켜졌을 때만 재무 탭에 중단영업 칸을 읽는다(컬럼이 관문 마이그레이션과 함께 생긴다). */
-    private final boolean usGate;
-    private final boolean krGate;
 
     public StockReader(JdbcTemplate jdbcTemplate, CorporateActionLedger corporateActions,
-                       StockAliasIndex aliasIndex,
-                       @org.springframework.beans.factory.annotation.Value("${stockscreener.gate.us}") boolean usGate,
-                       @org.springframework.beans.factory.annotation.Value("${stockscreener.gate.kr}") boolean krGate) {
+                       StockAliasIndex aliasIndex) {
         this.jdbcTemplate = jdbcTemplate;
         this.corporateActions = corporateActions;
         this.aliasIndex = aliasIndex;
-        this.usGate = usGate;
-        this.krGate = krGate;
     }
 
     /**
@@ -172,18 +165,14 @@ public class StockReader {
      */
     @Transactional(readOnly = true)
     public List<FinancialRow> financialsOf(long stockId, int limit) {
-        boolean discontinued = false;
-        boolean us = false;
-        if (usGate || krGate) {
-            List<String> market = jdbcTemplate.queryForList(
-                    "SELECT market_code FROM stock WHERE id = ?", String.class, stockId);
-            us = !market.isEmpty() && "US".equals(market.get(0));
-            discontinued = !market.isEmpty() && (us ? usGate : krGate);
-        }
-        boolean withDiscontinued = discontinued;
-        // 관문 켬 — 보통주 귀속 순이익(미국 ADR-0191 · 국내 ADR-0192)을 함께 읽는다. 원장이 값으로 정한 중단 포함 몫만(배분 0이면
+        // 시장을 아는 종목만 재무 탭에 중단영업 칸(F2b)을 읽는다.
+        List<String> market = jdbcTemplate.queryForList(
+                "SELECT market_code FROM stock WHERE id = ?", String.class, stockId);
+        boolean us = !market.isEmpty() && "US".equals(market.get(0));
+        boolean withDiscontinued = !market.isEmpty();
+        // 보통주 귀속 순이익(미국 ADR-0191 · 국내 ADR-0192)을 함께 읽는다. 원장이 값으로 정한 중단 포함 몫만(배분 0이면
         // 순이익과 같아 안 그린다 · 계속영업 몫이면 순이익과 기저가 달라 안 그린다).
-        // 국내 관문 켬(ADR-0192)도 같다 — 낡음 열쇠는 지표와 같은 행 스냅숏이고(국내 report_code는 판을 안 가른다), 배분 0(kr-ni)은
+        // 국내(ADR-0192)도 같다 — 낡음 열쇠는 지표와 같은 행 스냅숏이고(국내 report_code는 판을 안 가른다), 배분 0(kr-ni)은
         // 값이 순이익과 같아 안 그린다.
         boolean withCommon = withDiscontinued;
         String commonMatch = us

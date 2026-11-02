@@ -43,29 +43,23 @@ class DiscontinuedGateTest {
     private ShareClassStore shareClasses;
 
     @Test
-    @DisplayName("미국 관문만 켜면 미국 행만 중단영업을 싣고 국내 행은 그대로다 — 반대도 같다")
+    @DisplayName("미국 행과 국내 행이 모두 중단영업을 싣는다")
     void eachMarketReadsOnlyBehindItsOwnGate() {
         long us = insertStock("US", "ZZD1", "미국 중단영업");
         long kr = insertStock("KOSPI", "999981", "국내 중단영업");
         insertAnnual(us, "USD");
         insertAnnual(kr, "KRW");
 
-        IndicatorDataReader usOnly = reader(true, false);
-        IndicatorDataReader krOnly = reader(false, true);
-        IndicatorDataReader off = reader(false, false);
+        IndicatorDataReader reader = reader();
 
-        assertThat(discontinued(usOnly, us)).isEqualByComparingTo("120");
-        assertThat(discontinued(usOnly, kr)).as("국내 관문이 꺼졌다").isNull();
-        assertThat(discontinued(krOnly, kr)).isEqualByComparingTo("120");
-        assertThat(discontinued(krOnly, us)).as("미국 관문이 꺼졌다").isNull();
-        assertThat(discontinued(off, us)).isNull();
-        assertThat(discontinued(off, kr)).isNull();
-        assertThat(usOnly.readAnnualFigures(us, AS_OF, 5, FinancialVisibility.KNOWN_ON).get(0)
+        assertThat(discontinued(reader, us)).isEqualByComparingTo("120");
+        assertThat(discontinued(reader, kr)).isEqualByComparingTo("120");
+        assertThat(reader.readAnnualFigures(us, AS_OF, 5, FinancialVisibility.KNOWN_ON).get(0)
                 .discontinuedIncomeControlling()).as("시점 경로도 같은 컬럼을 싣는다").isEqualByComparingTo("100");
     }
 
     @Test
-    @DisplayName("국내 관문 켬 — 공시일은 공시 목록의 접수일이다: 금요일 밤에 낸 사업보고서는 월요일 봉부터 보인다 · 관문 꺼짐은 그대로")
+    @DisplayName("국내 — 공시일은 공시 목록의 접수일이다: 금요일 밤에 낸 사업보고서는 월요일 봉부터 보인다")
     void domesticPublicationIsTheReceiptDate() {
         long kr = insertStock("KOSPI", "999982", "국내 접수일");
         jdbcTemplate.update("""
@@ -79,18 +73,16 @@ class DiscontinuedGateTest {
                 VALUES ('20260313900123', ?, '00000001', 'A001', '사업보고서 (2025.12)', '2026-03-16', 2025, '11011')
                 """, kr);
 
-        IndicatorDataReader krOnly = reader(false, true);
-        assertThat(krOnly.readAnnualFigures(kr, LocalDate.of(2026, 3, 14), 5, FinancialVisibility.KNOWN_ON))
+        IndicatorDataReader reader = reader();
+        assertThat(reader.readAnnualFigures(kr, LocalDate.of(2026, 3, 14), 5, FinancialVisibility.KNOWN_ON))
                 .as("토요일 봉은 아직 공개 전").isEmpty();
-        FinancialFigures monday = krOnly.readAnnualFigures(kr, LocalDate.of(2026, 3, 16), 5, FinancialVisibility.KNOWN_ON).get(0);
+        FinancialFigures monday = reader.readAnnualFigures(kr, LocalDate.of(2026, 3, 16), 5, FinancialVisibility.KNOWN_ON).get(0);
         assertThat(monday.visibleOn()).as("보이는 날 = 접수일(게시 시각 모름 → 공시일 다음 날보다 접수일이 늦다)").isEqualTo(LocalDate.of(2026, 3, 16));
         assertThat(monday.publishedAt()).as("앵커는 저장 공시일(설계 v3)").isEqualTo(LocalDate.of(2026, 3, 13));
-        assertThat(reader(false, false).readAnnualFigures(kr, LocalDate.of(2026, 3, 14), 5, FinancialVisibility.KNOWN_ON))
-                .as("관문 꺼짐은 저장 공시일 그대로").hasSize(1);
     }
 
     @Test
-    @DisplayName("국내 관문 켬 — 거버넌스 사실도 공시 목록의 접수일부터 보인다(배당성향 분자 · 분모의 공개일을 맞춘다) · 관문 꺼짐은 그대로")
+    @DisplayName("국내 — 거버넌스 사실도 공시 목록의 접수일부터 보인다(배당성향 분자 · 분모의 공개일을 맞춘다)")
     void domesticGovernanceIsTheReceiptDate() {
         long kr = insertStock("KOSPI", "999983", "국내 거버넌스 접수일");
         jdbcTemplate.update("""
@@ -102,25 +94,22 @@ class DiscontinuedGateTest {
                 VALUES ('20260313900124', ?, '00000002', 'A001', '사업보고서 (2025.12)', '2026-03-16', 2025, '11011')
                 """, kr);
         // 보이는 날은 값이 싣고(GovernanceMath가 봉마다 거른다) 저장 공시일은 앵커로 남는다(설계 v3).
-        GovernanceValue gated = reader(false, true).readGovernanceFacts(kr, LocalDate.of(2026, 3, 14), 3, FinancialVisibility.KNOWN_ON)
+        GovernanceValue gated = reader().readGovernanceFacts(kr, LocalDate.of(2026, 3, 14), 3, FinancialVisibility.KNOWN_ON)
                 .get(0).get(GovernanceMetric.DPS_COMMON);
         assertThat(gated.visibleOn()).as("공개 시각을 모르면 접수일(월)보다 이르지 않다").isEqualTo(LocalDate.of(2026, 3, 16));
         assertThat(gated.publishedAt()).as("앵커는 저장 공시일").isEqualTo(LocalDate.of(2026, 3, 13));
-        GovernanceValue off = reader(false, false).readGovernanceFacts(kr, LocalDate.of(2026, 3, 14), 3, FinancialVisibility.KNOWN_ON)
-                .get(0).get(GovernanceMetric.DPS_COMMON);
-        assertThat(off.visibleOn()).as("관문 꺼짐은 그대로(공시일)").isEqualTo(LocalDate.of(2026, 3, 13));
 
         // 게시 시각을 알면 그 시각 뒤 처음 마감하는 세션 — 금 15:40 KST 게시는 그날 종가 뒤라 다음 날(접수일 월보다 이르면 접수일).
         jdbcTemplate.update("""
                 INSERT INTO kr_filing_time (rcept_no, corp_code, corp_name, report_name, listed_on, opened_at)
                 VALUES ('20260313900124', '00000002', '국내 거버넌스 접수일', '사업보고서 (2025.12)', '2026-03-13', '2026-03-13 15:40:59+09')
                 """);
-        assertThat(reader(false, true).readGovernanceFacts(kr, LocalDate.of(2026, 3, 16), 3, FinancialVisibility.KNOWN_ON)
+        assertThat(reader().readGovernanceFacts(kr, LocalDate.of(2026, 3, 16), 3, FinancialVisibility.KNOWN_ON)
                 .get(0).get(GovernanceMetric.DPS_COMMON).visibleOn()).isEqualTo(LocalDate.of(2026, 3, 16));
     }
 
     @Test
-    @DisplayName("미국 관문 켬 — 재무 판은 접수 시각 뒤 처음 마감하는 세션부터 보인다 · 앵커는 저장 공시일 · 시각을 모르면 다음 날 · 관문 꺼짐은 공시일")
+    @DisplayName("미국 — 재무 판은 접수 시각 뒤 처음 마감하는 세션부터 보인다 · 앵커는 저장 공시일 · 시각을 모르면 다음 날")
     void usFinancialsAreVisibleAfterTheFirstCloseFollowingAcceptance() {
         long us = insertStock("US", "ZZA1", "미국 접수 시각");
         jdbcTemplate.update("""
@@ -130,16 +119,14 @@ class DiscontinuedGateTest {
                 VALUES (?, 2024, 'FY', '2023-07-01', '2024-06-30', '2024-07-30', 0, true, 'USD', 1000, '2024-07-30 20:06:00+00'),
                        (?, 2023, 'FY', '2022-07-01', '2023-06-30', '2023-07-27', 0, true, 'USD', 900, NULL)
                 """, us, us);
-        List<FinancialFigures> on = reader(true, false).readAnnualFigures(us, LocalDate.of(2024, 7, 30), 5, FinancialVisibility.KNOWN_ON);
+        List<FinancialFigures> on = reader().readAnnualFigures(us, LocalDate.of(2024, 7, 30), 5, FinancialVisibility.KNOWN_ON);
         assertThat(on.get(0).visibleOn()).as("16:06 ET 접수 → 다음 날(달력에 없으면 13:00 마감으로)").isEqualTo(LocalDate.of(2024, 7, 31));
         assertThat(on.get(0).publishedAt()).as("앵커").isEqualTo(LocalDate.of(2024, 7, 30));
         assertThat(on.get(1).visibleOn()).as("시각 모름 → 공시일 다음 날").isEqualTo(LocalDate.of(2023, 7, 28));
-        assertThat(reader(false, false).readAnnualFigures(us, LocalDate.of(2024, 7, 30), 5, FinancialVisibility.KNOWN_ON).get(0).visibleOn())
-                .as("관문 꺼짐").isEqualTo(LocalDate.of(2024, 7, 30));
     }
 
     @Test
-    @DisplayName("국내 관문 켬 — 기저 대체일은 뒤 보고서가 보이는 날로 옮긴다(16:10 게시 → 다음 날 · ADR-0204)")
+    @DisplayName("국내 — 기저 대체일은 뒤 보고서가 보이는 날로 옮긴다(16:10 게시 → 다음 날 · ADR-0204)")
     void domesticSupersessionMovesToTheReportsVisibleDay() {
         long kr = insertStock("KOSPI", "999981", "국내 기저 대체");
         jdbcTemplate.update("""
@@ -157,14 +144,12 @@ class DiscontinuedGateTest {
                 INSERT INTO kr_filing_time (rcept_no, corp_code, corp_name, report_name, listed_on, opened_at)
                 VALUES ('20260313000777', '00000003', '국내 기저 대체', '사업보고서 (2025.12)', '2026-03-13', '2026-03-13 16:10:59+09')
                 """);
-        FinancialFigures row = reader(false, true).readAnnualFigures(kr, LocalDate.of(2026, 3, 20), 5, FinancialVisibility.KNOWN_ON).get(0);
+        FinancialFigures row = reader().readAnnualFigures(kr, LocalDate.of(2026, 3, 20), 5, FinancialVisibility.KNOWN_ON).get(0);
         assertThat(row.flowsSupersededOn().get("revenue").since()).isEqualTo(LocalDate.of(2026, 3, 14));
-        assertThat(reader(false, false).readAnnualFigures(kr, LocalDate.of(2026, 3, 20), 5, FinancialVisibility.KNOWN_ON).get(0)
-                .flowsSupersededOn()).as("관문 꺼짐은 안 읽는다").isEmpty();
     }
 
     @Test
-    @DisplayName("국내 관문 켬 — 실적 발표는 DART 게시 시각으로 막는 날을 정한다(16:05 → 다음 날 · 모르면 접수일 · 관문 꺼짐은 저장 효력일)")
+    @DisplayName("국내 — 실적 발표는 DART 게시 시각으로 막는 날을 정한다(16:05 → 다음 날 · 모르면 접수일)")
     void domesticReleaseBlocksFromItsPostingTime() {
         long kr = insertStock("KOSPI", "999980", "국내 잠정실적");
         jdbcTemplate.update("UPDATE stock SET accounting_month = 12 WHERE id = ?", kr);
@@ -178,14 +163,12 @@ class DiscontinuedGateTest {
                 VALUES ('20260130800501', '00000004', '국내 잠정실적', '연결재무제표기준영업(잠정)실적(공정공시)', '2026-01-30',
                         '2026-01-30 16:05:59+09')
                 """);
-        assertThat(reader(false, true).readEarningsReleaseDates(kr, LocalDate.of(2026, 5, 1)))
+        assertThat(reader().readEarningsReleaseDates(kr, LocalDate.of(2026, 5, 1)))
                 .containsExactly(LocalDate.of(2026, 1, 31), LocalDate.of(2026, 4, 30));
-        assertThat(reader(false, false).readEarningsReleaseDates(kr, LocalDate.of(2026, 5, 1)))
-                .containsExactly(LocalDate.of(2026, 1, 30), LocalDate.of(2026, 4, 30));
     }
 
     @Test
-    @DisplayName("국내 관문 켬 — 잇는 접수번호가 없는 판은 그 회사가 그 공시일 목록에 올린 정기 보고서의 게시 시각으로 본다")
+    @DisplayName("국내 — 잇는 접수번호가 없는 판은 그 회사가 그 공시일 목록에 올린 정기 보고서의 게시 시각으로 본다")
     void domesticUnlinkedVintageFallsBackToTheCompanysListing() {
         long kr = insertStock("KOSPI", "999979", "국내 접수번호 없음");
         jdbcTemplate.update("""
@@ -203,12 +186,12 @@ class DiscontinuedGateTest {
                 INSERT INTO kr_filing_time (rcept_no, corp_code, corp_name, report_name, listed_on, opened_at)
                 VALUES ('20250514000999', '00000005', '국내 접수번호 없음', '분기보고서 (2025.03)', '2025-05-14', '2025-05-14 17:02:59+09')
                 """);
-        assertThat(reader(false, true).readQuarterlyFigures(kr, LocalDate.of(2025, 6, 1), 4, FinancialVisibility.KNOWN_ON).get(0).visibleOn())
+        assertThat(reader().readQuarterlyFigures(kr, LocalDate.of(2025, 6, 1), 4, FinancialVisibility.KNOWN_ON).get(0).visibleOn())
                 .isEqualTo(LocalDate.of(2025, 5, 15));
     }
 
-    private IndicatorDataReader reader(boolean usGate, boolean krGate) {
-        return new IndicatorDataReader(jdbcTemplate, corporateActions, shareClasses, usGate, krGate);
+    private IndicatorDataReader reader() {
+        return new IndicatorDataReader(jdbcTemplate, corporateActions, shareClasses);
     }
 
     private static BigDecimal discontinued(IndicatorDataReader reader, long stockId) {

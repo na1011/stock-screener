@@ -92,7 +92,7 @@ public interface StoredShareCounts {
     }
 
     /**
-     * 주식수 클래스 축의 편입 보류 재료(미국 관문이 켜졌을 때만 — 아니면 빈 맵 · 탐색 {@code SHARES-CLASS-PLAN-V5-1015.md}
+     * 주식수 클래스 축의 편입 보류 재료(미국만 — 아니면 빈 맵 · 탐색 {@code SHARES-CLASS-PLAN-V5-1015.md}
      * §10b-1·§10e). 그날 상태가 보임이 아닌 줄만 — 티커 → 상태 · 보류 시총에 쓸 주식수 · 거름 재료.
      *
      * <p>{@link #activeByMarket}은 숨긴 줄을 안 낸다(값이 없다). 보류는 그 줄이 <b>앞 편입</b>이고 {@code HELD}일 때
@@ -104,7 +104,7 @@ public interface StoredShareCounts {
     }
 
     /**
-     * 판마다 예탁 비율(ADR-0183)로 주식수가 이미 ADS 단위인 종목 — 행 기저가 {@code DEPOSITARY}다. 관문 켬 순위는 이 종목을 표지 판정
+     * 판마다 예탁 비율(ADR-0183)로 주식수가 이미 ADS 단위인 종목 — 행 기저가 {@code DEPOSITARY}다. 순위는 이 종목을 표지 판정
      * (A′)에 다시 안 넘기고 과거 평면도 이름으로 안 뺀다. 그 밖의 예탁증권은 지금처럼 닫힌 쪽(뺌)으로 다룬다.
      */
     default java.util.Set<Long> depositaryStocks(String marketCode) {

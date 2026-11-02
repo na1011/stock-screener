@@ -70,12 +70,21 @@ class SecEdgarIncomeBasisTest {
     }
 
     @Test
-    @DisplayName("유도한 4분기도 두 컬럼을 다 만든다")
+    @DisplayName("유도한 4분기도 두 컬럼을 다 만든다 — 그 해 FY와 분기 셋이 지배주주를 실었으면")
     void fourthQuarterCarriesBothColumns() throws Exception {
-        List<RawFinancialReport> q4 = build().reports().stream()
+        List<RawFinancialReport> reports = build().reports();
+        // Q4 지배주주는 FY 지배주주 − 분기 지배주주 합이다(controllingIncomeQ4) — 그 해 재료가 지배주주를 다 실었을 때만 선다.
+        // 관문 전에는 연결 뺄셈으로 늘 채웠다(지배주주 = 연결 — 그 결함을 관문이 고쳤다 · 2026-11-03 관문 설정 걷기).
+        java.util.function.Predicate<RawFinancialReport> controllingYear = q -> java.util.stream.Stream.of("FY", "Q1", "Q2", "Q3")
+                .allMatch(p -> reports.stream().anyMatch(r -> r.fiscalYear() == q.fiscalYear() && p.equals(r.fiscalPeriod()))
+                        && reports.stream().filter(r -> r.fiscalYear() == q.fiscalYear() && p.equals(r.fiscalPeriod()))
+                                .allMatch(r -> r.netIncomeControlling() != null));
+        List<RawFinancialReport> q4 = reports.stream()
                 .filter(r -> "Q4".equals(r.fiscalPeriod()))
                 .filter(r -> r.netIncome() != null)
+                .filter(controllingYear)
                 .toList();
+        assertThat(q4).as("재료가 다 선 4분기가 하나도 없으면 이 시험은 아무것도 안 잰다").isNotEmpty();
         // Q4가 한쪽만 채우면 TTM 창에서 sumControllingContinuingIncome이 창 단위로 연결 합에
         // 떨어진다 — 편입 미국 983종목 중 960(97.7%)의 최신 창에 Q4 행이 든다.
         for (RawFinancialReport row : q4) {

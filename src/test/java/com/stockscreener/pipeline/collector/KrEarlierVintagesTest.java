@@ -66,9 +66,9 @@ class KrEarlierVintagesTest {
     }
 
     @Test
-    @DisplayName("국내 관문 켬 — 복사본은 원천을 적고 매 실행 원천 값으로 다시 맞춘다(관문 재적재가 원천에 채운 칸이 복사본에도 온다)")
+    @DisplayName("복사본은 원천을 적고 매 실행 원천 값으로 다시 맞춘다(관문 재적재가 원천에 채운 칸이 복사본에도 온다)")
     void gatedCopiesFollowTheirSource() {
-        KrEarlierVintages gated = new KrEarlierVintages(jdbc, new FinancialWriter(jdbc, new NoOpIndicatorInvalidationPort()), true);
+        KrEarlierVintages gated = new KrEarlierVintages(jdbc, new FinancialWriter(jdbc, new NoOpIndicatorInvalidationPort()));
         annual(LocalDate.of(2026, 6, 19));
         filing("20260313001191", LocalDate.of(2026, 3, 13), SAME);
         filing("20260619000667", LocalDate.of(2026, 6, 19), SAME);
@@ -82,9 +82,9 @@ class KrEarlierVintagesTest {
     }
 
     @Test
-    @DisplayName("국내 관문 켬 — FY 판에 같은 날 4분기 판이 없으면 FY − 그날 보이던 1~3분기로 짓는다(잔액은 그 FY 판 · 뒤에 낸 정정 분기는 안 쓴다)")
+    @DisplayName("FY 판에 같은 날 4분기 판이 없으면 FY − 그날 보이던 1~3분기로 짓는다(잔액은 그 FY 판 · 뒤에 낸 정정 분기는 안 쓴다)")
     void gatedRestoresTheFourthQuarterOfEveryAnnualVintage() {
-        KrEarlierVintages gated = new KrEarlierVintages(jdbc, new FinancialWriter(jdbc, new NoOpIndicatorInvalidationPort()), true);
+        KrEarlierVintages gated = new KrEarlierVintages(jdbc, new FinancialWriter(jdbc, new NoOpIndicatorInvalidationPort()));
         jdbc.update("""
                 INSERT INTO financial_statement (stock_id, fiscal_year, fiscal_period, period_start, period_end, published_at,
                     revision_no, is_latest, report_code, currency_code, net_income, total_assets)
@@ -118,11 +118,11 @@ class KrEarlierVintagesTest {
     }
 
     @Test
-    @DisplayName("국내 관문 켬 — FY 판 날짜의 소스 4분기 이른 판은 빈 유량 칸만 같은 항등식으로 채운다(무효화는 안 한다 — 화해가 덮는다)")
+    @DisplayName("FY 판 날짜의 소스 4분기 이른 판은 빈 유량 칸만 같은 항등식으로 채운다(무효화는 안 한다 — 화해가 덮는다)")
     void gatedFillsTheEmptyFlowsOfASourceFourthQuarterVintage() {
         List<String> invalidations = new java.util.ArrayList<>();
         KrEarlierVintages gated = new KrEarlierVintages(jdbc, new FinancialWriter(jdbc,
-                (stock, from, reason) -> invalidations.add(from.toString())), true);
+                (stock, from, reason) -> invalidations.add(from.toString())));
         jdbc.update("""
                 INSERT INTO financial_statement (stock_id, fiscal_year, fiscal_period, period_start, period_end, published_at,
                     revision_no, is_latest, report_code, currency_code, net_income, net_income_controlling)
@@ -145,7 +145,7 @@ class KrEarlierVintagesTest {
     }
 
     @Test
-    @DisplayName("관문 꺼짐 · 1~3분기가 다 안 보이면 4분기 판을 짓지 않는다")
+    @DisplayName("1~3분기가 다 안 보이면 4분기 판을 짓지 않는다")
     void doesNotRestoreWithoutTheGateOrTheQuarters() {
         jdbc.update("""
                 INSERT INTO financial_statement (stock_id, fiscal_year, fiscal_period, period_start, period_end, published_at,
@@ -159,8 +159,8 @@ class KrEarlierVintagesTest {
                 """, stockId, stockId, stockId, stockId, stockId, stockId);
 
         earlier.insert(stockId);
-        assertThat(vintages("Q4")).as("관문 꺼짐").containsExactly("2026-06-19 0 true 2100");
-        KrEarlierVintages gated = new KrEarlierVintages(jdbc, new FinancialWriter(jdbc, new NoOpIndicatorInvalidationPort()), true);
+        assertThat(vintages("Q4")).containsExactly("2026-06-19 0 true 2100");
+        KrEarlierVintages gated = new KrEarlierVintages(jdbc, new FinancialWriter(jdbc, new NoOpIndicatorInvalidationPort()));
         assertThat(gated.restoreFourthQuarters(stockId)).as("03-13엔 3분기가 아직 없다").isZero();
     }
 

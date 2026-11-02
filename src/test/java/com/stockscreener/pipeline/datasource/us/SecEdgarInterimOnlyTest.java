@@ -29,9 +29,9 @@ class SecEdgarInterimOnlyTest {
 
     private static final Path FIXTURE = Path.of("src/test/resources/fixtures/sec/companyfacts-xom-successor-interim-only.json");
 
-    private static List<RawFinancialReport> build(String json, boolean usGate, Integer fiscalYearEndMonth) throws Exception {
+    private static List<RawFinancialReport> build(String json, Integer fiscalYearEndMonth) throws Exception {
         JsonNode facts = new ObjectMapper().readTree(json).path("facts");
-        return SecEdgarFacts.build(facts, 2018, usGate, CoverUnitJudge.Result.NONE,
+        return SecEdgarFacts.build(facts, 2018, CoverUnitJudge.Result.NONE,
                 new IssuerProfile.Profile(fiscalYearEndMonth, null)).reports();
     }
 
@@ -42,25 +42,23 @@ class SecEdgarInterimOnlyTest {
     @Test
     @DisplayName("10-Q 하나뿐인 등록인도 그 분기 보고서를 낸다 — 반기 누계 2026-01-01이 회계연도 시작이고 끝 12-31이 선언 결산월 12와 맞는다")
     void interimOnlyRegistrantYieldsItsQuarter() throws Exception {
-        for (boolean usGate : new boolean[]{false, true}) {
-            List<RawFinancialReport> reports = build(fixture(), usGate, 12);
+        List<RawFinancialReport> reports = build(fixture(), 12);
 
-            assertThat(reports).as("관문 %s — 비교 열(2025)은 자기 보고서가 이 원장에 없어 라벨을 안 받는다", usGate).hasSize(1);
-            RawFinancialReport q2 = reports.get(0);
-            assertThat(q2.fiscalYear()).isEqualTo(2026);
-            assertThat(q2.fiscalPeriod()).isEqualTo("Q2");
-            assertThat(q2.periodStart()).isEqualTo(LocalDate.of(2026, 4, 1));
-            assertThat(q2.periodEnd()).isEqualTo(LocalDate.of(2026, 6, 30));
-            assertThat(q2.revenue()).isEqualByComparingTo("116017000000");
-            assertThat(q2.sharesOutstanding()).as("표지 그대로").isEqualByComparingTo("4111911960");
-        }
+        assertThat(reports).as("비교 열(2025)은 자기 보고서가 이 원장에 없어 라벨을 안 받는다").hasSize(1);
+        RawFinancialReport q2 = reports.get(0);
+        assertThat(q2.fiscalYear()).isEqualTo(2026);
+        assertThat(q2.fiscalPeriod()).isEqualTo("Q2");
+        assertThat(q2.periodStart()).isEqualTo(LocalDate.of(2026, 4, 1));
+        assertThat(q2.periodEnd()).isEqualTo(LocalDate.of(2026, 6, 30));
+        assertThat(q2.revenue()).isEqualByComparingTo("116017000000");
+        assertThat(q2.sharesOutstanding()).as("표지 그대로").isEqualByComparingTo("4111911960");
     }
 
     @Test
     @DisplayName("선언 결산월이 없거나 누계로 세운 끝과 안 맞으면 창을 안 세운다 — 0건(미표시)이지 틀린 라벨이 아니다")
     void noSeedWithoutAMatchingDeclaredFiscalYearEnd() throws Exception {
-        assertThat(build(fixture(), true, null)).as("결산월 없음").isEmpty();
-        assertThat(build(fixture(), true, 6)).as("결산월 6 — 누계 끝 12-31과 안 맞음").isEmpty();
+        assertThat(build(fixture(), null)).as("결산월 없음").isEmpty();
+        assertThat(build(fixture(), 6)).as("결산월 6 — 누계 끝 12-31과 안 맞음").isEmpty();
     }
 
     @Test
@@ -70,6 +68,6 @@ class SecEdgarInterimOnlyTest {
         String stub = fixture().replace("\"start\": \"2026-01-01\"", "\"start\": \"2026-05-10\"");
 
         assertThat(stub).as("픽스처를 실제로 바꿨다").isNotEqualTo(fixture());
-        assertThat(build(stub, true, 12)).isEmpty();
+        assertThat(build(stub, 12)).isEmpty();
     }
 }

@@ -25,22 +25,21 @@ class SecEdgarSixKAnnualTest {
                 .formatted(start, end, val, accn, filed);
     }
 
-    private static List<RawFinancialReport> build(boolean usGate, Integer fiscalYearEndMonth) throws Exception {
+    private static List<RawFinancialReport> build(Integer fiscalYearEndMonth) throws Exception {
         String json = """
                 {"facts":{"us-gaap":{"Revenues":{"units":{"USD":[%s,%s]}}}}}""".formatted(
                 fact("2023-02-01", "2024-01-31", 572_931_000L, "0000000001-24-000001", "2024-03-07"),
                 fact("2024-02-01", "2025-01-31", 651_000_000L, "0000000001-25-000001", "2025-03-06"));
         JsonNode facts = new ObjectMapper().readTree(json).path("facts");
-        return SecEdgarFacts.build(facts, 2018, usGate, CoverUnitJudge.Result.NONE,
+        return SecEdgarFacts.build(facts, 2018, CoverUnitJudge.Result.NONE,
                 new IssuerProfile.Profile(fiscalYearEndMonth, null)).reports();
     }
 
     @Test
-    @DisplayName("관문 켬: 선언 결산월(1월)에 끝나는 6-K 12개월 창은 회계연도다 — FY 라벨이 선다")
+    @DisplayName("선언 결산월(1월)에 끝나는 6-K 12개월 창은 회계연도다 — FY 라벨이 선다")
     void sixKAnnualWindowEndingInTheDeclaredMonthIsAFiscalYear() throws Exception {
-        assertThat(build(true, 1)).filteredOn(r -> "FY".equals(r.fiscalPeriod()))
+        assertThat(build(1)).filteredOn(r -> "FY".equals(r.fiscalPeriod()))
                 .extracting(RawFinancialReport::fiscalYear).containsExactlyInAnyOrder(2024, 2025);
-        assertThat(build(false, 1)).as("관문 꺼짐은 옛 출력 그대로").noneMatch(r -> "FY".equals(r.fiscalPeriod()));
     }
 
     @Test
@@ -52,19 +51,17 @@ class SecEdgarSixKAnnualTest {
                 {"facts":{"us-gaap":{"Revenues":{"units":{"USD":[%s,%s]}}}}}""".formatted(annual,
                 fact("2023-02-01", "2024-01-31", 572_931_000L, "0000000001-24-000001", "2024-03-07"));
         JsonNode facts = new ObjectMapper().readTree(json).path("facts");
-        List<RawFinancialReport> on = SecEdgarFacts.build(facts, 2018, true, CoverUnitJudge.Result.NONE,
-                new IssuerProfile.Profile(1, null)).reports();
-        List<RawFinancialReport> off = SecEdgarFacts.build(facts, 2018, false, CoverUnitJudge.Result.NONE,
+        List<RawFinancialReport> on = SecEdgarFacts.build(facts, 2018, CoverUnitJudge.Result.NONE,
                 new IssuerProfile.Profile(1, null)).reports();
 
-        assertThat(on).filteredOn(r -> "FY".equals(r.fiscalPeriod())).hasSize(off.stream()
-                .filter(r -> "FY".equals(r.fiscalPeriod())).toList().size());
+        // 관문 전 출력(6-K 창을 안 읽던 규칙)과 같은 FY 판 수 — 그 대조가 단언하던 수를 박는다(2026-11-03 관문 설정 걷기).
+        assertThat(on).filteredOn(r -> "FY".equals(r.fiscalPeriod())).hasSize(1);
     }
 
     @Test
     @DisplayName("결산월 증인이 없거나 맞지 않으면 6-K 12개월 창을 회계연도로 안 읽는다 — 연차 창이 없는 해의 롤링 12개월 창 방어")
     void sixKAnnualWindowWithoutTheWitnessIsNotAFiscalYear() throws Exception {
-        assertThat(build(true, null)).noneMatch(r -> "FY".equals(r.fiscalPeriod()));
-        assertThat(build(true, 6)).noneMatch(r -> "FY".equals(r.fiscalPeriod()));
+        assertThat(build(null)).noneMatch(r -> "FY".equals(r.fiscalPeriod()));
+        assertThat(build(6)).noneMatch(r -> "FY".equals(r.fiscalPeriod()));
     }
 }

@@ -36,7 +36,7 @@ import java.util.List;
  *
  * <pre>
  * DART_RECORD_DIR=&lt;dir&gt; DART_TICKERS=&lt;한 줄에 하나&gt; DART_FROM=2019 ./gradlew liveTest --tests "*DartRecordedSweepTest*"
- * DART_REPLAY_DIR=&lt;dir&gt; DART_TICKERS=&lt;file&gt; DART_FROM=2019 DART_SWEEP_OUT=&lt;tsv&gt; KR_GATE=true|false ./gradlew test --tests "*DartRecordedSweepTest*"
+ * DART_REPLAY_DIR=&lt;dir&gt; DART_TICKERS=&lt;file&gt; DART_FROM=2019 DART_SWEEP_OUT=&lt;tsv&gt; ./gradlew test --tests "*DartRecordedSweepTest*"
  * </pre>
  */
 class DartRecordedSweepTest {
@@ -52,7 +52,7 @@ class DartRecordedSweepTest {
         return properties;
     }
 
-    private static void run(Path dir, DartRecordedHttp.Mode mode, boolean krGate, PrintWriter out) throws Exception {
+    private static void run(Path dir, DartRecordedHttp.Mode mode, PrintWriter out) throws Exception {
         DataSourceProperties properties = properties();
         DartRecordedHttp http = new DartRecordedHttp(dir, mode);
         RateLimiter limiter = mode == DartRecordedHttp.Mode.RECORD
@@ -60,8 +60,8 @@ class DartRecordedSweepTest {
                 : new TokenBucketRateLimiter("dart", Integer.MAX_VALUE / 2, 0);
         DartDailyQuota quota = new DartDailyQuota(mode == DartRecordedHttp.Mode.RECORD ? 18_000 : 0, Clock.systemDefaultZone());
         DartCorpCodeCache corpCodes = new DartCorpCodeCache(http, properties, limiter, quota);
-        DartFinancialAdapter summary = new DartFinancialAdapter(http, properties, limiter, quota, corpCodes, krGate);
-        DartFullStatementAdapter full = new DartFullStatementAdapter(http, properties, limiter, quota, corpCodes, krGate);
+        DartFinancialAdapter summary = new DartFinancialAdapter(http, properties, limiter, quota, corpCodes);
+        DartFullStatementAdapter full = new DartFullStatementAdapter(http, properties, limiter, quota, corpCodes);
         int from = Integer.parseInt(System.getenv().getOrDefault("DART_FROM", "2019"));
         int to = java.time.LocalDate.now().getYear();
         List<String> tickers = Files.readAllLines(Path.of(System.getenv("DART_TICKERS"))).stream()
@@ -98,7 +98,7 @@ class DartRecordedSweepTest {
         }
     }
 
-    /** 손익 칸 기저 판정(국내 관문 켬 · 재고 A6) — 대체가 있는 행만 · 칸은 이름순. */
+    /** 손익 칸 기저 판정(재고 A6) — 대체가 있는 행만 · 칸은 이름순. */
     private static void printFlows(PrintWriter out, String ticker, String source,
                                    List<com.stockscreener.pipeline.datasource.FlowBasis> bases) {
         for (com.stockscreener.pipeline.datasource.FlowBasis b : bases) {
@@ -132,8 +132,7 @@ class DartRecordedSweepTest {
         Assumptions.assumeTrue(dir != null && !dir.isBlank() && System.getenv("DART_API_KEY") != null,
                 "DART_RECORD_DIR · DART_API_KEY가 없어 건너뛴다");
         DartRecordedHttp.requireDirectory(Path.of(dir));
-        // 녹화는 관문 켬으로 돈다 — 켬 갈래가 부르는 응답이 꺼짐의 상위집합이다(같은 엔드포인트 · 같은 보고서).
-        run(Path.of(dir), DartRecordedHttp.Mode.RECORD, true, null);
+        run(Path.of(dir), DartRecordedHttp.Mode.RECORD, null);
     }
 
     @Test
@@ -142,9 +141,8 @@ class DartRecordedSweepTest {
         String dir = System.getenv("DART_REPLAY_DIR");
         String outPath = System.getenv("DART_SWEEP_OUT");
         Assumptions.assumeTrue(dir != null && !dir.isBlank() && outPath != null, "DART_REPLAY_DIR · DART_SWEEP_OUT이 없어 건너뛴다");
-        boolean krGate = Boolean.parseBoolean(System.getenv().getOrDefault("KR_GATE", "false"));
         try (PrintWriter out = new PrintWriter(Files.newBufferedWriter(Path.of(outPath), StandardCharsets.UTF_8))) {
-            run(Path.of(dir), DartRecordedHttp.Mode.REPLAY, krGate, out);
+            run(Path.of(dir), DartRecordedHttp.Mode.REPLAY, out);
         }
     }
 }

@@ -48,12 +48,12 @@ class SecEdgarQuarterContextAnnualTest {
         return String.join(",", facts);
     }
 
-    private static List<RawFinancialReport> build(String revenue, String operating, boolean usGate) throws Exception {
+    private static List<RawFinancialReport> build(String revenue, String operating) throws Exception {
         String json = """
                 {"facts":{"us-gaap":{"Revenues":{"units":{"USD":[%s]}},"OperatingIncomeLoss":{"units":{"USD":[%s]}}}}}"""
                 .formatted(revenue, operating);
         JsonNode facts = new ObjectMapper().readTree(json).path("facts");
-        return SecEdgarFacts.build(facts, 2015, usGate).reports();
+        return SecEdgarFacts.build(facts, 2015).reports();
     }
 
     private static RawFinancialReport latest(List<RawFinancialReport> reports, String period) {
@@ -62,22 +62,20 @@ class SecEdgarQuarterContextAnnualTest {
     }
 
     @Test
-    @DisplayName("관문 켬: FY를 낸 컬럼의 4분기 문맥 값이 FY와 같고 9개월 실적이 있으면 그 칸만 FY − 분기 셋으로 — 같은 문맥의 맞는 3개월 값은 그대로")
+    @DisplayName("FY를 낸 컬럼의 4분기 문맥 값이 FY와 같고 9개월 실적이 있으면 그 칸만 FY − 분기 셋으로 — 같은 문맥의 맞는 3개월 값은 그대로")
     void quarterContextCarryingTheYearIsDroppedPerColumn() throws Exception {
         // 매출 4분기 문맥 = FY 12,000(오태깅) · 영업이익 4분기 문맥 300 = FY 1,200 − 9개월 900(맞는 3개월 값)
-        List<RawFinancialReport> on = build(year(12_000L, 12_000, 9_000), year(1_200L, 300, 900), true);
+        List<RawFinancialReport> on = build(year(12_000L, 12_000, 9_000), year(1_200L, 300, 900));
 
         assertThat(latest(on, "Q4").revenue()).as("FY − 분기 셋").isEqualByComparingTo("3000");
         assertThat(latest(on, "Q4").operatingIncome()).as("맞는 칸은 그대로").isEqualByComparingTo("300");
-        assertThat(latest(build(year(12_000L, 12_000, 9_000), year(1_200L, 300, 900), false), "Q4").revenue())
-                .as("관문 꺼짐은 옛 출력 그대로").isEqualByComparingTo("12000");
     }
 
     @Test
     @DisplayName("R2: 그 공시가 다른 컬럼에서 같은 오태깅을 보였고 FY를 안 낸 컬럼의 4분기 문맥 값이 9개월 누계 이상이면 FY로 옮긴다(LHX FY2025 꼴)")
     void orphanQuarterContextValueOfACarrierFilingBecomesTheYear() throws Exception {
         // 영업이익: 4분기 문맥 = FY 1,200(공시 단위 증거) · 매출: 그 10-K가 FY 없이 4분기 문맥에만 12,000(9개월 9,000 이상)
-        List<RawFinancialReport> on = build(year(null, 12_000, 9_000), year(1_200L, 1_200, 900), true);
+        List<RawFinancialReport> on = build(year(null, 12_000, 9_000), year(1_200L, 1_200, 900));
 
         assertThat(latest(on, "FY").revenue()).isEqualByComparingTo("12000");
         assertThat(latest(on, "Q4").revenue()).isEqualByComparingTo("3000");
@@ -87,7 +85,7 @@ class SecEdgarQuarterContextAnnualTest {
     @Test
     @DisplayName("R2는 공시 단위 증거 없이 안 옮긴다 — 일회성 항목이 큰 4분기는 한 분기가 9개월 합을 넘을 수 있다(2017 4분기 세제 개편)")
     void orphanWithoutCarrierEvidenceIsKept() throws Exception {
-        List<RawFinancialReport> on = build(year(null, 12_000, 9_000), year(1_200L, 300, 900), true);
+        List<RawFinancialReport> on = build(year(null, 12_000, 9_000), year(1_200L, 300, 900));
 
         assertThat(latest(on, "Q4").revenue()).isEqualByComparingTo("12000");
     }
@@ -95,7 +93,7 @@ class SecEdgarQuarterContextAnnualTest {
     @Test
     @DisplayName("그 해 9개월 실적이 0에 가까우면 4분기 = FY가 정당할 수 있어 둔다(첫해 · 한 분기에 몰린 실적)")
     void quarterEqualToYearWithoutPriorQuartersIsKept() throws Exception {
-        RawFinancialReport q4 = latest(build(year(12_000L, 12_000, 60), year(1_200L, 1_200, 6), true), "Q4");
+        RawFinancialReport q4 = latest(build(year(12_000L, 12_000, 60), year(1_200L, 1_200, 6)), "Q4");
 
         assertThat(q4.revenue()).isEqualByComparingTo("12000");
         assertThat(q4.derived()).isFalse();

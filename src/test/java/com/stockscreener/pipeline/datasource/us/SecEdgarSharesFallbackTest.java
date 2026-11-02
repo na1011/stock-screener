@@ -25,10 +25,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class SecEdgarSharesFallbackTest {
 
-    private static List<RawFinancialReport> build(String fixture, int from, boolean usGate) throws Exception {
+    private static List<RawFinancialReport> build(String fixture, int from) throws Exception {
         Path path = Path.of("src/test/resources/fixtures/sec", fixture);
         JsonNode facts = new ObjectMapper().readTree(Files.readString(path, StandardCharsets.UTF_8)).path("facts");
-        return SecEdgarFacts.build(facts, from, usGate).reports();
+        return SecEdgarFacts.build(facts, from).reports();
     }
 
     private static RawFinancialReport latest(List<RawFinancialReport> reports, int fiscalYear, String period) {
@@ -39,9 +39,9 @@ class SecEdgarSharesFallbackTest {
     }
 
     @Test
-    @DisplayName("관문 켬은 기본 가중평균의 가장 짧은 창을 고르고, 옛 규칙이 낼 수 있던 희석 값들을 대신한 값으로 단다(TKO 2026 Q2)")
+    @DisplayName("기본 가중평균의 가장 짧은 창을 고르고, 옛 규칙이 낼 수 있던 희석 값들을 대신한 값으로 단다(TKO 2026 Q2)")
     void gateOnPicksShortestBasicAndRecordsTheSupersededDiluted() throws Exception {
-        RawFinancialReport q2 = latest(build("companyfacts-tko-weighted-shares.json", 2025, true), 2026, "Q2");
+        RawFinancialReport q2 = latest(build("companyfacts-tko-weighted-shares.json", 2025), 2026, "Q2");
 
         assertThat(q2.sharesOutstanding()).as("3개월 기본 — 누계 기본 76.1M · 3개월 희석 75.9M · 누계 희석 193.3M")
                 .isEqualByComparingTo("74797769");
@@ -51,18 +51,9 @@ class SecEdgarSharesFallbackTest {
     }
 
     @Test
-    @DisplayName("관문 꺼짐은 옛 규칙 그대로다 — 희석 동점 중 하나이고 대신한 값은 비어 있다")
-    void gateOffKeepsTheLegacyPick() throws Exception {
-        RawFinancialReport q2 = latest(build("companyfacts-tko-weighted-shares.json", 2025, false), 2026, "Q2");
-
-        assertThat(q2.sharesOutstanding()).isIn(new BigDecimal("193323374"), new BigDecimal("75870706"));
-        assertThat(q2.sharesSuperseded()).isEmpty();
-    }
-
-    @Test
     @DisplayName("같은 10-K의 FY와 Q4는 같은 주식수다 — 시점 값이라 12개월 평균이 아니라 Q4 3개월(ACN FY2025)")
     void fiscalYearAndFourthQuarterShareTheShortestWindow() throws Exception {
-        List<RawFinancialReport> reports = build("companyfacts-acn-weighted-shares.json", 2025, true);
+        List<RawFinancialReport> reports = build("companyfacts-acn-weighted-shares.json", 2025);
 
         RawFinancialReport fy = latest(reports, 2025, "FY");
         RawFinancialReport q4 = latest(reports, 2025, "Q4");
@@ -75,7 +66,7 @@ class SecEdgarSharesFallbackTest {
     @Test
     @DisplayName("동점이 없고 옛 규칙과 같은 값이면 대신한 값이 없다 — 표지가 있는 행은 이 축 밖이다")
     void noTieNoSuperseded() throws Exception {
-        RawFinancialReport fy24 = latest(build("companyfacts-tko-weighted-shares.json", 2024, true), 2024, "FY");
+        RawFinancialReport fy24 = latest(build("companyfacts-tko-weighted-shares.json", 2024), 2024, "FY");
 
         assertThat(fy24.sharesOutstanding()).as("12개월 기본 — 그 10-K에 Q4 3개월이 없다").isEqualByComparingTo("81340472");
         assertThat(fy24.supersedesShares(new BigDecimal("171874540"))).as("옛 사다리의 희석 12개월").isTrue();
@@ -88,14 +79,14 @@ class SecEdgarSharesFallbackTest {
         Path path = Path.of("src/test/resources/fixtures/sec/cover/companyfacts-pkg-cover.json");
         JsonNode facts = new ObjectMapper().readTree(Files.readString(path, StandardCharsets.UTF_8)).path("facts");
 
-        RawFinancialReport judged = latest(SecEdgarFacts.build(facts, 2025, true,
+        RawFinancialReport judged = latest(SecEdgarFacts.build(facts, 2025,
                 ShareClassCollector.judgeCovers(facts, List.of())).reports(), 2025, "FY");
         assertThat(judged.sharesOutstanding()).as("10-K의 기본 가중평균(Q4 3개월)").isEqualByComparingTo("89300000");
         assertThat(judged.supersedesShares(new BigDecimal("89213394000"))).as("옛 추출 — 단위가 틀린 표지").isTrue();
         assertThat(judged.supersedesShares(new BigDecimal("89213394"))).as("그 손 수리(ADR-0126)").isTrue();
 
         // 대조: 판정 없이는 단위가 틀린 표지가 그대로 나간다.
-        assertThat(latest(SecEdgarFacts.build(facts, 2025, true).reports(), 2025, "FY").sharesOutstanding())
+        assertThat(latest(SecEdgarFacts.build(facts, 2025).reports(), 2025, "FY").sharesOutstanding())
                 .isEqualByComparingTo("89213394000");
     }
 }

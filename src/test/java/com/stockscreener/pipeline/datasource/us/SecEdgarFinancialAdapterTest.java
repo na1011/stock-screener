@@ -222,20 +222,18 @@ class SecEdgarFinancialAdapterTest {
         // 48 발행사 219행. 그 판은 원장이 주는데 우리가 통화로 거른 것이다.
         FinancialFetch fetch = adapter().fetchReports(FIX, FROM);
 
-        assertThat(fetch.reports()).extracting(RawFinancialReport::fiscalPeriod, RawFinancialReport::publishedAt,
-                        RawFinancialReport::currencyCode)
-                .as("담는 판은 그대로다 — 이 고침은 출력을 안 바꾼다")
-                .containsExactly(
-                        tuple("FY", LocalDate.of(2024, 5, 23), "USD"),
-                        tuple("FY", LocalDate.of(2025, 6, 26), "USD"));
+        // 종목 단위 통화 게이트(ADR-0182) — 가장 늦은 연차 공시가 비USD라 옛 USD 판도 담지 않는다(관문 전에는 USD 판 둘을 담았다).
+        assertThat(fetch.reports()).as("가장 늦은 연차 공시가 CNY인 종목은 판을 안 담는다").isEmpty();
         assertThat(fetch.completeVintageHistory()).isTrue();
         assertThat(fetch.withheldVintages())
-                .as("FY2024를 CNY로만 다시 실은 2025-06-26 판과 그 판에서 유도된 Q4 — 없으면 저장된 CNY 정정판이 회수된다")
+                .as("2025-06-26 공시는 표시 통화가 CNY 하나(TaxonomyFrame)라 그 공시의 FY2024 · FY2025 판과 각 Q4 — 없으면 저장된 CNY 정정판이 회수된다")
                 .containsExactlyInAnyOrder(
                         new FinancialFetch.WithheldVintage(2024, "FY", LocalDate.of(2025, 6, 26)),
-                        new FinancialFetch.WithheldVintage(2024, "Q4", LocalDate.of(2025, 6, 26)));
+                        new FinancialFetch.WithheldVintage(2024, "Q4", LocalDate.of(2025, 6, 26)),
+                        new FinancialFetch.WithheldVintage(2025, "FY", LocalDate.of(2025, 6, 26)),
+                        new FinancialFetch.WithheldVintage(2025, "Q4", LocalDate.of(2025, 6, 26)));
         assertThat(fetch.unconfirmedVintages())
-                .as("날짜로 지키지 않는다 — 같은 날짜의 FY2025 판은 담겼고 다른 라벨의 회수를 막으면 안 된다")
+                .as("날짜로 지키지 않는다 — (라벨, 공시일)로 지킨다 · 날짜로 막으면 같은 날 다른 라벨의 회수까지 막는다")
                 .isEmpty();
     }
 
@@ -507,45 +505,6 @@ class SecEdgarFinancialAdapterTest {
     }
 
     @Test
-    @DisplayName("분기 계열을 다시 낸 공시가 이 해의 분기는 안 냈으면 그 세대로 안 뺀다")
-    void skipsVintageThatRepresentedOtherYearsQuartersButNotThisOne() throws Exception {
-        enqueue(200, fixture("tickers.json"));
-        enqueue(200, fixture("companyfacts-q4-vintage-mismatch.json"));
-
-        // 실측(AIG 2025-02-13 10-K)이 이 모양이다. 사업을 팔아 FY를 계속영업 기준으로 다시
-        // 쓰면서 **아직 비교분기로 실을 수 있는 해**(2023·2024)는 분기까지 다시 냈고, 너무
-        // 오래된 2022는 못 냈다 — 10-Q가 직전 연도 비교분기만 싣기 때문이다. 그래서 그 공시의
-        // FY2022는 그해 분기가 못 받은 기준이고, 둘을 빼면 -12,609가 나온다.
-        //
-        // 픽스처도 같은 모양이되 **잔차가 양수로 앉는다**: 2026 공시가 FY2022를 900,000으로
-        // 다시 쓰면 900,000 - 750,000 = 150,000이라 **부호로는 아무것도 못 잡는다.** 그런데 그
-        // 공시는 자기 해가 2024인데 **지나간 해(2023)의 분기를 다시 냈고 2022 분기는 안 냈다**
-        // — 기준이 갈렸다는 직접 증거다. 그래서 FY2022는 2023-02-20 세대로 빼 250,000이 된다.
-        //
-        // 2023은 그 공시가 분기를 함께 냈으므로 **건너뛰지 않는다** — 아래 둘째 단언.
-        //
-        // **이것이 부호 규칙이 원리적으로 못 잡던 자리다**(ADR-0151 §결과의 「그럴듯한 양수」).
-        List<RawFinancialReport> reports = adapter().fetchReports(FIX, FROM).reports();
-
-        RawFinancialReport q4 = latestOf(reports.stream()
-                .filter(r -> r.fiscalYear() == 2022).toList(), "Q4");
-
-        assertThat(q4.publishedAt())
-                .as("분기가 따라온 마지막 세대를 쓴다")
-                .isEqualTo(LocalDate.of(2023, 2, 20));
-        assertThat(q4.revenue()).isEqualByComparingTo("250000");
-        assertThat(q4.derived()).isTrue();
-        assertThat(reports.stream()
-                .filter(r -> r.fiscalYear() == 2022 && "Q4".equals(r.fiscalPeriod())).count())
-                .as("건너뛴 세대는 판을 안 낸다")
-                .isEqualTo(1);
-        assertThat(reports.stream()
-                .filter(r -> r.fiscalYear() == 2023 && "Q4".equals(r.fiscalPeriod())).count())
-                .as("분기를 함께 낸 해는 세대마다 낸다 — 판정은 연도별이다")
-                .isEqualTo(2);
-    }
-
-    @Test
     @DisplayName("소스가 직접 낸 음수 4분기는 그대로 둔다 — 한 분기 매출은 정당하게 음수일 수 있다")
     void keepsSourceReportedNegativeQuarter() throws Exception {
         enqueue(200, fixture("tickers.json"));
@@ -603,7 +562,7 @@ class SecEdgarFinancialAdapterTest {
     }
 
     @Test
-    @DisplayName("관문 켬 · 보충만으로 쌓인 종목의 companyfacts 404는 빈 트리로 공시 보충에 넘긴다(ADR-0190) — 꺼짐 · companyfacts 이력은 NOT_FOUND")
+    @DisplayName("보충만으로 쌓인 종목의 companyfacts 404는 빈 트리로 공시 보충에 넘긴다(ADR-0190) — companyfacts 이력은 NOT_FOUND")
     void notFoundGoesToTheSupplementOnlyBehindTheGateWithoutCompanyFactsHistory() throws Exception {
         java.util.List<Long> supplemented = new java.util.ArrayList<>();
         FilingSupplementer recording = (cik, facts, from, context) -> {
@@ -614,20 +573,15 @@ class SecEdgarFinancialAdapterTest {
 
         enqueue(200, fixture("tickers.json"));
         enqueue(404, "<?xml version=\"1.0\"?><Error><Code>NoSuchKey</Code></Error>");
-        assertThat(adapter(true, recording, (stockId, cik) -> true).fetchReports(FIX, FROM).reports()).isEmpty();
+        assertThat(adapter(recording, (stockId, cik) -> true).fetchReports(FIX, FROM).reports()).isEmpty();
         assertThat(supplemented).hasSize(1);
 
         enqueue(200, fixture("tickers.json"));
         enqueue(404, "<?xml version=\"1.0\"?><Error><Code>NoSuchKey</Code></Error>");
-        assertThatThrownBy(() -> adapter(true, recording, (stockId, cik) -> false).fetchReports(FIX, FROM))
+        assertThatThrownBy(() -> adapter(recording, (stockId, cik) -> false).fetchReports(FIX, FROM))
                 .as("companyfacts 이력이 있는 종목 — 일시 404 · 등록인 교체를 빈 트리로 잇지 않는다")
                 .hasFieldOrPropertyWithValue("kind", DataSourceException.Kind.NOT_FOUND);
-
-        enqueue(200, fixture("tickers.json"));
-        enqueue(404, "<?xml version=\"1.0\"?><Error><Code>NoSuchKey</Code></Error>");
-        assertThatThrownBy(() -> adapter(false, recording, (stockId, cik) -> true).fetchReports(FIX, FROM))
-                .as("관문 꺼짐은 그대로다").hasFieldOrPropertyWithValue("kind", DataSourceException.Kind.NOT_FOUND);
-        assertThat(supplemented).as("이력 있음 · 꺼짐은 보충까지 안 간다").hasSize(1);
+        assertThat(supplemented).as("이력 있음은 보충까지 안 간다").hasSize(1);
     }
 
     @Test
@@ -762,13 +716,13 @@ class SecEdgarFinancialAdapterTest {
                 new SecTickerCikCache(factory, properties, limiter, baseUrl(), 1), baseUrl());
     }
 
-    private SecEdgarFinancialAdapter adapter(boolean usGate, FilingSupplementer supplementer, CompanyFactsHistory history) {
+    private SecEdgarFinancialAdapter adapter(FilingSupplementer supplementer, CompanyFactsHistory history) {
         DataSourceProperties properties = new DataSourceProperties();
         properties.getSecEdgar().setApiKey("Test Runner test@example.com");
         ExternalApiClientFactory factory = new ExternalApiClientFactory();
         TokenBucketRateLimiter limiter = new TokenBucketRateLimiter("sec-edgar", 0, 0);
         return new SecEdgarFinancialAdapter(factory, properties, limiter,
-                new SecTickerCikCache(factory, properties, limiter, baseUrl(), 1), baseUrl(), usGate, supplementer, history);
+                new SecTickerCikCache(factory, properties, limiter, baseUrl(), 1), baseUrl(), supplementer, history);
     }
 
     private String baseUrl() {

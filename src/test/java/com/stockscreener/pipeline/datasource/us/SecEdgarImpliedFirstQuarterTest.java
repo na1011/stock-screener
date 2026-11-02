@@ -30,7 +30,7 @@ class SecEdgarImpliedFirstQuarterTest {
     }
 
     /** 2017년 분기 셋(각 200) · 2018년 1분기 · 2018년 2분기 10-Q(자기 분기 · 반기 + 전년 비교 2분기 150 · 전년 반기 {@code priorHalf}). */
-    private static List<RawFinancialReport> build(long priorHalf, boolean usGate) throws Exception {
+    private static List<RawFinancialReport> build(long priorHalf) throws Exception {
         List<String> revenue = new ArrayList<>(List.of(
                 fact("2017-01-01", "2017-03-31", 200, "0000000001-17-000001", "10-Q", "Q1", 2017, "2017-05-01"),
                 fact("2017-04-01", "2017-06-30", 200, "0000000001-17-000002", "10-Q", "Q2", 2017, "2017-08-01"),
@@ -44,7 +44,7 @@ class SecEdgarImpliedFirstQuarterTest {
         String json = """
                 {"facts":{"us-gaap":{"Revenues":{"units":{"USD":[%s]}}}}}""".formatted(String.join(",", revenue));
         JsonNode facts = new ObjectMapper().readTree(json).path("facts");
-        return SecEdgarFacts.build(facts, 2015, usGate).reports();
+        return SecEdgarFacts.build(facts, 2015).reports();
     }
 
     private static RawFinancialReport latestQ1(List<RawFinancialReport> reports) {
@@ -53,17 +53,16 @@ class SecEdgarImpliedFirstQuarterTest {
     }
 
     @Test
-    @DisplayName("관문 켬: 전년 반기(300) − 전년 2분기(150)가 옛 1분기(200)와 다르면 그 10-Q의 1분기 판(150)을 낸다")
+    @DisplayName("전년 반기(300) − 전년 2분기(150)가 옛 1분기(200)와 다르면 그 10-Q의 1분기 판(150)을 낸다")
     void halfYearMinusSecondQuarterRestatesTheFirstQuarter() throws Exception {
-        assertThat(latestQ1(build(300, true)).revenue()).isEqualByComparingTo("150000000");
-        assertThat(latestQ1(build(300, false)).revenue()).as("관문 꺼짐은 옛 출력 그대로").isEqualByComparingTo("200000000");
+        assertThat(latestQ1(build(300)).revenue()).isEqualByComparingTo("150000000");
     }
 
     @Test
     @DisplayName("함의 1분기가 옛 1분기와 1% 안이면 같은 세대라 판을 안 낸다")
     void impliedFirstQuarterWithinOnePercentAddsNoVintage() throws Exception {
         // 전년 반기 351 − 2분기 150 = 201 — 옛 1분기 200과 0.5%.
-        RawFinancialReport q1 = latestQ1(build(351, true));
+        RawFinancialReport q1 = latestQ1(build(351));
         assertThat(q1.revenue()).isEqualByComparingTo("200000000");
         assertThat(q1.publishedAt()).hasToString("2017-05-01");
     }

@@ -597,7 +597,7 @@ class UsMarketCapUniverseAdapterTest {
         };
         UsMarketCapUniverseAdapter adapter = new UsMarketCapUniverseAdapter(listingAdapter(), counts, cikCache(), nameCache,
                 new ExternalApiClientFactory(), properties(), new TokenBucketRateLimiter("alpaca", 0, 0),
-                server.url("/").toString(), 2, true);
+                server.url("/").toString(), 2);
 
         // AAA 1000 · HLD 보류 80×10=800 · BBB 500 · EXC 제외 · NEW는 앞 편입이 아니라 못 든다
         UniverseSnapshot snapshot = adapter.fetchConstituents(UsMarketCapUniverseAdapter.UNIVERSE_CODE, AS_OF,
@@ -630,7 +630,7 @@ class UsMarketCapUniverseAdapterTest {
                 filed("HDBX", "100", "20-F:0000000001-26-000001"), filed("UXN", "50", "10-Q:0000000002-26-000001"),
                 filed("TEV", "10", "20-F:0000000003-26-000001"), filed("BIG", "1", "10-Q:0000000004-26-000001")),
                 cikCache(), nameCache, new ExternalApiClientFactory(), properties(), new TokenBucketRateLimiter("alpaca", 0, 0),
-                server.url("/").toString(), 2, false, () -> lookup)
+                server.url("/").toString(), 2, () -> lookup)
                 .fetchConstituents(UsMarketCapUniverseAdapter.UNIVERSE_CODE, AS_OF);
 
         assertThat(snapshot.tickers()).as("HDBX 1 ADS = 3주 · UXN 이름은 ADS인데 이름 실린 표지 없음 → 뺌 · TEV 비율 1 → 남음")
@@ -670,7 +670,7 @@ class UsMarketCapUniverseAdapterTest {
                 filed("WRTX", "10", "20-F:0000000005-26-000001"), filed("PFDX", "10", "20-F:0000000006-26-000001"),
                 filed("BIG", "1", "10-Q:0000000007-26-000001")),
                 cikCache(), nameCache, new ExternalApiClientFactory(), properties(), new TokenBucketRateLimiter("alpaca", 0, 0),
-                server.url("/").toString(), 3, false, () -> lookup)
+                server.url("/").toString(), 3, () -> lookup)
                 .fetchConstituents(UsMarketCapUniverseAdapter.UNIVERSE_CODE, AS_OF);
 
         assertThat(snapshot.tickers()).as("ARMX · RLXX 비율 1 → 듦 · ONCX 1 ADS = 13주 → 표지가 뺌 · GSPA · WRTX · PFDX → 이름이 자름")
@@ -679,7 +679,7 @@ class UsMarketCapUniverseAdapterTest {
     }
 
     @Test
-    @DisplayName("관문 켬 — 판마다 예탁 비율로 이미 ADS 단위인 종목(DEPOSITARY)은 표지에 다시 안 넘긴다 · 판 비율 없는 예탁증권은 지금처럼 표지가 가린다")
+    @DisplayName("판마다 예탁 비율로 이미 ADS 단위인 종목(DEPOSITARY)은 표지에 다시 안 넘긴다 · 판 비율 없는 예탁증권은 지금처럼 표지가 가린다")
     void gateOnKeepsDepositaryResolvedWithoutCover() throws Exception {
         bodies.put("/v2/assets", assets(
                 asset("ONCX", "Oncx Medicines Ltd. American Depositary Shares"),
@@ -714,7 +714,7 @@ class UsMarketCapUniverseAdapterTest {
 
         UniverseSnapshot snapshot = new UsMarketCapUniverseAdapter(listingAdapter(), counts,
                 cikCache(), nameCache, new ExternalApiClientFactory(), properties(), new TokenBucketRateLimiter("alpaca", 0, 0),
-                server.url("/").toString(), 2, true, () -> lookup)
+                server.url("/").toString(), 2, () -> lookup)
                 .fetchConstituents(UsMarketCapUniverseAdapter.UNIVERSE_CODE, AS_OF);
 
         assertThat(snapshot.tickers()).as("ONCX 판 비율로 ADS 단위 → 듦 · HDBX 판 비율 없고 표지 1:3 → 뺌").containsExactly("ONCX", "BIG");
@@ -740,7 +740,7 @@ class UsMarketCapUniverseAdapterTest {
         assertThatThrownBy(() -> new UsMarketCapUniverseAdapter(listingAdapter(), shares(
                 filed("FRN", "100", "20-F:0000000001-26-000001"), filed("BIG", "1", "10-Q:0000000002-26-000001")),
                 cikCache(), nameCache, new ExternalApiClientFactory(), properties(), new TokenBucketRateLimiter("alpaca", 0, 0),
-                server.url("/").toString(), 1, false, () -> null)
+                server.url("/").toString(), 1, () -> null)
                 .fetchConstituents(UsMarketCapUniverseAdapter.UNIVERSE_CODE, AS_OF))
                 .isInstanceOf(DataSourceException.class)
                 .hasMessageContaining("SEC 소스가 없다");
@@ -769,7 +769,7 @@ class UsMarketCapUniverseAdapterTest {
         return new UsMarketCapUniverseAdapter(
                 listingAdapter(), shares(share("BIG", "10"), share("MID", "100")),
                 cikCache(), nameCache, new ExternalApiClientFactory(), properties(),
-                new TokenBucketRateLimiter("alpaca", 0, 0), false, (cik, asOf) -> java.util.Optional.empty());
+                new TokenBucketRateLimiter("alpaca", 0, 0), (cik, asOf) -> java.util.Optional.empty());
     }
 
     private UsMarketCapUniverseAdapter build(int topN, StoredShareCounts counts) {

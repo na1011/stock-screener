@@ -60,15 +60,9 @@ final class PriceRefutation {
     private static final int NOISE_EXCLUDE_AFTER_DAYS = 30;
 
     private final JdbcTemplate jdbc;
-    private final boolean krGate;
 
     PriceRefutation(JdbcTemplate jdbc) {
-        this(jdbc, false);
-    }
-
-    PriceRefutation(JdbcTemplate jdbc, boolean krGate) {
         this.jdbc = jdbc;
-        this.krGate = krGate;
     }
 
     enum Action { APPLY, DEFER, HOLD }
@@ -83,7 +77,7 @@ final class PriceRefutation {
         }
         List<String> market = jdbc.queryForList("SELECT market_code FROM stock WHERE id = ?", String.class, stockId);
         boolean us = !market.isEmpty() && UsMarket.CODE.equals(market.get(0));
-        if (market.isEmpty() || (!us && !krGate)) {
+        if (market.isEmpty()) {
             return events;
         }
         // 사람이 본 행은 안 본다 — V69_3 뒤는 judged_at, 그 앞의 판정은 ADR-0090 펜스의 정의(「APPLIED ∧ note NULL = 사람이 안 본 것」).

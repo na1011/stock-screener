@@ -7,7 +7,6 @@ import com.stockscreener.pipeline.datasource.us.UsMarket;
 import com.stockscreener.pipeline.datasource.us.shareclass.ShareClassLine;
 import com.stockscreener.pipeline.datasource.us.shareclass.ShareClassStore;
 
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Component;
@@ -112,16 +111,14 @@ public class IndicatorDataReader {
             """;
 
     /**
-     * 중단영업 두 컬럼(F2b · ADR-0184). <b>그 행 시장의 관문이 켜졌을 때만 읽는다</b> — 컬럼이 그 관문의 마이그레이션과 함께
-     * 생기고, 꺼진 시장의 행은 이 축이 없던 때와 바이트까지 같아야 한다(「us 켬 · kr 끔에서 국내 행 무변화」).
+     * 중단영업 두 컬럼(F2b · ADR-0184). 시장을 아는 종목의 행에서 읽는다.
      */
     private static final String DISCONTINUED_COLUMNS = """
             , discontinued_income, discontinued_income_controlling, discontinued_rule
             """;
 
     /**
-     * 보통주 귀속 이익(주당 지표 분자 · 탐색 {@code PERSHARE-NUM-PLAN-1024.md} v2.1). <b>미국 관문이 켜졌을 때만 읽는다</b> — 표가 그 관문의
-     * 마이그레이션과 함께 생긴다. 붙일 때의 {@code report_code}가 지금 행과 같을 때만 — 판이 바뀌었는데 유도가 아직 안 돈 행은 옛 값 대신
+     * 보통주 귀속 이익(주당 지표 분자 · 탐색 {@code PERSHARE-NUM-PLAN-1024.md} v2.1). <b>미국 행에서 읽는다.</b> 붙일 때의 {@code report_code}가 지금 행과 같을 때만 — 판이 바뀌었는데 유도가 아직 안 돈 행은 옛 값 대신
      * 「붙은 것 없음」(그 창 미표시)이다.
      */
     private static final String COMMON_COLUMNS = """
@@ -141,7 +138,7 @@ public class IndicatorDataReader {
             """;
 
     /**
-     * 국내 보통주 귀속 이익(ADR-0192). <b>국내 관문이 켜졌을 때 국내 행만 읽는다.</b> 국내 {@code report_code}(11011 등)는 판을 안 가르므로
+     * 국내 보통주 귀속 이익(ADR-0192). <b>국내 행만 읽는다.</b> 국내 {@code report_code}(11011 등)는 판을 안 가르므로
      * 붙일 때의 행 스냅숏({@code published_at} · {@code coalesce(net_income_controlling, net_income)})이 지금 행과 같을 때만 쓴다 — 판이
      * 바뀌었는데 유도가 아직 안 돈 행은 「붙은 것 없음」(그 창 미표시)이다. 배당성향 분모({@code payout_base})를 함께 싣는다.
      */
@@ -252,7 +249,7 @@ public class IndicatorDataReader {
             SELECT_FINANCIALS_LATEST_TEMPLATE.formatted(FINANCIAL_COLUMNS + DISCONTINUED_COLUMNS + COMMON_COLUMNS);
 
     /**
-     * 국내 관문 켬 — <b>공시일은 접수일(공개일)</b>이다(재고 「국내 공시일이 접수번호 앞 8자리라 접수일보다 하루 이를 수 있다」). 저장 공시일은
+     * 국내 — <b>공시일은 접수일(공개일)</b>이다(재고 「국내 공시일이 접수번호 앞 8자리라 접수일보다 하루 이를 수 있다」). 저장 공시일은
      * 접수번호 앞 8자리(제출 시각)인데, 영업시간 밖 · 휴일에 낸 보고서는 공시 목록의 접수일이 다음 영업일이다(운영 22,044판 중 72 · 금 → 월 18 ·
      * 평일 → 다음 날 47 · 휴일 낀 금 → 화 3). 공개 전 봉이 그 재무를 보지 않게 공시 목록의 접수일이 더 늦으면 그날을 쓴다 — 저장 행은 안 바꾸고
      * 읽을 때 정한다(판 열쇠 · 보통주 몫 스냅숏은 저장 공시일 그대로).
@@ -358,20 +355,22 @@ public class IndicatorDataReader {
             """.formatted(FINANCIAL_COLUMNS);
 
     /**
-     * 국내 관문 켬 — 같은 판 이력을 지표와 같은 공시일(공시 목록의 접수일 · {@link #KR_PUBLISHED})로 읽는다. 미국 행은 {@code kr_report_xbrl}에
+     * 같은 판 이력을 지표와 같은 공시일(공시 목록의 접수일 · {@link #KR_PUBLISHED})로 읽는다. 미국 행은 {@code kr_report_xbrl}에
      * 판이 없어 저장 공시일 그대로다.
      */
     private static final String SELECT_FINANCIALS_KNOWN_ON_BATCH_KR =
             domestic(SELECT_FINANCIALS_KNOWN_ON_BATCH).replace("SELECT stock_id, ", "SELECT stock_id, published_effective, ");
 
-    /** 관문 켬 일괄 질의 — 행의 시장과 공개 시각 원자료를 싣는다({@link Opening}). */
-    private static String batchWithOpening(boolean us, boolean kr) {
-        String sql = kr ? SELECT_FINANCIALS_KNOWN_ON_BATCH_KR : SELECT_FINANCIALS_KNOWN_ON_BATCH;
+    /** 일괄 질의 — 행의 시장과 공개 시각 원자료를 싣는다({@link Opening}). */
+    private static final String SELECT_FINANCIALS_KNOWN_ON_BATCH_OPENING = batchWithOpening();
+
+    private static String batchWithOpening() {
+        String sql = SELECT_FINANCIALS_KNOWN_ON_BATCH_KR;
         String extra = "(SELECT s.market_code FROM stock s WHERE s.id = financial_statement.stock_id) AS row_market, "
-                + (us ? "accepted_at, " : "") + (kr ? "opened_at, " : "");
+                + "accepted_at, " + "opened_at, ";
         String out = sql.replace("SELECT stock_id, ", "SELECT stock_id, " + extra);
         if (out.equals(sql)) {
-            throw new IllegalStateException("관문 켬 일괄 질의를 못 지었다 — 틀이 바뀌었다");
+            throw new IllegalStateException("일괄 질의를 못 지었다 — 틀이 바뀌었다");
         }
         return out;
     }
@@ -389,23 +388,14 @@ public class IndicatorDataReader {
 
     private final JdbcTemplate jdbcTemplate;
     private final CorporateActionLedger corporateActions;
+    /** 미국 종목의 재무 행에 주식수 클래스 축 판정을 입힌다({@link ShareClassLine}). */
     private final ShareClassStore shareClasses;
-    /**
-     * 미국 관문 설정 — 켜졌으면 미국 종목의 재무 행에 주식수 클래스 축 판정을 입힌다({@link ShareClassLine}). 꺼졌으면 판정 표를
-     * 부르지 않고 행은 이 축이 없던 때와 같다.
-     */
-    private final boolean usGate;
-    /** 국내 관문 설정 — 켜졌으면 국내 종목의 재무 행에 중단영업 두 컬럼을 입힌다(F2b). */
-    private final boolean krGate;
 
     public IndicatorDataReader(JdbcTemplate jdbcTemplate, CorporateActionLedger corporateActions,
-                               ShareClassStore shareClasses, @Value("${stockscreener.gate.us}") boolean usGate,
-                               @Value("${stockscreener.gate.kr}") boolean krGate) {
+                               ShareClassStore shareClasses) {
         this.jdbcTemplate = jdbcTemplate;
         this.corporateActions = corporateActions;
         this.shareClasses = shareClasses;
-        this.usGate = usGate;
-        this.krGate = krGate;
     }
 
     /**
@@ -535,11 +525,11 @@ public class IndicatorDataReader {
      * 있다 — 휴리스틱 후보에는 아예 없고 공시 경로와 사람의 판정에만 있다. 접으면 구간이
      * 공집합이 되어 <b>보정하지 않는 쪽</b>으로 떨어지며, 그것이 "모르는 것을 추측하지 않는다"의
      * 이 자리에서의 형태다. 액면분할·병합은 두 날짜가 실제로 같으므로 접어도 정확하다.
-     * 국내 관문 켬에서 상장일 없는 무상 요소 행은 접기 전에 저장 주식수 계단으로 짓는다({@link #derivedListings} · ADR-0205).
+     * 국내의 상장일 없는 무상 요소 행은 접기 전에 저장 주식수 계단으로 짓는다({@link #derivedListings} · ADR-0205).
      */
     public List<ShareAdjustment> readShareAdjustments(long stockId) {
         List<CorporateActionLedger.Entry> entries = corporateActions.findApplicable(stockId);
-        java.util.Map<Long, LocalDate> derived = krGate && entries.stream().anyMatch(IndicatorDataReader::listingUnknownBonus)
+        java.util.Map<Long, LocalDate> derived = entries.stream().anyMatch(IndicatorDataReader::listingUnknownBonus)
                 && !UsMarket.CODE.equals(marketOf(stockId)) ? derivedListings(stockId, entries) : java.util.Map.of();
         return entries.stream()
                 .map(entry -> new ShareAdjustment(
@@ -560,7 +550,7 @@ public class IndicatorDataReader {
     private static final BigDecimal LISTING_STEP_TOLERANCE = new BigDecimal("0.995");
 
     /**
-     * 국내 관문 켬(ADR-0205) — 상장일을 모르는 무상 요소 사건(거래소 기준가가 지은 행)의 신주 상장일을 <b>저장 상장주식수 계단</b>으로 짓는다:
+     * 국내(ADR-0205) — 상장일을 모르는 무상 요소 사건(거래소 기준가가 지은 행)의 신주 상장일을 <b>저장 상장주식수 계단</b>으로 짓는다:
      * 권리락 다음 날부터 {@value #LISTING_LOOKAHEAD_DAYS}일 안에 주식수가 배수 × 0.995 이상으로 오른 첫 계단. 계단 하나는 한 사건에만 쓴다 —
      * 상장일을 아는 행의 계단은 먼저 비우고, 나머지는 권리락 순으로 고른다(무상증자 권리락 ~ 상장 사이에 유상증자 상장이 끼는 꼴 4건이 그래야
      * 맞는다 · 원장 92건 대조 92/92). 계단이 아직 없고 창이 안 끝났으면 <b>아직 상장 전</b>이다(마지막 봉 다음 날로 둔다 — 그동안 봉의 주식수
@@ -658,14 +648,7 @@ public class IndicatorDataReader {
      * 화면도 그 종목을 판정 불가로 둔다({@code FinancialBasisReader.Untracked.NON_DECEMBER_FISCAL_YEAR}) — 두 자리가 같은 술어다.
      */
     public List<LocalDate> readEarningsReleaseDates(long stockId, LocalDate asOf) {
-        if (!krGate) {
-            return jdbcTemplate.queryForList("""
-                    SELECT DISTINCT r.effective_on FROM earnings_release r JOIN stock s ON s.id = r.stock_id
-                    WHERE r.stock_id = ? AND r.effective_on <= ? AND (s.market_code = 'US' OR s.accounting_month = 12)
-                      AND """ + EarningsReleaseStore.IS_EARNINGS_RELEASE + """
-                     ORDER BY 1""", LocalDate.class, stockId, asOf);
-        }
-        // 국내 관문 켬 — 국내 발표는 DART 게시 시각으로 막는 날을 정한다(ReportingBasis.domesticReleaseEffective · 화면 판독기와 같은 함수).
+        // 국내 발표는 DART 게시 시각으로 막는 날을 정한다(ReportingBasis.domesticReleaseEffective · 화면 판독기와 같은 함수).
         java.util.TreeSet<LocalDate> out = new java.util.TreeSet<>();
         jdbcTemplate.query("""
                 SELECT r.market, r.effective_on, t.opened_at FROM earnings_release r JOIN stock s ON s.id = r.stock_id
@@ -683,7 +666,7 @@ public class IndicatorDataReader {
 
     /**
      * 이 종목이 모체인 분사의 효력일(오름차순 · ADR-0168 F1) — 원장의 승인된 분사({@code APPLIED}) 중 가격 배수가 1이 아닌 것. 그날부터 가격이
-     * 분사 뒤 회사를 뜻하므로 가격과 짝짓는 계산기가 분사 앞 기준 판을 안 쓰는 재료다({@code IndicatorContext.withoutPreSpinOffBasis} · 관문 켬).
+     * 분사 뒤 회사를 뜻하므로 가격과 짝짓는 계산기가 분사 앞 기준 판을 안 쓰는 재료다({@code IndicatorContext.withoutPreSpinOffBasis}).
      * 가격 배수가 1이면(SYRE 2023-07-03 양도불가 CVR) 가격 기저가 안 바뀌었으므로 싣지 않는다. 판정 대기 · 미해석은 억제가 따로 막는다(ADR-0055).
      *
      * <p>자식이 <b>모체와 같은 등록인(CIK)의 증권</b>이면 싣지 않는다 — 회사가 안 쪼개졌고 재무가 그대로 그 회사다(OPEN 2025-11-18 워런트 ·
@@ -732,8 +715,8 @@ public class IndicatorDataReader {
 
     /**
      * 재무 기준 표시(ADR-0195)의 판 이력을 여러 종목 한 번에 읽는다 — 지표 계산이 {@link FinancialVisibility#KNOWN_ON}으로 읽는 것과 같은
-     * 행이다(같은 술어). 열은 관문과 무관한 기본 열만 싣는다 — 기준 기를 정하는 것은 기말과 공시일뿐이고, 관문이 바꾸는 것은 행이 아니라
-     * 열이다({@link #queryFigures}의 갈래들이 같은 행에 열을 더할 뿐이다).
+     * 행이다(같은 술어). 열은 기본 열과 보이는 날 재료만 싣는다 — 기준 기를 정하는 것은 기말과 공시일(보이는 날)뿐이고,
+     * {@link #queryFigures}의 갈래들은 같은 행에 열을 더할 뿐이다.
      *
      * @param writtenBy 지표를 쓴 실행의 시작 시각. 그 뒤 생긴 행은 그 지표가 못 봤으므로 뺀다. {@code null}이면 빼지 않는다
      */
@@ -747,7 +730,7 @@ public class IndicatorDataReader {
         }
         Timestamp bound = writtenBy == null ? null : Timestamp.from(writtenBy);
         jdbcTemplate.query(con -> {
-            var ps = con.prepareStatement(usGate || krGate ? batchWithOpening(usGate, krGate) : SELECT_FINANCIALS_KNOWN_ON_BATCH);
+            var ps = con.prepareStatement(SELECT_FINANCIALS_KNOWN_ON_BATCH_OPENING);
             java.sql.Array ids = con.createArrayOf("bigint", stockIds.toArray());
             ps.setArray(1, ids);
             ps.setObject(2, asOf);
@@ -758,10 +741,9 @@ public class IndicatorDataReader {
             return ps;
         }, rs -> {
             long stockId = rs.getLong("stock_id");
-            String rowMarket = usGate || krGate ? rs.getString("row_market") : null;
-            Opening opening = rowMarket == null ? Opening.NONE
-                    : UsMarket.CODE.equals(rowMarket) ? (usGate ? Opening.US : Opening.NONE) : (krGate ? Opening.KR : Opening.NONE);
-            FinancialFigures figures = mapFigures(rs, null, false, false, krGate, opening, usCloses());
+            String rowMarket = rs.getString("row_market");
+            Opening opening = rowMarket == null ? Opening.NONE : UsMarket.CODE.equals(rowMarket) ? Opening.US : Opening.KR;
+            FinancialFigures figures = mapFigures(rs, null, false, false, true, opening, usCloses());
             (figures.fiscalPeriod() == FinancialFigures.FiscalPeriod.FY ? annual : quarterly)
                     .computeIfAbsent(stockId, k -> new ArrayList<>()).add(figures);
             String code = rs.getString("report_code");
@@ -812,14 +794,13 @@ public class IndicatorDataReader {
         }
         String publishedFilter = visibility == FinancialVisibility.KNOWN_ON
                 ? "AND published_at <= ?" : "";
-        // 국내 관문 켬 — 공시일은 공시 목록의 접수일이다(재무와 같은 규칙 · KR_PUBLISHED). 접수번호 앞 8자리는 제출일이라 영업시간 밖 · 휴일
+        // 국내 공시일은 공시 목록의 접수일이다(재무와 같은 규칙 · KR_PUBLISHED). 접수번호 앞 8자리는 제출일이라 영업시간 밖 · 휴일
         // 제출이 1~4일 이르다(거버넌스 133사실 · 11접수 · 반증 밖 렌즈) — 배당성향 분자(거버넌스)와 분모(재무)의 공개일이 갈리지 않게 한다.
         // 미국 접수 번호는 그 목록에 없어 저장 공시일 그대로다.
-        // 보이는 날(관문 켬 · ReportingBasis.visibleFrom) — 국내는 그 접수번호의 DART 게시 시각, 미국은 도장(그 해 FY 판의 첫 공시일)이
+        // 보이는 날(ReportingBasis.visibleFrom) — 국내는 그 접수번호의 DART 게시 시각, 미국은 도장(그 해 FY 판의 첫 공시일)이
         // 가리키는 FY 판의 EDGAR 접수 시각이다(배당성향 분자 · 분모가 같은 봉에 보이게 — 재무만 옮기면 그 봉이 빈다).
-        String market = usGate || krGate ? marketOf(stockId) : null;
-        Opening opening = market == null ? Opening.NONE
-                : UsMarket.CODE.equals(market) ? (usGate ? Opening.US : Opening.NONE) : (krGate ? Opening.KR : Opening.NONE);
+        String market = marketOf(stockId);
+        Opening opening = market == null ? Opening.NONE : UsMarket.CODE.equals(market) ? Opening.US : Opening.KR;
         String from = switch (opening) {
             case KR -> """
                 (SELECT g.fiscal_year, g.receipt_no, g.metric_key, g.value, g.stock_id, g.published_at,
@@ -837,7 +818,7 @@ public class IndicatorDataReader {
                    FROM governance_fact g) governance_fact""";
             case NONE -> "governance_fact";
         };
-        // 국내 관문 켬 이전 동작(접수일)도 보이는 날로 옮겼다 — 정렬은 저장 공시일 · 접수번호 그대로다.
+        // 국내 접수일도 보이는 날로 옮겼다 — 정렬은 저장 공시일 · 접수번호 그대로다.
         String sql = """
                 SELECT *
                   FROM %s
@@ -881,14 +862,14 @@ public class IndicatorDataReader {
     private List<FinancialFigures> queryFigures(String periodOperator, long stockId,
                                                 LocalDate asOf, int limit,
                                                 FinancialVisibility visibility) {
-        String market = usGate || krGate ? marketOf(stockId) : null;
+        String market = marketOf(stockId);
         boolean us = UsMarket.CODE.equals(market);
-        // 그 행 시장의 관문만 본다 — 한쪽 관문을 연 상태에서 다른 시장 행이 이 축을 타면 그 시장 값이 관문 없이 바뀐다.
-        boolean discontinued = market != null && (us ? usGate : krGate);
-        ShareClassLine line = usGate && us ? shareClasses.line(stockId) : null;
-        // 국내 보통주 몫(ADR-0192) — 국내 관문이 켜졌고 그 행이 국내일 때만(미국 행은 위 클래스 축 갈래).
-        boolean krCommon = krGate && market != null && !us;
-        // 보이는 날(관문 켬 · ReportingBasis.visibleFrom) — 미국은 COMMON_COLUMNS가, 국내는 KR_PUBLISHED가 공개 시각을 싣는다.
+        // 종목을 모르면(시장 없음) 중단영업 열을 안 싣는다.
+        boolean discontinued = market != null;
+        ShareClassLine line = us ? shareClasses.line(stockId) : null;
+        // 국내 보통주 몫(ADR-0192) — 그 행이 국내일 때만(미국 행은 위 클래스 축 갈래).
+        boolean krCommon = market != null && !us;
+        // 보이는 날(ReportingBasis.visibleFrom) — 미국은 COMMON_COLUMNS가, 국내는 KR_PUBLISHED가 공개 시각을 싣는다.
         Opening opening = line != null ? Opening.US : krCommon ? Opening.KR : Opening.NONE;
         ReportingBasis.SessionClose closes = opening == Opening.US ? usCloses() : null;
         // 국내 기저 대체일(ADR-0200)은 뒤 보고서의 저장 공시일이다 — 그 보고서가 보이는 날로 옮긴다(ADR-0204).
@@ -916,14 +897,6 @@ public class IndicatorDataReader {
         };
     }
 
-    /** 그 시장의 재적재 관문이 켜졌는가 — 미국은 {@code stockscreener.gate.us}, 그 밖(국내)은 {@code gate.kr}. 시장을 모르면 꺼짐. */
-    public boolean gateOn(String marketCode) {
-        if (marketCode == null) {
-            return false;
-        }
-        return UsMarket.CODE.equals(marketCode) ? usGate : krGate;
-    }
-
     /** 종목의 시장 코드. 종목이 없으면 {@code null}이다. */
     private String marketOf(long stockId) {
         List<String> market = jdbcTemplate.queryForList("SELECT market_code FROM stock WHERE id = ?", String.class, stockId);
@@ -931,14 +904,14 @@ public class IndicatorDataReader {
     }
 
     /**
-     * @param line {@code null}이면 행이 실은 주식수 그대로(관문 꺼짐 · 국내). 있으면 클래스 축 판정을 입힌다 — 주식수는 그 판정이
+     * @param line {@code null}이면 행이 실은 주식수 그대로(국내). 있으면 클래스 축 판정을 입힌다 — 주식수는 그 판정이
      *             정한 값, 숨김이면 상태로 막고, 분모 n을 싣는다.
-     * @param discontinued 그 행 시장의 관문이 켜졌는가 — 켜졌을 때만 질의가 중단영업 두 컬럼을 싣는다
-     * @param krCommon 국내 관문 켬 · 국내 행 — 질의가 국내 보통주 몫 네 열을 싣는다(ADR-0192)
+     * @param discontinued 질의가 중단영업 두 컬럼을 실었는가
+     * @param krCommon 국내 행 — 질의가 국내 보통주 몫 네 열을 싣는다(ADR-0192)
      */
     /**
      * @param effectivePublished 질의가 {@code published_effective}(국내 접수일)를 실었는가
-     * @param opening            그 행의 보이는 날을 지을 공개 시각 원자료(관문 켬) — {@link Opening#NONE}이면 보이는 날 = 공시일
+     * @param opening            그 행의 보이는 날을 지을 공개 시각 원자료 — {@link Opening#NONE}이면 보이는 날 = 공시일
      */
     private static FinancialFigures mapFigures(ResultSet rs, ShareClassLine line, boolean discontinued, boolean krCommon,
                                                boolean effectivePublished, Opening opening, ReportingBasis.SessionClose closes)
@@ -989,7 +962,7 @@ public class IndicatorDataReader {
         return day -> days.getOrDefault(day, day.plusDays(1));
     }
 
-    /** 보이는 날을 지을 공개 시각 원자료 — 미국 EDGAR 접수 시각 · 국내 DART 게시 시각 · 없음(관문 꺼짐). */
+    /** 보이는 날을 지을 공개 시각 원자료 — 미국 EDGAR 접수 시각 · 국내 DART 게시 시각 · 없음(시장을 모르는 종목). */
     private enum Opening { NONE, US, KR }
 
     /** 미국 세션 마감(NYSE {@code core_end} · 동부 시각) — 달력에 없는 날은 {@code null}(규칙이 가장 이른 마감으로 본다). */
@@ -1071,7 +1044,7 @@ public class IndicatorDataReader {
                 krCommon ? supersession(rs.getString("flow_superseded")) : null);
     }
 
-    /** 기저 대체일 jsonb({@code {"revenue": "2024-11-14", …}}) — 국내 관문 켬 행만 싣는다(재고 A6). */
+    /** 기저 대체일 jsonb({@code {"revenue": "2024-11-14", …}}) — 국내 행만 싣는다(재고 A6). */
     public static java.util.Map<String, FlowSupersession> supersession(String json) {
         if (json == null || json.isBlank()) {
             return null;

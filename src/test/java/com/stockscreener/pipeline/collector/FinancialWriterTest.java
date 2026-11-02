@@ -578,25 +578,11 @@ class FinancialWriterTest {
         }
 
         @Test
-        @DisplayName("더 이른 공시본의 행이 있어도 채우지 않는다 — 이 모드의 소스는 DART이고 판을 하나만 낸다")
-        void doesNotFillTheOlderVintageRow() {
-            writer.write(stockId, List.of(withoutBalanceDetail(2025, "FY", "2026-03-15", "1000")));
-            writer.write(stockId, List.of(report(2025, "FY", "2026-04-20", "950")));
-
-            FinancialWriter.Outcome outcome = fillOnlyWriter.writeDetailed(stockId,
-                    List.of(report(2025, "FY", "2026-03-15", "1000")),
-                    WriteMode.FILL_WITHOUT_REVISION);
-
-            assertThat(outcome.changed()).isZero();
-            assertThat(vintageRow("2026-03-15").get("current_assets")).isNull();
-        }
-
-        @Test
-        @DisplayName("국내 관문 켬 — 같은 공시일의 이른 판 행은 채운다(그 판의 XBRL 인스턴스로 지은 보고서) · 정정 판은 그대로다")
+        @DisplayName("같은 공시일의 이른 판 행은 채운다(그 판의 XBRL 인스턴스로 지은 보고서) · 정정 판은 그대로다")
         void gatedFillsTheSamePublicationVintageRow() {
             writer.write(stockId, List.of(withoutBalanceDetail(2025, "FY", "2026-03-15", "1000")));
             writer.write(stockId, List.of(report(2025, "FY", "2026-04-20", "950")));
-            FinancialWriter gated = new FinancialWriter(jdbcTemplate, invalidations, true);
+            FinancialWriter gated = new FinancialWriter(jdbcTemplate, invalidations);
 
             FinancialWriter.Outcome outcome = gated.writeDetailed(stockId,
                     List.of(report(2025, "FY", "2026-03-15", "1000")),

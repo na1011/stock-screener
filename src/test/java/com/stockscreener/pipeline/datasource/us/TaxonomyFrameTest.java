@@ -187,12 +187,10 @@ class TaxonomyFrameTest {
     }
 
     @Test
-    @DisplayName("관문 켬이면 IFRS 발행사(AEM 40-F)가 행을 얻고 꺼짐은 지금처럼 0행이다")
+    @DisplayName("IFRS 발행사(AEM 40-F)가 행을 얻는다")
     void ifrsIssuerGetsRowsOnlyBehindTheGate() throws Exception {
-        List<RawFinancialReport> off = SecEdgarFacts.build(aem(), 2022, false).reports();
-        List<RawFinancialReport> on = SecEdgarFacts.build(aem(), 2022, true).reports();
+        List<RawFinancialReport> on = SecEdgarFacts.build(aem(), 2022).reports();
 
-        assertThat(off).isEmpty();
         RawFinancialReport fy2025 = on.stream()
                 .filter(r -> r.fiscalYear() == 2025 && "FY".equals(r.fiscalPeriod()))
                 .max(java.util.Comparator.comparing(RawFinancialReport::publishedAt))

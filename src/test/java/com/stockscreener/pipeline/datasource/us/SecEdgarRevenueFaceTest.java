@@ -35,9 +35,9 @@ class SecEdgarRevenueFaceTest {
         return "\"%s\":{\"units\":{\"USD\":[%s]}}".formatted(name, fact(val));
     }
 
-    private static BigDecimal revenue(String usGaap, boolean usGate, SecStatementFaceCollector.SecStatementFaces faces) throws Exception {
+    private static BigDecimal revenue(String usGaap, SecStatementFaceCollector.SecStatementFaces faces) throws Exception {
         JsonNode facts = new ObjectMapper().readTree("{\"facts\":{\"us-gaap\":{" + usGaap + "}}}").path("facts");
-        List<RawFinancialReport> reports = SecEdgarFacts.build(facts, 2015, usGate, CoverUnitJudge.Result.NONE,
+        List<RawFinancialReport> reports = SecEdgarFacts.build(facts, 2015, CoverUnitJudge.Result.NONE,
                 IssuerProfile.Profile.UNKNOWN, faces).reports();
         return reports.stream().filter(r -> r.fiscalYear() == 2017 && "FY".equals(r.fiscalPeriod()))
                 .max(Comparator.comparing(RawFinancialReport::publishedAt)).orElseThrow().revenue();
@@ -53,14 +53,13 @@ class SecEdgarRevenueFaceTest {
     }
 
     @Test
-    @DisplayName("본문 줄 후보가 있으면 그것들만 다툰다 — 주석의 더 큰 총액이 본문 매출을 밀어내지 않는다 · 관문 꺼짐은 최댓값 그대로")
+    @DisplayName("본문 줄 후보가 있으면 그것들만 다툰다 — 주석의 더 큰 총액이 본문 매출을 밀어내지 않는다")
     void faceCandidateBeatsLargerNoteCandidate() throws Exception {
         String json = String.join(",",
                 tag("Revenues", 14_950 * MILLION),
                 tag("RevenueFromContractWithCustomerExcludingAssessedTax", 21_700 * MILLION));
         SecStatementFaceCollector.SecStatementFaces faces = faceWith(14_950 * MILLION, 5_859 * MILLION);
-        assertThat(revenue(json, true, faces)).isEqualByComparingTo("14950000000");
-        assertThat(revenue(json, false, faces)).as("관문 꺼짐은 옛 출력").isEqualByComparingTo("21700000000");
+        assertThat(revenue(json, faces)).isEqualByComparingTo("14950000000");
     }
 
     @Test
@@ -70,7 +69,7 @@ class SecEdgarRevenueFaceTest {
                 tag("Revenues", 14_950 * MILLION),
                 tag("RevenueFromContractWithCustomerExcludingAssessedTax", 21_700 * MILLION))
                 .replaceAll("\"val\":(\\d+)", "\"val\":\"$1\"");
-        assertThat(revenue(json, true, faceWith(14_950 * MILLION, 5_859 * MILLION))).isEqualByComparingTo("14950000000");
+        assertThat(revenue(json, faceWith(14_950 * MILLION, 5_859 * MILLION))).isEqualByComparingTo("14950000000");
     }
 
     @Test
@@ -79,8 +78,8 @@ class SecEdgarRevenueFaceTest {
         String json = String.join(",",
                 tag("Revenues", 14_950 * MILLION),
                 tag("RevenueFromContractWithCustomerExcludingAssessedTax", 21_700 * MILLION));
-        assertThat(revenue(json, true, faceWith(5_859 * MILLION))).isEqualByComparingTo("21700000000");
-        assertThat(revenue(json, true, SecStatementFaceCollector.SecStatementFaces.NONE)).isEqualByComparingTo("21700000000");
+        assertThat(revenue(json, faceWith(5_859 * MILLION))).isEqualByComparingTo("21700000000");
+        assertThat(revenue(json, SecStatementFaceCollector.SecStatementFaces.NONE)).isEqualByComparingTo("21700000000");
     }
 
     @Test
@@ -90,13 +89,13 @@ class SecEdgarRevenueFaceTest {
                 tag("Revenues", 3_711_800_000L),
                 tag("SalesRevenueNet", 3_430_400_000L),
                 tag("FinancialServicesRevenue", 281_400_000L));
-        assertThat(revenue(split, true, faceWith(3_430_400_000L, 281_400_000L))).as("SNA 2016").isEqualByComparingTo("3711800000");
+        assertThat(revenue(split, faceWith(3_430_400_000L, 281_400_000L))).as("SNA 2016").isEqualByComparingTo("3711800000");
 
         String coincidence = String.join(",",
                 tag("Revenues", 18_300_000_000L),
                 tag("SalesRevenueNet", 18_259_000_000L),
                 tag("NetIncomeLossAttributableToNoncontrollingInterest", 41_000_000L));
-        assertThat(revenue(coincidence, true, faceWith(18_259_000_000L, 41_000_000L))).as("KMB 2017 — 차액이 비지배 순이익")
+        assertThat(revenue(coincidence, faceWith(18_259_000_000L, 41_000_000L))).as("KMB 2017 — 차액이 비지배 순이익")
                 .isEqualByComparingTo("18259000000");
     }
 
@@ -110,17 +109,14 @@ class SecEdgarRevenueFaceTest {
         assertThat(SecEdgarFacts.openedAt(Set.of("A", "C"), known)).as("C를 모른다").isNull();
         assertThat(SecEdgarFacts.openedAt(Set.of(), known)).isNull();
 
-        // build는 판 공시일에 사실을 낸 공시들로 짓는다 — 관문 꺼짐은 판정하지 않는다.
+        // build는 판 공시일에 사실을 낸 공시들로 짓는다.
         String json = tag("Revenues", 14_950 * MILLION);
         JsonNode facts = new ObjectMapper().readTree("{\"facts\":{\"us-gaap\":{" + json + "}}}").path("facts");
         java.time.Instant accepted = java.time.Instant.parse("2018-02-15T21:10:00Z");
-        RawFinancialReport on = SecEdgarFacts.build(facts, 2015, true, CoverUnitJudge.Result.NONE, IssuerProfile.Profile.UNKNOWN,
+        RawFinancialReport on = SecEdgarFacts.build(facts, 2015, CoverUnitJudge.Result.NONE, IssuerProfile.Profile.UNKNOWN,
                 SecStatementFaceCollector.SecStatementFaces.NONE, Map.of(ACCN, accepted)).reports().get(0);
         assertThat(on.acceptedAt()).isEqualTo(accepted);
         assertThat(on.openedJudged()).isTrue();
-        RawFinancialReport off = SecEdgarFacts.build(facts, 2015, false, CoverUnitJudge.Result.NONE, IssuerProfile.Profile.UNKNOWN,
-                SecStatementFaceCollector.SecStatementFaces.NONE, Map.of(ACCN, accepted)).reports().get(0);
-        assertThat(off.openedJudged()).as("관문 꺼짐").isFalse();
     }
 
     @Test
@@ -135,7 +131,7 @@ class SecEdgarRevenueFaceTest {
                 new SecStatementFaceCollector.Face(Set.of("us-gaap_Revenues", "us-gaap_NetIncomeLoss"),
                         Set.of(SecStatementFaceCollector.Face.key("20171231", 4, BigDecimal.valueOf(1_000 * MILLION)),
                                 SecStatementFaceCollector.Face.key("20171231", 4, BigDecimal.valueOf(50 * MILLION))))));
-        RawFinancialReport latest = latestFy2017(json, true, faces);
+        RawFinancialReport latest = latestFy2017(json, faces);
         assertThat(latest.revenue()).isEqualByComparingTo("900000000");
         assertThat(latest.operatingIncome()).isNull();
         assertThat(latest.assertedAbsent()).as("뒤 판도 거둔 열을 「없다」로 싣는다").contains("operating_income");
@@ -149,9 +145,9 @@ class SecEdgarRevenueFaceTest {
                 .formatted(name, fact(first), restated, RESTATED);
     }
 
-    private static RawFinancialReport latestFy2017(String usGaap, boolean usGate, SecStatementFaceCollector.SecStatementFaces faces) throws Exception {
+    private static RawFinancialReport latestFy2017(String usGaap, SecStatementFaceCollector.SecStatementFaces faces) throws Exception {
         JsonNode facts = new ObjectMapper().readTree("{\"facts\":{\"us-gaap\":{" + usGaap + "}}}").path("facts");
-        return SecEdgarFacts.build(facts, 2015, usGate, CoverUnitJudge.Result.NONE, IssuerProfile.Profile.UNKNOWN, faces).reports().stream()
+        return SecEdgarFacts.build(facts, 2015, CoverUnitJudge.Result.NONE, IssuerProfile.Profile.UNKNOWN, faces).reports().stream()
                 .filter(r -> r.fiscalYear() == 2017 && "FY".equals(r.fiscalPeriod()))
                 .max(Comparator.comparing(RawFinancialReport::publishedAt)).orElseThrow();
     }
@@ -165,7 +161,7 @@ class SecEdgarRevenueFaceTest {
     }
 
     @Test
-    @DisplayName("고정 태그가 없는 재작성 판 — 그 공시 본문의 매출 줄을 받는다 · 같은 줄의 원가가 앞 판에서 이어지면 받지 않는다 · 관문 꺼짐은 이어받기(DAL FY2017)")
+    @DisplayName("고정 태그가 없는 재작성 판 — 그 공시 본문의 매출 줄을 받는다 · 같은 줄의 원가가 앞 판에서 이어지면 받지 않는다)")
     void restatedVintageTakesItsOwnFaceLine() throws Exception {
         // DAL FY2017: 원 10-K `Revenues` 41,244 · 재작성 10-K(ASC 606)는 `RevenueFromContractWithCustomerExcludingAssessedTax` 41,138만 싣는다.
         String json = String.join(",",
@@ -174,13 +170,12 @@ class SecEdgarRevenueFaceTest {
                         + "\"val\":41138000000,\"accn\":\"" + RESTATED + "\",\"fy\":2018,\"fp\":\"FY\",\"form\":\"10-K\",\"filed\":\"2019-02-15\"}]}}",
                 restatedFact("OperatingIncomeLoss", 6_114 * MILLION, 5_966 * MILLION));
         SecStatementFaceCollector.SecStatementFaces face = restatedFace("RevenueFromContractWithCustomerExcludingAssessedTax", 41_138 * MILLION);
-        assertThat(latestFy2017(json, true, face).revenue()).isEqualByComparingTo("41138000000");
-        assertThat(latestFy2017(json, false, face).revenue()).as("관문 꺼짐은 옛 출력").isEqualByComparingTo("41244000000");
-        assertThat(latestFy2017(json, true, SecStatementFaceCollector.SecStatementFaces.NONE).revenue()).as("재료를 모르면 이어받기")
+        assertThat(latestFy2017(json, face).revenue()).isEqualByComparingTo("41138000000");
+        assertThat(latestFy2017(json, SecStatementFaceCollector.SecStatementFaces.NONE).revenue()).as("재료를 모르면 이어받기")
                 .isEqualByComparingTo("41244000000");
 
         String withCarriedCost = json + "," + tag("CostOfRevenue", 30_000 * MILLION);
-        assertThat(latestFy2017(withCarriedCost, true, face).revenue()).as("원가가 앞 판에서 이어진다 — 한 행에 기저가 섞인다")
+        assertThat(latestFy2017(withCarriedCost, face).revenue()).as("원가가 앞 판에서 이어진다 — 한 행에 기저가 섞인다")
                 .isEqualByComparingTo("41244000000");
     }
 
@@ -193,7 +188,7 @@ class SecEdgarRevenueFaceTest {
                 tag("CostOfServices", 295_700_000L),
                 tag("Revenues", 2_167_400_000L));
         JsonNode facts = new ObjectMapper().readTree("{\"facts\":{\"us-gaap\":{" + json + "}}}").path("facts");
-        RawFinancialReport fy = SecEdgarFacts.build(facts, 2015, true, CoverUnitJudge.Result.NONE, IssuerProfile.Profile.UNKNOWN,
+        RawFinancialReport fy = SecEdgarFacts.build(facts, 2015, CoverUnitJudge.Result.NONE, IssuerProfile.Profile.UNKNOWN,
                 faceWith(595_800_000L, 295_700_000L, 2_167_400_000L)).reports().stream()
                 .filter(r -> r.fiscalYear() == 2017 && "FY".equals(r.fiscalPeriod())).findFirst().orElseThrow();
         assertThat(fy.costOfSales()).isEqualByComparingTo("891500000");

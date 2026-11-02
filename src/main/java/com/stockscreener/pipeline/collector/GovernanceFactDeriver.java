@@ -5,7 +5,6 @@ import com.stockscreener.indicator.ShareBasis;
 import com.stockscreener.pipeline.datasource.us.UsMarket;
 import com.stockscreener.pipeline.datasource.us.shareclass.ShareClassLine;
 import com.stockscreener.pipeline.datasource.us.shareclass.ShareClassStore;
-import org.springframework.beans.factory.annotation.Value;
 
 import com.stockscreener.indicator.GovernanceMetric;
 import com.stockscreener.pipeline.datasource.GovernanceDerivation;
@@ -62,17 +61,14 @@ public class GovernanceFactDeriver {
      */
     private final Map<String, GovernanceFactMapper> mappersByMarket;
 
+    /** 미국 배당 총액의 주식수를 클래스 축 판정을 입힌 값(N_L)으로 읽는다({@link #withClassAxisShares}). */
     private final ShareClassStore shareClasses;
-    /** 미국 관문 설정 — 켜졌으면 배당 총액의 주식수를 클래스 축 판정을 입힌 값(N_L)으로 읽는다({@link #withClassAxisShares}). */
-    private final boolean usGate;
 
     public GovernanceFactDeriver(JdbcTemplate jdbcTemplate, CorporateActionLedger ledger,
-                                 List<GovernanceFactMapper> mappers, ShareClassStore shareClasses,
-                                 @Value("${stockscreener.gate.us}") boolean usGate) {
+                                 List<GovernanceFactMapper> mappers, ShareClassStore shareClasses) {
         this.jdbcTemplate = jdbcTemplate;
         this.ledger = ledger;
         this.shareClasses = shareClasses;
-        this.usGate = usGate;
         Map<String, GovernanceFactMapper> index = new HashMap<>();
         for (GovernanceFactMapper candidate : mappers) {
             for (String market : candidate.supportedMarketCodes()) {
@@ -250,7 +246,7 @@ public class GovernanceFactDeriver {
                         rs.getBigDecimal("shares")),
                 stockId);
 
-        if (usGate && UsMarket.CODE.equals(jdbcTemplate.queryForObject(
+        if (UsMarket.CODE.equals(jdbcTemplate.queryForObject(
                 "SELECT market_code FROM stock WHERE id = ?", String.class, stockId))) {
             periods = withClassAxisShares(stockId, periods);
         }

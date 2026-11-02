@@ -166,7 +166,8 @@ class PriceCollectorTest {
         // 수집은 여기서 안 쓰이므로 registry만 같은 것을 준다.
         return new PriceCollector(registry, writer,
                 new CorporateActionCollector(registry, ledger, recalculator, priceCalendar,
-                new SpinOffValuer(registry, jdbcTemplate), new PriceObservationWindow(jdbcTemplate), new CorporateActionSupplement(), null, false));
+                new SpinOffValuer(registry, jdbcTemplate), new PriceObservationWindow(jdbcTemplate), new CorporateActionSupplement(),
+                new KrBasePriceEvents(jdbcTemplate, org.mockito.Mockito.mock(com.stockscreener.pipeline.datasource.kr.KrSpinOffResolver.class))));
     }
 
     private static CorporateAction split() {

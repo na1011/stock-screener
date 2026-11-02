@@ -24,10 +24,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class SecEdgarPartnersEquityTest {
 
-    private static List<RawFinancialReport> build(String name, int from, boolean usGate) throws Exception {
+    private static List<RawFinancialReport> build(String name, int from) throws Exception {
         Path path = Path.of("src/test/resources/fixtures/sec", "companyfacts-" + name + "-partners-equity.json");
         JsonNode facts = new ObjectMapper().readTree(Files.readString(path, StandardCharsets.UTF_8)).path("facts");
-        return SecEdgarFacts.build(facts, from, usGate).reports();
+        return SecEdgarFacts.build(facts, from).reports();
     }
 
     private static RawFinancialReport at(List<RawFinancialReport> reports, int fiscalYear, String period, String published) {
@@ -40,15 +40,13 @@ class SecEdgarPartnersEquityTest {
     @Test
     @DisplayName("LP 총 · 지배 · 비지배가 같은 공시에서 닫히면 LP 지배 태그가 지배자본이다 — SE 계열 총자본이 있는 판에서도(ET 2026 Q1)")
     void partnersCapitalIsControllingWhenTheSumCloses() throws Exception {
-        RawFinancialReport on = at(build("et", 2025, true), 2026, "Q1", "2026-05-07");
-        RawFinancialReport off = at(build("et", 2025, false), 2026, "Q1", "2026-05-07");
+        RawFinancialReport on = at(build("et", 2025), 2026, "Q1", "2026-05-07");
 
         assertThat(on.totalEquity()).isEqualByComparingTo("49737000000");
         assertThat(on.totalEquityControlling()).as("PartnersCapital 34,462M + 비지배 15,275M = 총 49,737M")
                 .isEqualByComparingTo("34462000000");
-        assertThat(off.totalEquityControlling()).as("관문 꺼짐은 LP 태그를 안 읽는다").isNull();
 
-        RawFinancialReport q1of2019 = at(build("et", 2019, true), 2019, "Q1", "2020-05-11");
+        RawFinancialReport q1of2019 = at(build("et", 2019), 2019, "Q1", "2020-05-11");
         assertThat(q1of2019.totalEquityControlling()).as("원장 PartnersCapital — 「총 − 비지배」 유도는 20,759M")
                 .isEqualByComparingTo("20654000000");
     }
@@ -56,18 +54,16 @@ class SecEdgarPartnersEquityTest {
     @Test
     @DisplayName("MinorityInterest를 안 내도 손익 비지배가 있고 원장이 두 자본을 갈라 실었으면 지배자본은 StockholdersEquity다(BX 2026 Q2)")
     void incomeNoncontrollingKeepsTheDirectControllingEquity() throws Exception {
-        RawFinancialReport on = at(build("bx", 2025, true), 2026, "Q2", "2026-08-07");
-        RawFinancialReport off = at(build("bx", 2025, false), 2026, "Q2", "2026-08-07");
+        RawFinancialReport on = at(build("bx", 2025), 2026, "Q2", "2026-08-07");
 
         assertThat(on.totalEquityControlling()).isEqualByComparingTo("9014543000");
         assertThat(on.totalEquity()).isEqualByComparingTo("21062145000");
-        assertThat(off.totalEquityControlling()).as("ADR-0159 옛 규칙 — 비지배 포함 총자본").isEqualByComparingTo("21062145000");
     }
 
     @Test
     @DisplayName("손익 비지배를 포괄손익 태그로만 내는 기간도 비지배 있음이다(TKO 2026 Q2)")
     void comprehensiveIncomeNoncontrollingCounts() throws Exception {
-        RawFinancialReport on = at(build("tko", 2025, true), 2026, "Q2", "2026-08-03");
+        RawFinancialReport on = at(build("tko", 2025), 2026, "Q2", "2026-08-03");
 
         assertThat(on.totalEquityControlling()).isEqualByComparingTo("3395932000");
     }
@@ -75,28 +71,26 @@ class SecEdgarPartnersEquityTest {
     @Test
     @DisplayName("비지배가 없는데 두 자본이 갈리면 자산 − 부채가 고른 쪽이다 — 비지배 포함 태그가 쓰레기(UNM 2026 Q2)")
     void balanceEvidenceRejectsAGarbageIncludingTag() throws Exception {
-        RawFinancialReport on = at(build("unm", 2025, true), 2026, "Q2", "2026-07-29");
-        RawFinancialReport off = at(build("unm", 2025, false), 2026, "Q2", "2026-07-29");
+        RawFinancialReport on = at(build("unm", 2025), 2026, "Q2", "2026-07-29");
 
         assertThat(on.totalEquityControlling()).isEqualByComparingTo("10809500000");
         assertThat(on.totalEquity()).isEqualByComparingTo("10809500000");
-        assertThat(off.totalEquityControlling()).as("옛 규칙은 쓰레기 −1,870M을 지배자본으로 고른다").isEqualByComparingTo("-1870000000");
     }
 
     @Test
     @DisplayName("같은 공시의 두 자본이 늘 같으면 이어받은 값끼리의 차이는 판 혼합이다 — 새 판정을 안 건다(UHAL 2021 FY 2023-06-02 판)")
     void mixedVintagesKeepTheLegacyBehaviour() throws Exception {
-        RawFinancialReport on = at(build("uhal", 2020, true), 2021, "FY", "2023-06-02");
-        RawFinancialReport off = at(build("uhal", 2020, false), 2021, "FY", "2023-06-02");
+        RawFinancialReport on = at(build("uhal", 2020), 2021, "FY", "2023-06-02");
 
-        assertThat(on.totalEquityControlling()).isEqualByComparingTo(off.totalEquityControlling());
-        assertThat(on.totalEquity()).isEqualByComparingTo(off.totalEquity());
+        // 옛 규칙(ADR-0159 · 관문 전)과 같은 값 — 관문 전 출력과 같다고 단언하던 값을 박는다(2026-11-03 관문 설정 걷기).
+        assertThat(on.totalEquityControlling()).isEqualByComparingTo("4919091000");
+        assertThat(on.totalEquity()).isEqualByComparingTo("4851882000");
     }
 
     @Test
     @DisplayName("부채 유도는 옛 비지배 술어 그대로다 — 손익 비지배가 상환가능분(이미 메자닌)뿐인 회사의 부채를 안 지운다(ARMK 2026 Q3)")
     void liabilitiesKeepTheBalanceSheetPredicate() throws Exception {
-        RawFinancialReport on = at(build("armk", 2025, true), 2026, "Q3", "2026-08-11");
+        RawFinancialReport on = at(build("armk", 2025), 2026, "Q3", "2026-08-11");
 
         assertThat(on.totalLiabilities()).as("자산 13,973.9M − 자본 3,394.2M − 상환가능 비지배 69.9M")
                 .isEqualByComparingTo("10509813000");
@@ -105,8 +99,8 @@ class SecEdgarPartnersEquityTest {
     @Test
     @DisplayName("LP 지배 + 비지배가 총과 안 닫히면 지배자본은 값 없음이다 — 「총 − 비지배」도 막는다(BX 2017 · CG 2018)")
     void unconfirmedPartnersCapitalLeavesControllingEmpty() throws Exception {
-        RawFinancialReport bx = at(build("bx", 2017, true), 2017, "FY", "2018-03-01");
-        RawFinancialReport cg = at(build("cg", 2018, true), 2018, "FY", "2019-02-13");
+        RawFinancialReport bx = at(build("bx", 2017), 2017, "FY", "2018-03-01");
+        RawFinancialReport cg = at(build("cg", 2018), 2018, "FY", "2019-02-13");
 
         assertThat(bx.totalEquity()).as("LP 총 태그").isEqualByComparingTo("13518611000");
         assertThat(bx.totalEquityControlling()).as("지배 6,636M + 표준 비지배 3,253M ≠ 총 — 유도하면 10,265M").isNull();
@@ -117,7 +111,7 @@ class SecEdgarPartnersEquityTest {
     @Test
     @DisplayName("뒤 해 10-Q의 비교 재무상태표는 LP 자본도 새 판으로 받는다 — 순이익이 없어도(WES 2018 FY 2019-05-01 판)")
     void comparativeBalanceSheetCarriesItsOwnPartnersCapital() throws Exception {
-        RawFinancialReport restated = at(build("wes", 2018, true), 2018, "FY", "2019-05-01");
+        RawFinancialReport restated = at(build("wes", 2018), 2018, "FY", "2019-05-01");
 
         assertThat(restated.totalAssets()).isEqualByComparingTo("11457205000");
         assertThat(restated.totalEquity()).as("원 10-K의 3,504.7M이 아니다").isEqualByComparingTo("4892683000");
@@ -127,7 +121,7 @@ class SecEdgarPartnersEquityTest {
     @Test
     @DisplayName("자본변동표만 실은 뒤 공시의 LP 자본은 안 받는다 — 앞 판의 자산 · 부채와 섞인다(MPLX 2019 Q1)")
     void equityStatementOnlyFactsAreIgnored() throws Exception {
-        List<RawFinancialReport> reports = build("mplx", 2019, true);
+        List<RawFinancialReport> reports = build("mplx", 2019);
 
         for (RawFinancialReport q1 : reports.stream().filter(r -> r.fiscalYear() == 2019 && "Q1".equals(r.fiscalPeriod())).toList()) {
             assertThat(q1.totalEquity()).as("@%s — 원 10-Q 값", q1.publishedAt()).isEqualByComparingTo("6929000000");

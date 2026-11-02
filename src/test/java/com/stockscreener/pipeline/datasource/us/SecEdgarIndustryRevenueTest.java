@@ -24,10 +24,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class SecEdgarIndustryRevenueTest {
 
-    private static List<RawFinancialReport> build(boolean usGate, String sic) throws Exception {
+    private static List<RawFinancialReport> build(String sic) throws Exception {
         Path path = Path.of("src/test/resources/fixtures/sec/companyfacts-njr-utility-revenue.json");
         JsonNode facts = new ObjectMapper().readTree(Files.readString(path, StandardCharsets.UTF_8)).path("facts");
-        return SecEdgarFacts.build(facts, 2018, usGate, CoverUnitJudge.Result.NONE,
+        return SecEdgarFacts.build(facts, 2018, CoverUnitJudge.Result.NONE,
                 new IssuerProfile.Profile(9, sic)).reports();
     }
 
@@ -37,19 +37,18 @@ class SecEdgarIndustryRevenueTest {
     }
 
     @Test
-    @DisplayName("관문 켬 · 유틸리티(SIC 4924): 업종 총매출이 계약 매출과 최댓값을 다툰다 — FY 2,592M · 1분기 866M")
+    @DisplayName("유틸리티(SIC 4924): 업종 총매출이 계약 매출과 최댓값을 다툰다 — FY 2,592M · 1분기 866M")
     void utilityTotalRevenueCompetes() throws Exception {
-        List<RawFinancialReport> reports = build(true, "4924");
+        List<RawFinancialReport> reports = build("4924");
 
         assertThat(latest(reports, "FY").revenue()).as("계약 매출 782M은 부분집합").isEqualByComparingTo("2592045000");
         assertThat(latest(reports, "Q2").revenue()).as("1~3월 — 회계연도가 10월에 시작한다").isEqualByComparingTo("866255000");
     }
 
     @Test
-    @DisplayName("그 업종이 아니거나 관문이 꺼지면 업종 태그를 안 본다 — 다른 회사에서는 한 부문이다(KKR · TRGP)")
+    @DisplayName("그 업종이 아니면 업종 태그를 안 본다 — 다른 회사에서는 한 부문이다(KKR · TRGP)")
     void otherIndustryOrGateOffKeepsTheContractTag() throws Exception {
-        assertThat(latest(build(true, "6282"), "FY").revenue()).as("업종 밖 SIC").isEqualByComparingTo("782331000");
-        assertThat(latest(build(true, null), "FY").revenue()).as("SIC 모름").isEqualByComparingTo("782331000");
-        assertThat(latest(build(false, "4924"), "FY").revenue()).as("관문 꺼짐").isEqualByComparingTo("782331000");
+        assertThat(latest(build("6282"), "FY").revenue()).as("업종 밖 SIC").isEqualByComparingTo("782331000");
+        assertThat(latest(build(null), "FY").revenue()).as("SIC 모름").isEqualByComparingTo("782331000");
     }
 }

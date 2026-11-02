@@ -14,7 +14,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -56,30 +55,22 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
     private final RateLimiter rateLimiter;
     private final SecTickerCikCache cikCache;
     private final boolean userAgentPresent;
-    /**
-     * 미국 재적재 관문 설정({@code stockscreener.gate.us} · 기본 꺼짐). 여기서는 관문에서 함께 나갈 어댑터 규칙 변경을
-     * {@link SecEdgarFacts#build(tools.jackson.databind.JsonNode, int, boolean)}에 넘기고, 켜졌을 때만 클래스 축 재료를 받는다
-     * ({@link ShareClassCollector}). 이 설정을 읽는 곳 전부는 {@code @Value("${stockscreener.gate.us}")}로 센다 — 클래스 축의
-     * 유도·판독·명부도 같은 설정 뒤다.
-     * 켜는 길(코드 기본값을 뒤집은 jar 하나 — 배포 디렉터리 {@code .env}는 배포마다 저장소 {@code .env}로 덮인다)은 {@code CLAUDE.md} 「재적재·백필」에 있다.
-     */
-    /** 판마다 예탁 비율의 표지 재료(관문 뒤 · ADR-0183). 시험 생성자는 null이다. */
+    /** 판마다 예탁 비율의 표지 재료(ADR-0183). 시험 생성자는 null이다. */
     private final DepositaryCoverCollector depositary;
-    private final boolean usGate;
     /** companyfacts가 빠뜨린 공시를 인스턴스로 채운다(ADR-0173). */
     private final FilingSupplementer supplementer;
     /** 같은 실행 안 재시도 대기 — 보충의 받기와 같은 규칙, 상태(연속 소진 차단)는 이 어댑터 몫이다. */
     private final SecFilingClient.Backoff backoff;
-    /** 클래스 축 재료 받기 — 관문 설정이 켜졌을 때만 부른다. 시험 생성자는 {@code null}(받지 않는다). */
+    /** 클래스 축 재료 받기. 시험 생성자는 {@code null}(받지 않는다). */
     private final ShareClassCollector shareClass;
-    /** companyfacts 404를 빈 facts로 받아도 되는가(관문 뒤 · ADR-0190). 시험 생성자는 {@link CompanyFactsHistory#NONE}. */
+    /** companyfacts 404를 빈 facts로 받아도 되는가(ADR-0190). 시험 생성자는 {@link CompanyFactsHistory#NONE}. */
     private final CompanyFactsHistory history;
-    /** 팩트 해석의 증인인 발행사 속성 — 선언 결산월(SecEdgarFacts.interimSeed) · SIC(관문 켬 업종 총매출 폴백). */
+    /** 팩트 해석의 증인인 발행사 속성 — 선언 결산월(SecEdgarFacts.interimSeed) · SIC(업종 총매출 폴백). */
     private final IssuerProfile issuerProfile;
-    /** 공시 본문 재료(관문 켬) — 없으면 영업이익을 본문으로 거르지 않는다. */
+    /** 공시 본문 재료 — 없으면 영업이익을 본문으로 거르지 않는다. */
     private final SecStatementFaceCollector faces;
 
-    /** 발행사 전 이력 공시의 접수 시각(관문 켬 · ADR-0204) — 없으면(키 없음 · 시험) 판정하지 않는다. */
+    /** 발행사 전 이력 공시의 접수 시각(ADR-0204) — 없으면(키 없음 · 시험) 판정하지 않는다. */
     private SecCurrentReportClient acceptances;
 
     @Autowired(required = false)
@@ -101,20 +92,19 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
                                     DepositaryCoverCollector depositary,
                                     CompanyFactsHistory history,
                                     IssuerProfile issuerProfile,
-                                    SecStatementFaceCollector faces,
-                                    @Value("${stockscreener.gate.us}") boolean usGate) {
+                                    SecStatementFaceCollector faces) {
         this(clientFactory, properties, rateLimiter, cikCache,
-                properties.getSecEdgar().getBaseUrl(), usGate, supplement, SecFilingClient.Backoff.standard(), shareClass,
+                properties.getSecEdgar().getBaseUrl(), supplement, SecFilingClient.Backoff.standard(), shareClass,
                 depositary, history, issuerProfile, faces);
     }
 
-    /** MockWebServer 테스트 전용 — base URL만 바꿔 끼운다. 관문 설정은 꺼진 채이고 보충하지 않는다. */
+    /** MockWebServer 테스트 전용 — base URL만 바꿔 끼운다. 보충하지 않는다. */
     SecEdgarFinancialAdapter(ExternalApiClientFactory clientFactory,
                              DataSourceProperties properties,
                              RateLimiter rateLimiter,
                              SecTickerCikCache cikCache,
                              String baseUrl) {
-        this(clientFactory, properties, rateLimiter, cikCache, baseUrl, false, FilingSupplementer.NONE);
+        this(clientFactory, properties, rateLimiter, cikCache, baseUrl, FilingSupplementer.NONE);
     }
 
     /** 시험 전용 — 재시도 대기는 기다리지 않는다(대기 자체는 {@code SecRetryBackoffTest}가 묻는다). */
@@ -123,9 +113,8 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
                              RateLimiter rateLimiter,
                              SecTickerCikCache cikCache,
                              String baseUrl,
-                             boolean usGate,
                              FilingSupplementer supplementer) {
-        this(clientFactory, properties, rateLimiter, cikCache, baseUrl, usGate, supplementer, CompanyFactsHistory.NONE);
+        this(clientFactory, properties, rateLimiter, cikCache, baseUrl, supplementer, CompanyFactsHistory.NONE);
     }
 
     /** 시험 전용 — companyfacts 이력 판정을 끼운다(ADR-0190). */
@@ -134,10 +123,9 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
                              RateLimiter rateLimiter,
                              SecTickerCikCache cikCache,
                              String baseUrl,
-                             boolean usGate,
                              FilingSupplementer supplementer,
                              CompanyFactsHistory history) {
-        this(clientFactory, properties, rateLimiter, cikCache, baseUrl, usGate, supplementer,
+        this(clientFactory, properties, rateLimiter, cikCache, baseUrl, supplementer,
                 new SecFilingClient.Backoff(SecFilingClient.Backoff.STANDARD_MILLIS, millis -> { }), null, null, history, IssuerProfile.NONE,
                 null);
     }
@@ -147,7 +135,6 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
                              RateLimiter rateLimiter,
                              SecTickerCikCache cikCache,
                              String baseUrl,
-                             boolean usGate,
                              FilingSupplementer supplementer,
                              SecFilingClient.Backoff backoff,
                              ShareClassCollector shareClass,
@@ -161,7 +148,6 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
         this.rateLimiter = rateLimiter;
         this.cikCache = cikCache;
         this.userAgentPresent = source.hasApiKey();
-        this.usGate = usGate;
         this.supplementer = supplementer;
         this.backoff = backoff;
         this.shareClass = shareClass;
@@ -201,7 +187,7 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
                 security.ticker(), SecTickerCikCache.padded(cik.get()));
         ResponseEntity<String> response = factsResponse(cik.get(), context);
         JsonNode facts;
-        if (response.getStatusCode().value() == 404 && usGate && history.supplementOnly(security.stockId(), cik.get())) {
+        if (response.getStatusCode().value() == 404 && history.supplementOnly(security.stockId(), cik.get())) {
             // companyfacts가 그 발행사를 아직 안 지었다 — 공시 인스턴스는 재무를 준다(MAKO · SCZM · TGE 40-F/20-F · 2026-10-24 실측).
             // 「200인데 facts가 빔」(AUGO · AERO)과 같은 갈래로 공시 보충에 넘긴다. companyfacts 이력이 있는 종목의 404는 그대로
             // NOT_FOUND다 — 일시 사건이나 등록인 교체를 빈 트리로 이으면 클래스 축 재료 · 부재 표 · 보충 판이 덮인다(ADR-0190).
@@ -217,23 +203,22 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
 
         // 공시 소비의 근거 ①(ADR-0176 2차): companyfacts가 us-gaap를 싣는 접수번호. MUST: 보충 **전**에 잰다 — 보충이 트리에
         // 팩트를 더하므로 뒤에 재면 보충으로 실은 공시가 섞이고, 보충의 성패는 소비가 보충 표로 따로 판정한다.
-        // 관문 켬은 IFRS 공시도 companyfacts가 실은 공시다(ADR-0182) — 안 세면 그 공시가 「소비할 근거 없음」으로 남는다.
-        TaxonomyFrame.Result frame = usGate ? TaxonomyFrame.of(tree) : null;
-        Set<String> carried = SecFilingSupplement.usGaapAccessions(tree);
-        if (frame != null) {
-            carried = new java.util.HashSet<>(carried);
-            carried.addAll(SecFilingSupplement.usGaapAccessions(frame.facts()));
-        }
+        // IFRS 공시도 companyfacts가 실은 공시다(ADR-0182) — 안 세면 그 공시가 「소비할 근거 없음」으로 남는다.
+        TaxonomyFrame.Result frame = TaxonomyFrame.of(tree);
+        Set<String> carried = new java.util.HashSet<>(SecFilingSupplement.usGaapAccessions(tree));
+        carried.addAll(SecFilingSupplement.usGaapAccessions(frame.facts()));
 
-        // 클래스 축 재료(관문 뒤). MUST: 보충 **전**에 — 보충이 트리에 팩트를 더하고, 판정 엔진은 companyfacts 그대로로 검증됐다.
-        // 관문 켬의 틀(TaxonomyFrame)로 넘긴다 — us-gaap에서만 공시 목록을 지으면 IFRS 공시가 앵커가 못 되어 표지를 클래스(차원)로만
+        // 클래스 축 재료. MUST: 보충 **전**에 — 보충이 트리에 팩트를 더하고, 판정 엔진은 companyfacts 그대로로 검증됐다.
+        // 틀(TaxonomyFrame)로 넘긴다 — us-gaap에서만 공시 목록을 지으면 IFRS 공시가 앵커가 못 되어 표지를 클래스(차원)로만
         // 싣는 발행사(TRI · VALE · BIP)의 주식수를 영영 못 읽고, 섞인 us-gaap 팩트가 앵커를 받은 IFRS 발행사(VALE · WFG)는 그 뒤
         // IFRS 공시가 「미판정 = 숨김」에 걸린다(ADR-0182).
         com.stockscreener.pipeline.datasource.us.shareclass.IssuerFacts classInput =
-                usGate && shareClass != null ? shareClass.saveInput(security, cik.get(), frame.shareClassFacts()) : null;
+                shareClass != null ? shareClass.saveInput(security, cik.get(), frame.shareClassFacts()) : null;
 
         // companyfacts가 빠뜨린 정기 공시를 그 공시의 인스턴스로 채운다(ADR-0173). 실패는 종목을 세우지 않고 판 보호로 낸다.
-        SecFilingSupplement.Outcome supplement = supplementer.supplement(cik.get(), tree, fromFiscalYear, context, usGate);
+        // IFRS로 실린 공시도 「덮였다」로 센다(ADR-0182). 보충 쪽 인자는 READER_VERSION 판 범위 파일(ReaderVersionPinTest)이라 그대로 둔다 —
+        // 걷으면 판을 올려 저장 행을 다시 받는다.
+        SecFilingSupplement.Outcome supplement = supplementer.supplement(cik.get(), tree, fromFiscalYear, context, true);
         if (supplement.fromStore() + supplement.fetched() > 0 || !supplement.failed().isEmpty()
                 || supplement.vintagesUncertain()) {
             log.info("공시 보충. ticker={} 받음={} 저장분={} 옛 판 저장분={} 더한 팩트={} 실패={} 목록 모름={}",
@@ -241,7 +226,7 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
                     supplement.merged(), supplement.failed(), supplement.vintagesUncertain());
         }
 
-        // 클래스 축 인스턴스(관문 뒤) — 보충 **뒤**: 보충이 이번에 실은 정기 공시도 앵커 후보다.
+        // 클래스 축 인스턴스 — 보충 **뒤**: 보충이 이번에 실은 정기 공시도 앵커 후보다.
         List<DataSourceException.Kind> unfetchedClassFacts = List.of();
         if (classInput != null) {
             ShareClassCollector.Outcome classes = shareClass.fetchInstances(cik.get(), classInput, context);
@@ -251,7 +236,7 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
             }
             unfetchedClassFacts = classes.unresolved();
         }
-        if (usGate && depositary != null) {
+        if (depositary != null) {
             // 판마다 예탁 비율의 재료(ADR-0183) — 예탁증권 줄 발행사의 2019 뒤 정기 공시 표지. 받지 못한 것은 클래스 축처럼 시장 미완료의
             // 재료로 싣는다(다음 받기가 다시 받는다).
             DepositaryCoverCollector.Outcome covers = depositary.collect(security, cik.get(), context);
@@ -266,18 +251,18 @@ public class SecEdgarFinancialAdapter implements FinancialDataSource {
             }
         }
 
-        // 표지 단위 판정(ADR-0193 · 관문 뒤) — 공시 보충 **뒤** 트리로 한 번만 낸다. 그 결정을 재무 추출과 클래스 축 입력에 함께 싣는다 —
+        // 표지 단위 판정(ADR-0193) — 공시 보충 **뒤** 트리로 한 번만 낸다. 그 결정을 재무 추출과 클래스 축 입력에 함께 싣는다 —
         // 두 쪽이 저마다 내면 입력(보충 공시의 표지 · IFRS 가중평균 별칭)이 달라 결정이 갈린다.
         com.stockscreener.pipeline.datasource.us.shareclass.CoverUnitJudge.Result coverUnit =
                 classInput != null ? shareClass.judgeCovers(security, cik.get(), frame.shareClassFacts(), tree) : null;
-        // 관문 켬: 손익 머리 열의 사실을 낸 창 안 공시마다 재무제표 본문(ADR-0202) — 주석의 줄을 본문 열로 받지 않는다.
-        SecStatementFaceCollector.SecStatementFaces statementFaces = usGate && faces != null
+        // 손익 머리 열의 사실을 낸 창 안 공시마다 재무제표 본문(ADR-0202) — 주석의 줄을 본문 열로 받지 않는다.
+        SecStatementFaceCollector.SecStatementFaces statementFaces = faces != null
                 ? faces.faces(cik.get(), SecEdgarFacts.headlineAccessions(tree, fromFiscalYear, issuerProfile.of(security.stockId()).sic()), context)
                 : SecStatementFaceCollector.SecStatementFaces.NONE;
-        // 관문 켬: 판마다 공개 시각(ADR-0204) — 발행사 전 이력 공시의 접수 시각. 받기 실패는 그 종목의 실패다(「모름」으로 접으면 실행마다
+        // 판마다 공개 시각(ADR-0204) — 발행사 전 이력 공시의 접수 시각. 받기 실패는 그 종목의 실패다(「모름」으로 접으면 실행마다
         // 그 판이 보이는 봉이 갈린다).
-        java.util.Map<String, java.time.Instant> accepted = usGate && acceptances != null ? acceptances.acceptances(cik.get()) : null;
-        SecEdgarFacts.Result result = SecEdgarFacts.build(tree, fromFiscalYear, usGate,
+        java.util.Map<String, java.time.Instant> accepted = acceptances != null ? acceptances.acceptances(cik.get()) : null;
+        SecEdgarFacts.Result result = SecEdgarFacts.build(tree, fromFiscalYear,
                 coverUnit != null ? coverUnit : com.stockscreener.pipeline.datasource.us.shareclass.CoverUnitJudge.Result.NONE,
                 issuerProfile.of(security.stockId()), statementFaces, accepted);
         if (result.dropped() > 0) {

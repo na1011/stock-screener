@@ -7,7 +7,6 @@ import com.stockscreener.pipeline.datasource.us.listing.DepositaryRatioJudge;
 import com.stockscreener.pipeline.datasource.us.shareclass.ClassFacts;
 import com.stockscreener.pipeline.datasource.us.shareclass.ShareClassLine;
 import com.stockscreener.pipeline.datasource.us.shareclass.ShareClassStore;
-import org.springframework.beans.factory.annotation.Value;
 
 import com.stockscreener.indicator.ShareBasis;
 
@@ -34,7 +33,7 @@ import java.util.Map;
  * <p><b>왜 필요한가</b>: 시가총액 = 주식수 × 종가인데 <b>그 둘의 기저가 다른 종목이 있다.</b>
  * {@code AKTX}는 SEC 표지가 보통주 155,758,529,533주를 주고 시세는 ADS당 가격이라 저장 시총이
  * 1,565B로 미국 8위에 앉았다. 관문 밖에서는 원장이 「기저가 어긋났다」고 말하는 자리만 고친다(SHIFTED). 비율은 공시 표지가
- * 판마다 주며, 관문 켬은 예탁증권 줄 발행사의 행마다 그 비율로 배수를 짓는다(DEPOSITARY · ADR-0183).
+ * 판마다 주며, 예탁증권 줄 발행사의 행마다 그 비율로 배수를 짓는다(DEPOSITARY · ADR-0183).
  *
  * <p><b>판정은 세 갈래다</b>({@link ShareBasis}). 선언된 주식 교환이 있었는데 계열이 그 비율을
  * 안 따라갔으면 그 뒤 판은 사건 전 기저이고({@code B}), 그 위에 「다른 배수로 움직인」
@@ -85,22 +84,18 @@ public class ShareBasisDeriver {
     private static final double UNCHANGED_BAND = 1.10;
 
     private final JdbcTemplate jdbcTemplate;
-    private final ShareClassStore shareClasses;
     /**
-     * 미국 관문 설정 — 켜졌으면 판정할 계열이 <b>판독기가 읽는 계열</b>(클래스 축 판정을 입힌 주식수 · N_L)이다. 옛 계열로 잰
-     * 배수를 판독기가 N_L에 곱하면 축척 사고가 되살아난다(탐색 {@code SHARES-CLASS-PLAN-V5-1015.md} §0-13). 그래서 화해 입력
-     * 유도가 클래스 축 판정을 먼저 돈다.
+     * 미국은 판정할 계열이 <b>판독기가 읽는 계열</b>(클래스 축 판정을 입힌 주식수 · N_L)이다. 옛 계열로 잰 배수를 판독기가 N_L에
+     * 곱하면 축척 사고가 되살아난다(탐색 {@code SHARES-CLASS-PLAN-V5-1015.md} §0-13). 그래서 화해 입력 유도가 클래스 축 판정을 먼저 돈다.
      */
-    private final boolean usGate;
-    /** 판마다 예탁 비율의 두 표(관문 뒤 · ADR-0183). */
+    private final ShareClassStore shareClasses;
+    /** 판마다 예탁 비율의 두 표(ADR-0183). */
     private final DepositaryCoverStore depositary;
 
-    public ShareBasisDeriver(JdbcTemplate jdbcTemplate, ShareClassStore shareClasses, DepositaryCoverStore depositary,
-                             @Value("${stockscreener.gate.us}") boolean usGate) {
+    public ShareBasisDeriver(JdbcTemplate jdbcTemplate, ShareClassStore shareClasses, DepositaryCoverStore depositary) {
         this.jdbcTemplate = jdbcTemplate;
         this.shareClasses = shareClasses;
         this.depositary = depositary;
-        this.usGate = usGate;
     }
 
     /** 판정 결과 집계. */
@@ -142,7 +137,7 @@ public class ShareBasisDeriver {
             if (declared.isEmpty()) {
                 continue;
             }
-            List<Filing> filings = usGate && UsMarket.CODE.equals(marketCode) ? classAxisFilingsOf(stockId) : filingsOf(stockId);
+            List<Filing> filings = UsMarket.CODE.equals(marketCode) ? classAxisFilingsOf(stockId) : filingsOf(stockId);
             if (filings.size() < 2) {
                 continue;
             }
@@ -155,7 +150,7 @@ public class ShareBasisDeriver {
                     .add(tickers.get(stockId));
         }
         List<String> deposited = new ArrayList<>();
-        if (usGate && UsMarket.CODE.equals(marketCode)) {
+        if (UsMarket.CODE.equals(marketCode)) {
             rows += deriveDepositary(marketCode, deposited);
         }
         log.info("주식수 기저 판정. 시장={} 재료사건보유={} SHIFTED={}{} UNRESOLVED={}{} DEPOSITARY={}{} 쓴행={}",
@@ -165,7 +160,7 @@ public class ShareBasisDeriver {
     }
 
     /**
-     * 관문 켬 미국 — 예탁증권 줄 발행사의 행마다 {@code share_basis_multiple} = 1/k · 상태 DEPOSITARY(ADR-0183). k는 공시마다 한 번
+     * 미국 — 예탁증권 줄 발행사의 행마다 {@code share_basis_multiple} = 1/k · 상태 DEPOSITARY(ADR-0183). k는 공시마다 한 번
      * 정해 {@code sec_depositary_ratio}에 두고 <b>정한 값은 다시 안 짓는다</b>(미정만 채운다) — 매 평일 이 판정이 전 행을 지우고 다시
      * 짓는 동안 지난 판의 k가 소급해 뒤집히지 않게. 그 발행사의 SHIFTED 판정을 덮는다(같은 사건을 두 번 곱하지 않는다 — AMRN이 이 범위에
      * 들면 1/20이 SHIFTED ×0.05를 대신한다). 미정 행은 UNRESOLVED(숨김)다.
@@ -197,7 +192,7 @@ public class ShareBasisDeriver {
     }
 
     /**
-     * 관문 켬 미국 — 예탁증권 줄 발행사의 공시마다 k를 정해 {@code sec_depositary_ratio}에 둔다(ADR-0183). <b>정한 값은 다시 안
+     * 미국 — 예탁증권 줄 발행사의 공시마다 k를 정해 {@code sec_depositary_ratio}에 둔다(ADR-0183). <b>정한 값은 다시 안
      * 짓는다</b>(미정만 채운다 — 저장소가 지킨다). 클래스 축 판정보다 먼저 돈다 — 클래스 축이 ADS 원장 계수를 보통주 계수로 바꿀 때 이
      * k를 쓴다({@code IndicatorReconciler.deriveShareBases}).
      *
@@ -247,7 +242,7 @@ public class ShareBasisDeriver {
     }
 
     /**
-     * 관문 켬 미국 — 예탁증권 줄 발행사의 행마다 {@code share_basis_multiple} = 1/k · DEPOSITARY(ADR-0183). k는
+     * 미국 — 예탁증권 줄 발행사의 행마다 {@code share_basis_multiple} = 1/k · DEPOSITARY(ADR-0183). k는
      * {@link #decideDepositaryRatios}가 정해 둔 값이다(여기서 못 정한 공시가 있으면 먼저 정한다). 그 발행사의 SHIFTED 판정을 덮는다
      * (같은 사건을 두 번 곱하지 않는다 — AMRN이 이 범위에 들면 1/20이 SHIFTED ×0.05를 대신한다). 미정 행은 UNRESOLVED(숨김)다.
      */

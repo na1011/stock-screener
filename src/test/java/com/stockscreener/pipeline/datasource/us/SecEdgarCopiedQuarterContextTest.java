@@ -25,7 +25,7 @@ class SecEdgarCopiedQuarterContextTest {
                 .formatted(start, end, val, accn, form, filed);
     }
 
-    private static List<RawFinancialReport> build(boolean usGate) throws Exception {
+    private static List<RawFinancialReport> build() throws Exception {
         String q1 = "0000000001-17-000001";
         String q2 = "0000000001-17-000002";
         String q3 = "0000000001-17-000003";
@@ -47,7 +47,7 @@ class SecEdgarCopiedQuarterContextTest {
                 {"facts":{"us-gaap":{"Revenues":{"units":{"USD":[%s]}},"CostOfRevenue":{"units":{"USD":[%s]}}}}}"""
                 .formatted(revenue, cost);
         JsonNode facts = new ObjectMapper().readTree(json).path("facts");
-        return SecEdgarFacts.build(facts, 2015, usGate).reports();
+        return SecEdgarFacts.build(facts, 2015).reports();
     }
 
     private static RawFinancialReport latestQ2(List<RawFinancialReport> reports) {
@@ -56,10 +56,9 @@ class SecEdgarCopiedQuarterContextTest {
     }
 
     @Test
-    @DisplayName("관문 켬: 3분기 10-Q가 비교 2분기 창에 3분기 문맥을 통째로 복사하면 그 창을 안 읽는다 — 2분기는 앞 10-Q 값")
+    @DisplayName("3분기 10-Q가 비교 2분기 창에 3분기 문맥을 통째로 복사하면 그 창을 안 읽는다 — 2분기는 앞 10-Q 값")
     void copiedQuarterContextIsIgnored() throws Exception {
-        assertThat(latestQ2(build(true)).revenue()).isEqualByComparingTo("2000");
-        assertThat(latestQ2(build(true)).costOfSales()).isEqualByComparingTo("1200");
-        assertThat(latestQ2(build(false)).revenue()).as("관문 꺼짐은 옛 출력 그대로 — 복사본이 최신 판").isEqualByComparingTo("2500");
+        assertThat(latestQ2(build()).revenue()).isEqualByComparingTo("2000");
+        assertThat(latestQ2(build()).costOfSales()).isEqualByComparingTo("1200");
     }
 }

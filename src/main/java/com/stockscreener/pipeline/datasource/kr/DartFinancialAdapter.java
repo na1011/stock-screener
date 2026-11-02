@@ -58,26 +58,12 @@ public class DartFinancialAdapter implements FinancialDataSource {
     private final DartDailyQuota dailyQuota;
     private final DartCorpCodeCache corpCodes;
     private final String apiKey;
-    /** 국내 관문(`stockscreener.gate.kr`) — 켜면 4분기를 FY와 3분기 누계가 같은 재무제표 기저(연결 · 별도)일 때만 짓는다. */
-    private final boolean krGate;
 
-    /** 국내 관문 꺼짐 — 시험이 쓴다. */
-    public DartFinancialAdapter(ExternalApiClientFactory clientFactory,
-                                DataSourceProperties properties,
-                                RateLimiter rateLimiter,
-                                DartDailyQuota dailyQuota,
-                                DartCorpCodeCache corpCodes) {
-        this(clientFactory, properties, rateLimiter, dailyQuota, corpCodes, false);
-    }
-
-    @org.springframework.beans.factory.annotation.Autowired
     public DartFinancialAdapter(ExternalApiClientFactory clientFactory,
                                 DataSourceProperties properties,
                                 @Qualifier("dartRateLimiter") RateLimiter rateLimiter,
                                 DartDailyQuota dailyQuota,
-                                DartCorpCodeCache corpCodes,
-                                @org.springframework.beans.factory.annotation.Value("${stockscreener.gate.kr}") boolean krGate) {
-        this.krGate = krGate;
+                                DartCorpCodeCache corpCodes) {
         DataSourceProperties.Source source = properties.getDart();
         this.client = clientFactory.create(source);
         this.rateLimiter = rateLimiter;
@@ -140,19 +126,16 @@ public class DartFinancialAdapter implements FinancialDataSource {
                 reports.add(q4);
             });
         }
-        if (krGate) {
-            List<com.stockscreener.pipeline.datasource.FlowBasis> bases = new ArrayList<>();
-            for (int year = fromFiscalYear; year <= currentYear; year++) {
-                bases.addAll(flowBases(year, rowsByYear.get(year), rowsByYear.getOrDefault(year + 1, Map.of()),
-                        rowsByYear.getOrDefault(year + 2, Map.of()), reportsByYear.get(year)));
-            }
-            return FinancialFetch.of(reports).withFilingTrace(FilingTrace.ofReports(seen)).withFlowBases(bases);
+        List<com.stockscreener.pipeline.datasource.FlowBasis> bases = new ArrayList<>();
+        for (int year = fromFiscalYear; year <= currentYear; year++) {
+            bases.addAll(flowBases(year, rowsByYear.get(year), rowsByYear.getOrDefault(year + 1, Map.of()),
+                    rowsByYear.getOrDefault(year + 2, Map.of()), reportsByYear.get(year)));
         }
-        // DART는 이 축을 안 본다 — 빈 목록은 「모른다」이지 「없다」가 아니다.
+        // 부재 축(absences)은 DART가 안 본다 — 빈 목록은 「모른다」이지 「없다」가 아니다.
         // 같은 판정을 낼 재료는 있다(DartFullAccountMapper.find가 후보 account_id가 손익 행에
         // 하나도 없을 때 null을 낸다 · 추가 콜 0). 국내 54종목이 미국 380과 같은 상황인데
         // 이번에 안 열었고, 그 사실과 수는 이 변경의 ADR §결과에 있다.
-        return FinancialFetch.of(reports).withFilingTrace(FilingTrace.ofReports(seen));
+        return FinancialFetch.of(reports).withFilingTrace(FilingTrace.ofReports(seen)).withFlowBases(bases);
     }
 
     /**
@@ -290,9 +273,9 @@ public class DartFinancialAdapter implements FinancialDataSource {
         boolean subtractable = annualCurrency != null
                 && annualCurrency.equals(singleCurrency(thirdQuarter.rows()))
                 && samePeriodTerm(annual.rows(), thirdQuarter.rows())
-                // 국내 관문 켬: 연결 FY − 별도 3분기 누계는 뜻이 없다 — 그 해 안에서 연결 대상이 생기거나 없어진 회사(편입 350 × 2019~ 녹화 26
+                // 연결 FY − 별도 3분기 누계는 뜻이 없다 — 그 해 안에서 연결 대상이 생기거나 없어진 회사(편입 350 × 2019~ 녹화 26
                 // (종목, 연도) · 23종목 · 예 「별도 1~3분기 · 연결 FY」). 그 해의 연결 3분기 누계를 원장이 안 주므로 4분기 유량은 미표시다.
-                && (!krGate || annual.fsDiv().equals(thirdQuarter.fsDiv()));
+                && annual.fsDiv().equals(thirdQuarter.fsDiv());
 
         return Optional.of(new RawFinancialReport(
                 year, "Q4",
@@ -345,7 +328,7 @@ public class DartFinancialAdapter implements FinancialDataSource {
     }
 
     /**
-     * 국내 관문 켬(재고 A6): 그 해 손익의 기저 판정({@link DartFlowBasis}) — 그 해 보고서와 다음 해 보고서 넷의 전기 열. 한 통화의 보고서끼리
+     * 재고 A6: 그 해 손익의 기저 판정({@link DartFlowBasis}) — 그 해 보고서와 다음 해 보고서 넷의 전기 열. 한 통화의 보고서끼리
      * 잰다(연결 · 별도 기저는 가리지 않는다 — 다른 기저로 다시 실은 것도 같은 원칙이다).
      */
     private static List<com.stockscreener.pipeline.datasource.FlowBasis> flowBases(int year, Map<String, PeriodRows> rows,

@@ -77,22 +77,14 @@ public class FinancialWriter {
 
     private final JdbcTemplate jdbcTemplate;
     private final IndicatorInvalidationPort invalidationPort;
+
     /**
-     * 국내 관문 설정({@code stockscreener.gate.kr}) — 켜졌으면 {@link WriteMode#FILL_WITHOUT_REVISION}도 같은 공시일의 이른 판을 채운다
-     * (전체 재무제표 어댑터가 저장 이른 판을 그 판의 XBRL 인스턴스로 지어 함께 낸다 · {@code DartXbrlStatementRows}). 꺼지면 이 축이 없던 때와 같다.
+     * {@link WriteMode#FILL_WITHOUT_REVISION}도 같은 공시일의 이른 판을 채운다(전체 재무제표 어댑터가 저장 이른 판을 그 판의 XBRL 인스턴스로
+     * 지어 함께 낸다 · {@code DartXbrlStatementRows}).
      */
-    private final boolean krGate;
-
     public FinancialWriter(JdbcTemplate jdbcTemplate, IndicatorInvalidationPort invalidationPort) {
-        this(jdbcTemplate, invalidationPort, false);
-    }
-
-    @org.springframework.beans.factory.annotation.Autowired
-    public FinancialWriter(JdbcTemplate jdbcTemplate, IndicatorInvalidationPort invalidationPort,
-                           @org.springframework.beans.factory.annotation.Value("${stockscreener.gate.kr}") boolean krGate) {
         this.jdbcTemplate = jdbcTemplate;
         this.invalidationPort = invalidationPort;
-        this.krGate = krGate;
     }
 
     /** 같은 회계기간이 다시 들어왔을 때 무엇까지 할지. */
@@ -710,13 +702,13 @@ public class FinancialWriter {
             // **851행·248종목**(교정 139칸 · 채움 3,292칸)이고, 교정 139칸 중 41칸이 50% 넘게
             // 어긋나며 최대는 UHAL 매출 **173배**다.
             //
-            // MUST: FILL_MISSING에서만 연다 — 국내 관문 켬의 FILL_WITHOUT_REVISION은 예외다. FILL_WITHOUT_REVISION을 쓰는 것은
+            // MUST: FILL_MISSING에서만 연다 — FILL_WITHOUT_REVISION은 예외다. FILL_WITHOUT_REVISION을 쓰는 것은
             // FullStatementCollector 하나이고 그 어댑터는 **DART 전용**인데(KOSPI·KOSDAQ), DART 재무 API는
-            // (corp_code, 연도, 보고서코드)마다 판을 하나만 낸다 — 그 API의 이른 판은 오지 않는다. 국내 관문 켬은 그 어댑터가
+            // (corp_code, 연도, 보고서코드)마다 판을 하나만 낸다 — 그 API의 이른 판은 오지 않는다. 그래서 그 어댑터가
             // 저장 이른 판을 **그 판 자신의 XBRL 인스턴스**로 지어 함께 낸다(판마다 원장이 하나씩 있다 · 녹화본 9,110 보고서에서
             // 인스턴스가 낸 값이 전부 응답과 같다 · DartXbrlStatementRows) — 같은 공시일의 행을 고치므로 섞이지 않는다.
             // APPEND_ONLY는 일일 갱신이라 판 이력을 다시 쓰면 안 된다.
-            boolean instanceVintage = krGate && mode == WriteMode.FILL_WITHOUT_REVISION;
+            boolean instanceVintage = mode == WriteMode.FILL_WITHOUT_REVISION;
             Existing vintage = mode == WriteMode.FILL_MISSING || instanceVintage
                     ? findVintage(stockId, report, managed) : null;
             if (vintage != null && instanceVintage && derivedCopy(vintage.id())) {

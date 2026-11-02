@@ -87,15 +87,13 @@ class SecEdgarFactsSweepTest {
                 .orElse("build/sweep.tsv"));
         int from = Integer.parseInt(
                 Optional.ofNullable(System.getenv("REPLAY_SWEEP_FROM")).orElse("2015"));
-        // 미국 재적재 관문 설정. 어댑터와 같은 갈래를 태운다 — 꺼진 출력은 설정이 생기기 전과 같아야 한다.
-        boolean usGate = "true".equals(System.getenv("US_GATE"));
-        // TSV 밖의 출력(버린 팩트 수 · 컬럼 부재 · 행별 assertedAbsent). 「꺼진 출력이 같다」를 이것까지 대조한다 —
+        // TSV 밖의 출력(버린 팩트 수 · 컬럼 부재 · 행별 assertedAbsent). 전/후 출력이 같은지를 이것까지 대조한다 —
         // TSV만 같아도 Writer가 읽는 부재 판정이 갈리면 저장이 갈린다.
         Optional<Path> extra = Optional.ofNullable(System.getenv("REPLAY_SWEEP_EXTRA")).map(Path::of);
         // 발행사 속성(티커 · 결산월 · SIC — 운영 stock 표에서 뜬 TSV). 어댑터가 IssuerProfile로 묻는 증인이다 — 안 주면 모름(UNKNOWN)이라
-        // 그 증인이 필요한 해석(연차 보고서 전 회계연도 창 · 관문 켬 업종 총매출 폴백)이 안 선다.
+        // 그 증인이 필요한 해석(연차 보고서 전 회계연도 창 · 업종 총매출 폴백)이 안 선다.
         java.util.Map<String, IssuerProfile.Profile> issuers = new java.util.HashMap<>();
-        // 공시 접수 시각(관문 켬 · ADR-0204) — 접수번호 \t UTC 시각(ISO). 주면 판마다 공개 시각 칸을 줄 끝에 붙인다(안 주면 형식 그대로).
+        // 공시 접수 시각(ADR-0204) — 접수번호 \t UTC 시각(ISO). 주면 판마다 공개 시각 칸을 줄 끝에 붙인다(안 주면 형식 그대로).
         java.util.Map<String, java.time.Instant> acceptances = new java.util.HashMap<>();
         Optional.ofNullable(System.getenv("REPLAY_ACCEPTANCES")).map(Path::of).ifPresent(p -> {
             try {
@@ -131,7 +129,7 @@ class SecEdgarFactsSweepTest {
                 removals.computeIfAbsent(parts[0], k -> new java.util.HashSet<>()).add(parts[1]);
             }
         });
-        // 관문 켬의 표지 단위 판정(ADR-0193) — 운영 어댑터처럼 보충 뒤 트리로 낸다. 분할 원장(티커 · 날짜 · 비율 TSV)을 주면 켠다.
+        // 표지 단위 판정(ADR-0193) — 운영 어댑터처럼 보충 뒤 트리로 낸다. 분할 원장(티커 · 날짜 · 비율 TSV)을 주면 켠다.
         java.util.Map<String, List<com.stockscreener.pipeline.datasource.us.shareclass.IssuerTimeline.Split>> splits =
                 Optional.ofNullable(System.getenv("REPLAY_SPLITS")).map(SecEdgarFactsSweepTest::splits).orElse(null);
         List<Path> files;
@@ -161,7 +159,7 @@ class SecEdgarFactsSweepTest {
                     }
                     if (supplement.isPresent()) {
                         SecFilingSupplement.Outcome outcome = supplement.get().supplement().supplement(
-                                root.path("cik").asLong(), (tools.jackson.databind.node.ObjectNode) facts, from, ticker, usGate);
+                                root.path("cik").asLong(), (tools.jackson.databind.node.ObjectNode) facts, from, ticker, true);
                         if (extra.isPresent() && (outcome.fetched() + outcome.fromStore() > 0
                                 || !outcome.failed().isEmpty() || outcome.vintagesUncertain())) {
                             extraLines.append(ticker).append("\tsupplement\t").append(outcome.fetched())
@@ -171,7 +169,7 @@ class SecEdgarFactsSweepTest {
                         }
                     }
                     IssuerProfile.Profile issuer = issuers.getOrDefault(ticker, IssuerProfile.Profile.UNKNOWN);
-                    // 공시 본문 재료(관문 켬 · 재고 「부문 합계가 영업이익 자리에 앉음」) — REPLAY_FACE_DIR의 캐시만 읽는다(0콜 · 없으면 그 공시는 모름).
+                    // 공시 본문 재료(재고 「부문 합계가 영업이익 자리에 앉음」) — REPLAY_FACE_DIR의 캐시만 읽는다(0콜 · 없으면 그 공시는 모름).
                     SecStatementFaceCollector.SecStatementFaces faces = SecStatementFaceCollector.SecStatementFaces.NONE;
                     if (System.getenv("REPLAY_FACE_DIR") != null) {
                         java.util.Map<String, SecStatementFaceCollector.Face> known = new java.util.HashMap<>();
@@ -188,11 +186,11 @@ class SecEdgarFactsSweepTest {
                         }
                         faces = new SecStatementFaceCollector.SecStatementFaces(known);
                     }
-                    result = usGate && splits != null
-                            ? SecEdgarFacts.build(facts, from, true,
+                    result = splits != null
+                            ? SecEdgarFacts.build(facts, from,
                                     ShareClassCollector.judgeCovers(facts, splits.getOrDefault(ticker, List.of())), issuer, faces,
                                     opened ? acceptances : null)
-                            : SecEdgarFacts.build(facts, from, usGate,
+                            : SecEdgarFacts.build(facts, from,
                                     com.stockscreener.pipeline.datasource.us.shareclass.CoverUnitJudge.Result.NONE, issuer, faces,
                                     opened ? acceptances : null);
                 } catch (RuntimeException | java.io.IOException
@@ -239,15 +237,13 @@ class SecEdgarFactsSweepTest {
                         BigDecimal v = f.apply(r);
                         line.append('\t').append(v == null ? "" : v.stripTrailingZeros().toPlainString());
                     }
-                    if (usGate) {
-                        // 관문 켬만 중단영업 세 칸(F2b · ADR-0184)을 줄 끝에 붙인다 — 꺼짐 TSV는 형식까지 그대로라 main과 바이트 대조가 선다.
-                        for (BigDecimal v : java.util.Arrays.asList(r.discontinuedIncome(),
-                                r.discontinuedIncomeControlling(), r.discontinuedRule())) {
-                            line.append('\t').append(v == null ? "" : v.stripTrailingZeros().toPlainString());
-                        }
-                        if (opened) {
-                            line.append('\t').append(r.acceptedAt() == null ? "" : r.acceptedAt().toString());
-                        }
+                    // 중단영업 세 칸(F2b · ADR-0184)을 줄 끝에 붙인다 — 헤더 밖이다(관문 전 TSV와 바이트 대조하던 형식 그대로).
+                    for (BigDecimal v : java.util.Arrays.asList(r.discontinuedIncome(),
+                            r.discontinuedIncomeControlling(), r.discontinuedRule())) {
+                        line.append('\t').append(v == null ? "" : v.stripTrailingZeros().toPlainString());
+                    }
+                    if (opened) {
+                        line.append('\t').append(r.acceptedAt() == null ? "" : r.acceptedAt().toString());
                     }
                     w.write(line.toString());
                     w.newLine();
@@ -270,7 +266,7 @@ class SecEdgarFactsSweepTest {
         // 수집이 빠뜨린 원자료가 있으면 그 공시는 「받지 못함」으로 바뀌어 출력이 운영과 갈린다 — 조용히 넘기지 않는다.
         supplement.ifPresent(r -> org.assertj.core.api.Assertions.assertThat(r.missing())
                 .as("보충 원자료 없음(404) — 수집을 다시 한다").isZero());
-        System.out.println("SWEEP 관문=" + usGate + " 파일=" + files.size() + " 종목=" + stocks + " 보고서=" + rows
+        System.out.println("SWEEP 파일=" + files.size() + " 종목=" + stocks + " 보고서=" + rows
                 + " 버린팩트=" + dropped + " 부재=" + absences + " 읽기실패=" + failed
                 + " out=" + out.toAbsolutePath());
         if (failed > 0) {

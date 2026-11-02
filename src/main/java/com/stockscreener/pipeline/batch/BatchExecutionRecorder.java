@@ -50,43 +50,28 @@ public class BatchExecutionRecorder {
 
     private final JdbcTemplate jdbcTemplate;
     private final Clock clock;
+
     /**
-     * 시작 때 켜져 있던 관문({@code us} · {@code kr} · {@code us,kr}) — 둘 다 꺼졌으면 {@code null}이고 기록하지 않는다(컬럼이 관문
-     * 마이그레이션과 함께 생긴다 · F2b). 시장마다 관문이 따로 열려 「이 실행이 어느 상태로 돌았나」를 SELECT로 답해야 한다.
+     * 실행 행의 관문 상태({@code gate_state} · F2b 마이그레이션 V70_4). 두 시장 관문이 2026-11-03에 켜졌고 그 설정과 꺼진 갈래를
+     * 걷었으므로 모든 실행이 두 관문 켬의 코드로 돈다 — 관문 전 실행(NULL · {@code us} · {@code kr})과 SELECT로 가른다.
      */
-    private final String gateState;
+    static final String GATE_STATE = "us,kr";
 
     // MUST: @Autowired를 지우지 않는다. 생성자가 둘이면 Spring이 고르지 못해 컨텍스트가 기동에 실패한다.
     @Autowired
-    public BatchExecutionRecorder(JdbcTemplate jdbcTemplate,
-                                  @org.springframework.beans.factory.annotation.Value("${stockscreener.gate.us}") boolean usGate,
-                                  @org.springframework.beans.factory.annotation.Value("${stockscreener.gate.kr}") boolean krGate) {
-        this(jdbcTemplate, Clock.systemUTC(), gateState(usGate, krGate));
+    public BatchExecutionRecorder(JdbcTemplate jdbcTemplate) {
+        this(jdbcTemplate, Clock.systemUTC());
     }
 
-    /** 테스트가 「지금」을 밀 수 있게 시계를 주입받는다. 관문은 다 꺼진 상태다. */
+    /** 테스트가 「지금」을 밀 수 있게 시계를 주입받는다. */
     public BatchExecutionRecorder(JdbcTemplate jdbcTemplate, Clock clock) {
-        this(jdbcTemplate, clock, null);
-    }
-
-    BatchExecutionRecorder(JdbcTemplate jdbcTemplate, Clock clock, String gateState) {
         this.jdbcTemplate = jdbcTemplate;
         this.clock = clock;
-        this.gateState = gateState;
     }
 
-    static String gateState(boolean usGate, boolean krGate) {
-        if (usGate && krGate) {
-            return "us,kr";
-        }
-        return usGate ? "us" : krGate ? "kr" : null;
-    }
-
-    /** 켜진 관문을 실행 행에 남긴다. 다 꺼졌으면 아무것도 안 한다 — 그때 SQL은 이 열이 생기기 전과 같다. */
+    /** 관문 상태를 실행 행에 남긴다. */
     private void recordGate(long id) {
-        if (gateState != null) {
-            jdbcTemplate.update("UPDATE batch_execution SET gate_state = ? WHERE id = ?", gateState, id);
-        }
+        jdbcTemplate.update("UPDATE batch_execution SET gate_state = ? WHERE id = ?", GATE_STATE, id);
     }
 
     /**

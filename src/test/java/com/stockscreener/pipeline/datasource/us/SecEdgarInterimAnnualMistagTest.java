@@ -29,12 +29,12 @@ class SecEdgarInterimAnnualMistagTest {
                 .formatted(start, end, val, accn, fp, form, filed);
     }
 
-    private static List<RawFinancialReport> build(String laterTenQFacts, boolean usGate) throws Exception {
+    private static List<RawFinancialReport> build(String laterTenQFacts) throws Exception {
         String json = """
                 {"facts":{"us-gaap":{"Revenues":{"units":{"USD":[%s,%s]}}}}}"""
                 .formatted(fact("2017-01-01", "2017-12-31", 14_748L, KQ, "10-K", "2018-02-15", "FY"), laterTenQFacts);
         JsonNode facts = new ObjectMapper().readTree(json).path("facts");
-        return SecEdgarFacts.build(facts, 2015, usGate).reports();
+        return SecEdgarFacts.build(facts, 2015).reports();
     }
 
     private static RawFinancialReport latestFy(List<RawFinancialReport> reports) {
@@ -44,13 +44,12 @@ class SecEdgarInterimAnnualMistagTest {
     }
 
     @Test
-    @DisplayName("관문 켬: 10-Q가 FY 창에 같은 공시 1분기 값을 실으면 그 FY 값을 안 읽는다 — 최신 판이 10-K 값으로 남는다")
+    @DisplayName("10-Q가 FY 창에 같은 공시 1분기 값을 실으면 그 FY 값을 안 읽는다 — 최신 판이 10-K 값으로 남는다")
     void interimAnnualEqualToItsQuarterIsDropped() throws Exception {
         String tenQ = fact("2018-01-01", "2018-03-31", 3_486L, TEN_Q, "10-Q", "2018-05-01", "Q1") + ","
                 + fact("2017-01-01", "2017-12-31", 3_486L, TEN_Q, "10-Q", "2018-05-01", "Q1");
 
-        assertThat(latestFy(build(tenQ, true)).revenue()).isEqualByComparingTo("14748");
-        assertThat(latestFy(build(tenQ, false)).revenue()).as("관문 꺼짐은 옛 출력 그대로").isEqualByComparingTo("3486");
+        assertThat(latestFy(build(tenQ)).revenue()).isEqualByComparingTo("14748");
     }
 
     @Test
@@ -65,9 +64,9 @@ class SecEdgarInterimAnnualMistagTest {
         String fy = fact("2017-01-01", "2017-12-31", 4_000L, TEN_Q, "10-Q", "2018-05-01", "Q1");
         String q1 = fact("2018-01-01", "2018-03-31", 900L, TEN_Q, "10-Q", "2018-05-01", "Q1");
 
-        assertThat(latestFy(build(String.join(",", q1, fy, String.join(",", quarters)), true)).revenue())
+        assertThat(latestFy(build(String.join(",", q1, fy, String.join(",", quarters)))).revenue())
                 .as("하위 창 합이 지지한다").isEqualByComparingTo("4000");
-        assertThat(latestFy(build(String.join(",", q1, fy, quarters.get(0), quarters.get(2)), true)).revenue())
+        assertThat(latestFy(build(String.join(",", q1, fy, quarters.get(0), quarters.get(2)))).revenue())
                 .as("대조군: 지지하는 산수가 없으면(1분기 · 3분기만) 쌍둥이라 버린다").isEqualByComparingTo("14748");
     }
 }

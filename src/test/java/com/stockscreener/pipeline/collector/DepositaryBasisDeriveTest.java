@@ -42,7 +42,7 @@ class DepositaryBasisDeriveTest {
     private DepositaryCoverStore depositary;
 
     private ShareBasisDeriver gateOn() {
-        return new ShareBasisDeriver(jdbcTemplate, shareClasses, depositary, true);
+        return new ShareBasisDeriver(jdbcTemplate, shareClasses, depositary);
     }
 
     @Test
@@ -63,7 +63,7 @@ class DepositaryBasisDeriveTest {
         assertThat(jdbcTemplate.queryForList("SELECT how FROM sec_depositary_ratio WHERE stock_id = ? ORDER BY filed",
                 String.class, stockId)).containsExactly("OWN", "CARRY_FORWARD", "OWN");
 
-        StoredShareCounts.ShareCount count = new JdbcStoredShareCounts(jdbcTemplate, shareClasses, false)
+        StoredShareCounts.ShareCount count = new JdbcStoredShareCounts(jdbcTemplate, shareClasses)
                 .activeByMarket("US", LocalDate.of(2024, 1, 1), LocalDate.of(2025, 7, 1)).stream()
                 .filter(c -> c.ticker().equals("DEPX")).findFirst().orElseThrow();
         assertThat(count.shares().doubleValue()).as("보통주 621 ÷ 3 = ADS 207").isCloseTo(207, org.assertj.core.data.Offset.offset(1e-6));

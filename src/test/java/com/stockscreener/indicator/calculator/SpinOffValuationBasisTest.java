@@ -50,11 +50,11 @@ class SpinOffValuationBasisTest {
      * 2024년 3분기 ~ 2026년 4분기. 분사 앞에 시작한 분기 이익 250, 2026년 분기 이익 150. 2025년 4분기(분사를 품음)와 그 FY 10-K가
      * 2025년 1~3분기를 같은 날 다시 싣는다 — {@code recastValue}가 그 값이다(같은 값이면 이어받기 판).
      */
-    private static IndicatorContext context(long recastValue, boolean gateOn) {
-        return context(recastValue, gateOn, SPIN_OFF);
+    private static IndicatorContext context(long recastValue) {
+        return context(recastValue, SPIN_OFF);
     }
 
-    private static IndicatorContext context(long recastValue, boolean gateOn, LocalDate spinOff) {
+    private static IndicatorContext context(long recastValue, LocalDate spinOff) {
         LocalDate tenK = LocalDate.of(2026, 2, 17);
         List<FinancialFigures> quarters = new ArrayList<>();
         quarters.add(quarter(LocalDate.of(2026, 12, 31), LocalDate.of(2027, 2, 15), 150));
@@ -76,7 +76,7 @@ class SpinOffValuationBasisTest {
             bars.add(new PriceBar(date, price, price, price, price, price, 1_000L, null, null));
         }
         return new IndicatorContext(1L, bars, List.of(), quarters, Map.of())
-                .withGateOn(gateOn).withSpinOffDates(List.of(spinOff));
+                .withSpinOffDates(List.of(spinOff));
     }
 
     private static List<LocalDate> dates(List<IndicatorPoint> points) {
@@ -84,10 +84,10 @@ class SpinOffValuationBasisTest {
     }
 
     @Test
-    @DisplayName("관문 켬: 분사 뒤 PER은 분사 뒤에 시작한 네 분기가 찰 때까지 없다 — 재게재 판이 있어도, 같은 값 이어받기 판이어도")
+    @DisplayName("분사 뒤 PER은 분사 뒤에 시작한 네 분기가 찰 때까지 없다 — 재게재 판이 있어도, 같은 값 이어받기 판이어도")
     void perWaitsForFourPostSpinOffQuarters() {
         for (long recast : List.of(150L, 250L)) {
-            List<IndicatorPoint> per = new PerCalculator().calculate(context(recast, true));
+            List<IndicatorPoint> per = new PerCalculator().calculate(context(recast));
             assertThat(dates(per)).as("재게재 값 %d", recast).containsExactly(BEFORE, FULL_POST);
             // 분사 뒤 TTM = 150 × 4 = 600 → EPS 6 → PER 20.
             assertThat(per.getLast().value()).isEqualByComparingTo("20");
@@ -95,44 +95,36 @@ class SpinOffValuationBasisTest {
     }
 
     @Test
-    @DisplayName("관문 켬: 잔액만 읽는 PBR은 분사 뒤에 시작한 첫 기간이 공시되면 다시 선다")
+    @DisplayName("잔액만 읽는 PBR은 분사 뒤에 시작한 첫 기간이 공시되면 다시 선다")
     void pbrReturnsWithTheFirstPostSpinOffPeriod() {
-        assertThat(dates(new PbrCalculator().calculate(context(250, true))))
+        assertThat(dates(new PbrCalculator().calculate(context(250))))
                 .containsExactly(BEFORE, FIRST_POST_BALANCE, THREE_POST, FULL_POST);
     }
 
     @Test
-    @DisplayName("관문 켬: 분사 뒤 재무 대기는 분사 뒤에 시작한 분기가 넷 미만일 때다")
+    @DisplayName("분사 뒤 재무 대기는 분사 뒤에 시작한 분기가 넷 미만일 때다")
     void awaitingFlagFollowsTheSameRule() {
-        IndicatorContext context = context(250, true);
+        IndicatorContext context = context(250);
         assertThat(context.visibleAt(BEFORE).awaitingPostSpinOffFinancials(BEFORE)).isFalse();
         assertThat(context.visibleAt(FIRST_POST_BALANCE).awaitingPostSpinOffFinancials(FIRST_POST_BALANCE)).isTrue();
         assertThat(context.visibleAt(FULL_POST).awaitingPostSpinOffFinancials(FULL_POST)).isFalse();
-        assertThat(context(250, false).visibleAt(GAP).awaitingPostSpinOffFinancials(GAP)).as("관문 꺼짐").isFalse();
     }
 
     @Test
-    @DisplayName("관문 켬: 4분기의 입력 기간은 그 FY다 — 분사 뒤에 시작한 4분기라도 FY가 분사 앞에 시작했으면 쓰지 않는다")
+    @DisplayName("4분기의 입력 기간은 그 FY다 — 분사 뒤에 시작한 4분기라도 FY가 분사 앞에 시작했으면 쓰지 않는다")
     void fourthQuarterSpansItsFiscalYear() {
         // 분사 2025-08-01: 2025년 4분기(10-01 시작)는 분사 뒤지만 FY − 1~3분기로 지은 값이라 분사 앞 분기가 섞인다.
-        IndicatorContext context = context(250, true, LocalDate.of(2025, 8, 1));
+        IndicatorContext context = context(250, LocalDate.of(2025, 8, 1));
         // 이 분사에서는 BEFORE(10-01) 봉도 분사 뒤다.
         assertThat(dates(new PerCalculator().calculate(context))).containsExactly(FULL_POST);
         assertThat(dates(new PbrCalculator().calculate(context))).containsExactly(FIRST_POST_BALANCE, THREE_POST, FULL_POST);
     }
 
     @Test
-    @DisplayName("관문 켬: 「분사 앞」의 경계는 효력일 직전 거래일 — 그 사이에 시작한 기간은 분사 뒤다")
+    @DisplayName("「분사 앞」의 경계는 효력일 직전 거래일 — 그 사이에 시작한 기간은 분사 뒤다")
     void boundaryIsThePreviousTradingDay() {
         // 효력일 2026-01-05(월) · 직전 거래일 2025-12-01(이 시험의 봉) — 2026년 1분기(01-01 시작)는 분사 뒤다.
-        IndicatorContext context = context(250, true, LocalDate.of(2026, 1, 5));
+        IndicatorContext context = context(250, LocalDate.of(2026, 1, 5));
         assertThat(dates(new PbrCalculator().calculate(context))).containsExactly(BEFORE, GAP, FIRST_POST_BALANCE, THREE_POST, FULL_POST);
-    }
-
-    @Test
-    @DisplayName("관문 꺼짐은 옛 출력 그대로 — 분사 뒤 봉도 분사 앞 판으로 PER을 낸다")
-    void gateOffKeepsTheOldOutput() {
-        List<IndicatorPoint> per = new PerCalculator().calculate(context(250, false));
-        assertThat(dates(per)).containsExactly(BEFORE, GAP, FIRST_POST_BALANCE, THREE_POST, FULL_POST);
     }
 }

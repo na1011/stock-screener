@@ -13,8 +13,8 @@ import org.springframework.stereotype.Component;
  * 동작은 이 설정이 생기기 전과 같다. 끌 때는 {@code JobFreshnessPolicy}의 후보 예산 둘도 함께 뺀다(꺼진 동안 남기면 신선도 점검이
  * 「한 번도 안 돈 잡」으로 운다). 손 실행({@code --job=candidate-consumption}·{@code candidate-splits})은 이 설정을 안 본다 — 명시적 실행이다.
  *
- * <p>재적재 관문 설정({@code stockscreener.gate.us})과 다르다 — 그것은 값을 계산하는 규칙을 바꾸는 갈래를 한 날 함께 켜는 스위치이고,
- * 이것은 지금 규칙을 어느 종목에 돌리는가다. 켠 뒤 전 종목 재적재가 필요 없다.
+ * <p>재적재 관문 설정(값을 계산하는 규칙을 바꾸는 갈래를 한 날 함께 켜던 스위치 · 2026-11-03에 켜고 걷었다)과 다르다 — 이것은 지금
+ * 규칙을 어느 종목에 돌리는가다. 켠 뒤 전 종목 재적재가 필요 없다.
  */
 @Component
 public class UsCandidateFeed {

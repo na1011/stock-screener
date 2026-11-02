@@ -8,7 +8,6 @@ import com.stockscreener.pipeline.datasource.us.shareclass.ShareClassLine;
 import com.stockscreener.pipeline.datasource.us.shareclass.ShareClassStore;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -176,7 +175,7 @@ public class JdbcStoredShareCounts implements StoredShareCounts {
             """.formatted(SHIFT_TO_ASOF, CURRENCY_MISMATCHED, StockRegistrar.eraCovers("s", "?"));
 
     /**
-     * 관문이 켜진 미국의 판 후보 — {@link #SQL}의 안쪽과 같은 범위·같은 정렬이되 주식수로 미리 거르지 않는다. 클래스 축 발행사는
+     * 미국의 판 후보 — {@link #SQL}의 안쪽과 같은 범위·같은 정렬이되 주식수로 미리 거르지 않는다. 클래스 축 발행사는
      * 지금 경로 주식수가 비어 있고(축 없는 표지가 없다) 값은 판정에서 오기 때문이다. 고르기는 {@link ShareClassLine}을 입힌 뒤
      * 자바에서 한다(지표 판독기와 같은 규칙 한 자리).
      */
@@ -201,25 +200,22 @@ public class JdbcStoredShareCounts implements StoredShareCounts {
             """.formatted(CURRENCY_MISMATCHED);
 
     private final JdbcTemplate jdbcTemplate;
+    /** 미국 주식수를 클래스 축 판정으로 읽는다. */
     private final ShareClassStore shareClasses;
-    /** 미국 관문 설정 — 켜졌으면 미국 주식수를 클래스 축 판정으로 읽는다(꺼졌으면 판정 표를 부르지 않는다). */
-    private final boolean usGate;
 
-    /** 관문이 꺼진 판독기(시험 · 재생 도구). */
+    /** 같은 DB의 클래스 축 표를 읽는 판독기(재생 도구). */
     public JdbcStoredShareCounts(JdbcTemplate jdbcTemplate) {
-        this(jdbcTemplate, null, false);
+        this(jdbcTemplate, new ShareClassStore(jdbcTemplate));
     }
 
     @Autowired
-    public JdbcStoredShareCounts(JdbcTemplate jdbcTemplate, ShareClassStore shareClasses,
-                                 @Value("${stockscreener.gate.us}") boolean usGate) {
+    public JdbcStoredShareCounts(JdbcTemplate jdbcTemplate, ShareClassStore shareClasses) {
         this.jdbcTemplate = jdbcTemplate;
         this.shareClasses = shareClasses;
-        this.usGate = usGate;
     }
 
-    private boolean classAxis(String marketCode) {
-        return usGate && UsMarket.CODE.equals(marketCode);
+    private static boolean classAxis(String marketCode) {
+        return UsMarket.CODE.equals(marketCode);
     }
 
     @Override
@@ -243,7 +239,7 @@ public class JdbcStoredShareCounts implements StoredShareCounts {
     }
 
     /**
-     * 관문이 켜진 미국: 종목마다 기(期) 순서로 판을 내려가며 클래스 축 판정을 입혀 첫 값을 고른다 — 숨긴 판을 만나면 멈추고
+     * 미국: 종목마다 기(期) 순서로 판을 내려가며 클래스 축 판정을 입혀 첫 값을 고른다 — 숨긴 판을 만나면 멈추고
      * 아무것도 안 낸다(앞 판으로 안 내려간다 · §10b-3). 지금 경로 판이 주식수를 안 실었으면 앞 판으로 내려간다(꺼진 질의가
      * 주식수 있는 판만 고르는 것과 같다). 기저 판정({@code share_basis_status})은 고른 판에서 본다 — 꺼진 질의와 같다.
      */

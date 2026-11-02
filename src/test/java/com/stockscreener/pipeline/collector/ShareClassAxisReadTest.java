@@ -71,7 +71,7 @@ class ShareClassAxisReadTest {
     @DisplayName("순위 판독기 — 정정 행은 서 있던 판정의 N_L(분할 옮김) · 숨긴 판은 안 낸다 · 보류는 마지막 보인 값 · 상한을 넘으면 끝")
     void rankingReaderAndHolds() {
         seedLine("CLS2");
-        StoredShareCounts on = new JdbcStoredShareCounts(jdbcTemplate, store, true);
+        StoredShareCounts on = new JdbcStoredShareCounts(jdbcTemplate, store);
 
         assertThat(find(on, LocalDate.of(2025, 10, 1))).as("Q2 정정 행 → T2 N_L 1000 × 분할 2")
                 .isEqualByComparingTo("2000");

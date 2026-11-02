@@ -27,7 +27,7 @@ class SecEdgarNineMonthFourthQuarterTest {
     }
 
     /** 상장 뒤 첫 10-Q(2분기)와 3분기 10-Q · 10-K. {@code nineMonthTag}로 3분기 10-Q의 9개월 누계 태그를 바꾼다. */
-    private static List<RawFinancialReport> build(String nineMonthTag, boolean usGate) throws Exception {
+    private static List<RawFinancialReport> build(String nineMonthTag) throws Exception {
         String q2 = "0000000001-25-000002";
         String q3 = "0000000001-25-000003";
         String tenK = "0000000001-26-000001";
@@ -41,7 +41,7 @@ class SecEdgarNineMonthFourthQuarterTest {
                 : "{\"facts\":{\"us-gaap\":{\"Revenues\":{\"units\":{\"USD\":[" + revenues + "]}},\"" + nineMonthTag
                         + "\":{\"units\":{\"USD\":[" + nine + "]}}}}}";
         JsonNode facts = new ObjectMapper().readTree(json).path("facts");
-        return SecEdgarFacts.build(facts, 2015, usGate).reports();
+        return SecEdgarFacts.build(facts, 2015).reports();
     }
 
     private static Optional<RawFinancialReport> q4(List<RawFinancialReport> reports) {
@@ -49,19 +49,18 @@ class SecEdgarNineMonthFourthQuarterTest {
     }
 
     @Test
-    @DisplayName("관문 켬: 1분기가 없으면 4분기 = FY − 9개월 누계(1,300 − 900 = 400) — 꺼짐은 옛 출력(4분기 없음)")
+    @DisplayName("1분기가 없으면 4분기 = FY − 9개월 누계(1,300 − 900 = 400) — 꺼짐은 옛 출력(4분기 없음)")
     void fourthQuarterFromNineMonthsWhenTheFirstQuarterIsMissing() throws Exception {
-        RawFinancialReport q4 = q4(build("Revenues", true)).orElseThrow();
+        RawFinancialReport q4 = q4(build("Revenues")).orElseThrow();
         assertThat(q4.revenue()).isEqualByComparingTo("400000000");
         assertThat(q4.periodStart()).hasToString("2025-10-01");
         assertThat(q4.publishedAt()).hasToString("2026-03-09");
-        assertThat(q4(build("Revenues", false))).isEmpty();
     }
 
     @Test
-    @DisplayName("관문 켬: 9개월 누계가 FY와 다른 태그면 그 칸은 비운다 — 개념이 섞이지 않게")
+    @DisplayName("9개월 누계가 FY와 다른 태그면 그 칸은 비운다 — 개념이 섞이지 않게")
     void nineMonthsUnderAnotherTagIsNotSubtracted() throws Exception {
-        Optional<RawFinancialReport> q4 = q4(build("RevenueFromContractWithCustomerExcludingAssessedTax", true));
+        Optional<RawFinancialReport> q4 = q4(build("RevenueFromContractWithCustomerExcludingAssessedTax"));
         assertThat(q4.map(RawFinancialReport::revenue).orElse(null)).isNull();
     }
 }

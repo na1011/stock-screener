@@ -46,13 +46,11 @@ public class CorporateActionCollector {
     private final PriceObservationWindow window;
     private final CorporateActionSupplement supplement;
     private final KrBasePriceEvents basePriceEvents;
-    private final boolean krGate;
 
     public CorporateActionCollector(DataSourceRegistry registry, CorporateActionLedger ledger,
                                     AdjustmentRecalculator recalculator, PriceCalendar priceCalendar,
                                     SpinOffValuer spinOffValuer, PriceObservationWindow window,
-                                    CorporateActionSupplement supplement, KrBasePriceEvents basePriceEvents,
-                                    @org.springframework.beans.factory.annotation.Value("${stockscreener.gate.kr}") boolean krGate) {
+                                    CorporateActionSupplement supplement, KrBasePriceEvents basePriceEvents) {
         this.registry = registry;
         this.ledger = ledger;
         this.recalculator = recalculator;
@@ -61,7 +59,6 @@ public class CorporateActionCollector {
         this.window = window;
         this.supplement = supplement;
         this.basePriceEvents = basePriceEvents;
-        this.krGate = krGate;
     }
 
     /**
@@ -135,10 +132,10 @@ public class CorporateActionCollector {
             return Result.empty();
         }
 
-        // 국내 관문 켬(ADR-0205): 거래소 기준가 사건을 먼저 적는다 — 날짜의 정본이라, 뒤에 오는 DART 행 · 휴리스틱 후보는 그 행과 같은 날이면
+        // 국내(ADR-0205): 거래소 기준가 사건을 먼저 적는다 — 날짜의 정본이라, 뒤에 오는 DART 행 · 휴리스틱 후보는 그 행과 같은 날이면
         // 덮지 못하고(IGNORED) 며칠 어긋나면 근접 중복으로 조용히 빠진다(판정된 행과의 충돌과 같은 취급). 창 필터는 다른 사건과 같다.
         Result exchange = Result.empty();
-        if (krGate && !com.stockscreener.pipeline.datasource.us.UsMarket.CODE.equals(security.marketCode())) {
+        if (!com.stockscreener.pipeline.datasource.us.UsMarket.CODE.equals(security.marketCode())) {
             exchange = recordAll(security, basePriceEvents.detect(security, from, to).events());
         }
 

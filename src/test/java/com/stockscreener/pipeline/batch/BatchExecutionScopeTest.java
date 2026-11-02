@@ -277,18 +277,11 @@ class BatchExecutionScopeTest {
     }
 
     @Test
-    @DisplayName("켜진 관문을 실행 행에 남긴다 — 다 꺼졌으면 NULL이고 그때 SQL은 이 열이 생기기 전과 같다")
+    @DisplayName("실행 행에 두 관문 켬(us,kr)을 남긴다 — 관문 설정을 걷은 뒤의 모든 실행이다")
     void recordsTheGateState() {
-        BatchExecutionRecorder usOnly = new BatchExecutionRecorder(jdbcTemplate, CLOCK, BatchExecutionRecorder.gateState(true, false));
-        long id = usOnly.start(JOB_NAME, TODAY_KST, TriggeredBy.MANUAL, 1, DeclaredScope.FULL);
-        assertThat(jdbcTemplate.queryForObject("SELECT gate_state FROM batch_execution WHERE id = ?", String.class, id))
-                .isEqualTo("us");
-
-        long off = new BatchExecutionRecorder(jdbcTemplate, CLOCK)
+        long id = new BatchExecutionRecorder(jdbcTemplate, CLOCK)
                 .start(JOB_NAME, TODAY_KST, TriggeredBy.MANUAL, 1, DeclaredScope.FULL);
-        assertThat(jdbcTemplate.queryForObject("SELECT gate_state FROM batch_execution WHERE id = ?", String.class, off))
-                .isNull();
-        assertThat(BatchExecutionRecorder.gateState(true, true)).isEqualTo("us,kr");
-        assertThat(BatchExecutionRecorder.gateState(false, true)).isEqualTo("kr");
+        assertThat(jdbcTemplate.queryForObject("SELECT gate_state FROM batch_execution WHERE id = ?", String.class, id))
+                .isEqualTo("us,kr");
     }
 }

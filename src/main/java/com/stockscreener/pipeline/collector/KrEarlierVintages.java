@@ -65,28 +65,19 @@ public class KrEarlierVintages {
     private final JdbcTemplate jdbc;
     private final FinancialWriter writer;
 
+    /**
+     * 복사본에 원천을 적고(`copied_from` · 관문 마이그레이션 V70_10) 매 실행 원천 값으로 다시 맞춘다. 복사본은 값 사본이라
+     * 다시 지어지지 않아, 재적재가 원천 판에 채운 칸(중단영업 · 비표준 지배 NI · 기저 대체)이 빈 채 남는다(반증 안 렌즈 · 11-01).
+     */
     public KrEarlierVintages(JdbcTemplate jdbc, FinancialWriter writer) {
-        this(jdbc, writer, false);
-    }
-
-    @org.springframework.beans.factory.annotation.Autowired
-    public KrEarlierVintages(JdbcTemplate jdbc, FinancialWriter writer,
-                             @org.springframework.beans.factory.annotation.Value("${stockscreener.gate.kr}") boolean krGate) {
         this.jdbc = jdbc;
         this.writer = writer;
-        this.krGate = krGate;
     }
-
-    /**
-     * 국내 관문 켬 — 복사본에 원천을 적고(`copied_from` · 관문 시험 마이그레이션 V70_10) 매 실행 원천 값으로 다시 맞춘다. 복사본은 값 사본이라
-     * 다시 지어지지 않아, 관문 재적재가 원천 판에 채운 칸(중단영업 · 비표준 지배 NI · 기저 대체)이 빈 채 남는다(반증 안 렌즈 · 11-01).
-     */
-    private final boolean krGate;
 
     private record Candidate(long rowId, int fiscalYear, String fiscalPeriod, LocalDate earliest) {
     }
 
-    /** 한 종목의 결과 — 넣은 이른 판 · (국내 관문 켬) 다시 짓거나 지운 4분기 판 · 원천으로 다시 맞춘 복사본. */
+    /** 한 종목의 결과 — 넣은 이른 판 · 다시 짓거나 지운 4분기 판 · 원천으로 다시 맞춘 복사본. */
     public record Outcome(int inserted, int restored, int resynced) {
     }
 
@@ -95,22 +86,22 @@ public class KrEarlierVintages {
         List<Candidate> candidates = jdbc.query(CANDIDATES, (rs, i) -> new Candidate(rs.getLong("id"), rs.getInt("fiscal_year"),
                 rs.getString("fiscal_period"), rs.getObject("earliest", LocalDate.class)), stockId, stockId, stockId);
         if (candidates.isEmpty()) {
-            return krGate ? new Outcome(0, restoreFourthQuarters(stockId), resync(stockId)) : new Outcome(0, 0, 0);
+            return new Outcome(0, restoreFourthQuarters(stockId), resync(stockId));
         }
         String columns = copiedColumns();
         int inserted = 0;
         for (Candidate c : candidates) {
             // 임시 번호는 그 라벨의 최대 + 1 — 넣은 즉시 공시일 순으로 다시 맞춘다(uq 번호 충돌을 같은 트랜잭션 안에서 풀려고).
             inserted += jdbc.update("""
-                    INSERT INTO financial_statement (%1$s, published_at, revision_no, is_latest%2$s)
+                    INSERT INTO financial_statement (%1$s, published_at, revision_no, is_latest, copied_from)
                     SELECT %1$s, ?, (SELECT max(revision_no) + 1 FROM financial_statement
-                                     WHERE stock_id = ? AND fiscal_year = ? AND fiscal_period = ?), false%3$s
+                                     WHERE stock_id = ? AND fiscal_year = ? AND fiscal_period = ?), false, %2$s
                     FROM financial_statement WHERE id = ?
-                    """.formatted(columns, krGate ? ", copied_from" : "", krGate ? ", " + c.rowId() : ""),
+                    """.formatted(columns, c.rowId()),
                     Date.valueOf(c.earliest()), stockId, c.fiscalYear(), c.fiscalPeriod(), c.rowId());
             writer.renumberLabel(stockId, c.fiscalYear(), c.fiscalPeriod());
         }
-        return krGate ? new Outcome(inserted, restoreFourthQuarters(stockId), resync(stockId)) : new Outcome(inserted, 0, 0);
+        return new Outcome(inserted, restoreFourthQuarters(stockId), resync(stockId));
     }
 
     /** 4분기 유량 칸 — FY − 그날 보이던 1~3분기로 짓는다(어댑터의 4분기 유도와 같은 칸). 나머지 유량은 국내 4분기 행이 안 싣는다. */

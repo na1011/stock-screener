@@ -38,8 +38,8 @@ class SecEdgarControllingQ4GateTest {
         return new ObjectMapper().readTree(Files.readString(path, StandardCharsets.UTF_8)).path("facts");
     }
 
-    private static List<RawFinancialReport> build(String fixture, boolean usGate) throws Exception {
-        return SecEdgarFacts.build(facts(fixture), FROM, usGate).reports();
+    private static List<RawFinancialReport> build(String fixture) throws Exception {
+        return SecEdgarFacts.build(facts(fixture), FROM).reports();
     }
 
     private static List<RawFinancialReport> derivedQ4(List<RawFinancialReport> reports) {
@@ -84,44 +84,25 @@ class SecEdgarControllingQ4GateTest {
     }
 
     @Test
-    @DisplayName("설정을 끄면 기존 진입점과 출력이 같다")
-    void gateOffMatchesLegacyEntryPoint() throws Exception {
-        for (String fixture : List.of("acm-controlling-q4.json", "ccl-controlling-q4.json",
-                "ares-controlling-q4.json", "adbe-controlling-q4.json", "bx-income-basis.json")) {
-            assertThat(SecEdgarFacts.build(facts(fixture), FROM).reports())
-                    .as(fixture + " — 꺼진 설정이 출력을 바꿨다")
-                    .isEqualTo(build(fixture, false));
-        }
-    }
-
-    @Test
-    @DisplayName("비지배 회사(ACM형): 꺼지면 Q4 지배주주 = Q4 연결, 켜면 지배주주끼리 뺀다")
+    @DisplayName("비지배 회사(ACM형): Q4 지배주주는 지배주주끼리 뺀다")
     void nonControllingCompanySubtractsControlling() throws Exception {
-        List<RawFinancialReport> off = build("acm-controlling-q4.json", false);
-        List<RawFinancialReport> on = build("acm-controlling-q4.json", true);
+        List<RawFinancialReport> on = build("acm-controlling-q4.json");
 
-        assertThat(derivedQ4(off)).as("픽스처가 유도 Q4를 안 내면 이 시험은 아무것도 안 잰다").isNotEmpty();
-        assertThat(derivedQ4(off))
-                .as("꺼진 상태 — 지금 결함의 모양이 그대로 있어야 대조군이 선다")
-                .anyMatch(r -> r.netIncome() != null && r.netIncome().equals(r.netIncomeControlling()));
+        assertThat(derivedQ4(on)).as("픽스처가 유도 Q4를 안 내면 이 시험은 아무것도 안 잰다").isNotEmpty();
         assertThat(derivedQ4(on))
-                .as("켜진 상태 — 유도 Q4의 지배주주가 연결과 갈려야 한다")
+                .as("유도 Q4의 지배주주가 연결과 갈려야 한다")
                 .anyMatch(r -> r.netIncome() != null && r.netIncomeControlling() != null
                         && r.netIncome().compareTo(r.netIncomeControlling()) != 0);
         assertThat(assertResidualIsControlling(on)).as("항등식을 잰 판이 하나도 없다").isPositive();
     }
 
     @Test
-    @DisplayName("연결이 비는 회사(CCL형): 꺼지면 Q4 지배주주도 비고, 켜면 채워진다")
+    @DisplayName("연결이 비는 회사(CCL형): 연결이 null인 해도 Q4 지배주주가 채워진다")
     void consolidatedNullNoLongerEmptiesControlling() throws Exception {
-        List<RawFinancialReport> off = build("ccl-controlling-q4.json", false);
-        List<RawFinancialReport> on = build("ccl-controlling-q4.json", true);
+        List<RawFinancialReport> on = build("ccl-controlling-q4.json");
 
-        assertThat(derivedQ4(off))
-                .as("꺼진 상태 — 연결이 null인 해의 Q4 지배주주가 비어 있어야 대조군이 선다")
-                .anyMatch(r -> r.netIncome() == null && r.netIncomeControlling() == null);
         assertThat(derivedQ4(on))
-                .as("켜진 상태 — 같은 해의 Q4 지배주주가 채워져야 한다")
+                .as("연결이 null인 해의 Q4 지배주주가 채워져야 한다")
                 .anyMatch(r -> r.netIncome() == null && r.netIncomeControlling() != null);
         assertThat(assertResidualIsControlling(on)).isPositive();
     }
@@ -129,7 +110,7 @@ class SecEdgarControllingQ4GateTest {
     @Test
     @DisplayName("분기 폴백 섞인 해(ARES형): Q4가 음수여도 FY 지배주주와 네 분기 합이 맞는다 — 가드를 두지 않는다")
     void mixedBasisYearStillSumsToAnnual() throws Exception {
-        List<RawFinancialReport> on = build("ares-controlling-q4.json", true);
+        List<RawFinancialReport> on = build("ares-controlling-q4.json");
 
         // 분기 폴백(그 시점 10-Q에 NetIncomeLoss가 없어 연결이 들어간 분기)이 섞인 해에는 Q4가 그 분기들의
         // 비지배를 흡수해 음수가 될 수 있다. 칸 하나는 틀리지만 같은 해 네 분기 합은 FY 지배주주다 —
@@ -143,14 +124,9 @@ class SecEdgarControllingQ4GateTest {
     }
 
     @Test
-    @DisplayName("비지배가 없는 회사: 켜도 바뀌지 않는다 — 켬이 더하는 중단영업 판정(F2b · 이 회사는 0) 말고는")
+    @DisplayName("비지배가 없는 회사: 중단영업 판정(F2b)은 0이다")
     void noNoncontrollingCompanyUnchanged() throws Exception {
-        List<RawFinancialReport> on = build("adbe-controlling-q4.json", true);
-        // 관문 켬은 중단영업 세 칸(ADR-0184)도 싣는다 — 이 시험이 묻는 것은 지배주주 Q4 규칙이라 그 셋은 따로 묻는다.
-        assertThat(on)
-                .usingRecursiveFieldByFieldElementComparatorIgnoringFields(
-                        "discontinuedIncome", "discontinuedIncomeControlling", "discontinuedRule")
-                .isEqualTo(build("adbe-controlling-q4.json", false));
+        List<RawFinancialReport> on = build("adbe-controlling-q4.json");
         assertThat(on).allSatisfy(r -> assertThat(r.discontinuedIncome()).isEqualByComparingTo("0"));
     }
 }

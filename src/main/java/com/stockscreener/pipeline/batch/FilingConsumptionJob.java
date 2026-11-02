@@ -82,18 +82,16 @@ public class FilingConsumptionJob {
     public FilingConsumptionJob(FilingLedgerStore store, FinancialRefillJob financialRefill,
                                 FullStatementRefillJob fullStatementRefill,
                                 ObjectProvider<SecFilingConsumption> secConsumption,
-                                BatchExecutions batchExecutions,
-                                @org.springframework.beans.factory.annotation.Value("${stockscreener.gate.kr}") boolean krGate) {
+                                BatchExecutions batchExecutions) {
         this(store, financialRefill, fullStatementRefill, secConsumption.getIfAvailable(), batchExecutions);
-        this.priorYear = krGate ? 2 : 0;
     }
 
     /**
-     * 국내 관문 켬이면 창을 두 해 더 당긴다(재고 A6 · ADR-0200) — 손익 칸 기저 판정의 「다음 해 보고서의 전기 열 · 두 해 뒤 사업보고서의
+     * 창을 두 해 더 당긴다(재고 A6 · ADR-0200) — 손익 칸 기저 판정의 「다음 해 보고서의 전기 열 · 두 해 뒤 사업보고서의
      * 전전기 열」 단계는 그 보고서와 앞 두 해 보고서를 한 호출에 함께 받아야 앞 해들의 대체를 다시 짓는다. 0이면 그 해 1분기 공시 소비가 앞 해를 안 받아 다음 넓은 정기 FR까지
      * 대체가 안 붙는다.
      */
-    private int priorYear;
+    private static final int PRIOR_YEARS = 2;
 
     FilingConsumptionJob(FilingLedgerStore store, FinancialRefillJob financialRefill,
                          FullStatementRefillJob fullStatementRefill, SecFilingConsumption secConsumption,
@@ -313,7 +311,7 @@ public class FilingConsumptionJob {
             Set<Long> reached = new HashSet<>();
             fed.addAll(tickersOf(frRows));
             FinancialRefillJob.Invalidation run = financialRefill.runForConsumption(today, by,
-                    Math.min(FinancialRefillJob.DEFAULT_YEARS_BACK, yearsBack(today, frRows) + priorYear),
+                    Math.min(FinancialRefillJob.DEFAULT_YEARS_BACK, yearsBack(today, frRows) + PRIOR_YEARS),
                     tickersOf(frRows), (executionId, security, outcome) -> {
                         reached.add(security.stockId());
                         judgeKr(store.openFrOf("KR", security.stockId()), outcome.filingTrace(), fr,
@@ -338,7 +336,7 @@ public class FilingConsumptionJob {
             Set<Long> reached = new HashSet<>();
             fed.addAll(tickersOf(fsrRows));
             BatchStatus status = fullStatementRefill.runForConsumption(today, by,
-                    Math.min(FinancialRefillJob.DEFAULT_YEARS_BACK, yearsBack(today, fsrRows) + priorYear),
+                    Math.min(FinancialRefillJob.DEFAULT_YEARS_BACK, yearsBack(today, fsrRows) + PRIOR_YEARS),
                     tickersOf(fsrRows), (executionId, security, collected) -> {
                         reached.add(security.stockId());
                         judgeKr(store.openFsrOf(security.stockId()), collected.outcome().filingTrace(), fsr,

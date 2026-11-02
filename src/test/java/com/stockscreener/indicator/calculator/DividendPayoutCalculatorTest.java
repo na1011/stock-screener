@@ -34,18 +34,9 @@ class DividendPayoutCalculatorTest {
     private final DividendPayoutCalculator calculator = new DividendPayoutCalculator();
 
     @Test
-    @DisplayName("관문 꺼짐은 지금처럼 모든 봉이 최신 판의 순이익을 쓴다")
-    void gateOffPairsTheLatestVintage() {
-        List<IndicatorPoint> points = calculator.calculate(context(false));
-
-        assertThat(valueOn(points, BEFORE_RESTATEMENT)).isEqualByComparingTo("25");
-        assertThat(valueOn(points, AFTER_RESTATEMENT)).isEqualByComparingTo("25");
-    }
-
-    @Test
-    @DisplayName("관문 켬은 그 봉까지 공시된 판의 순이익을 쓴다 — 정정 전 봉에 정정 뒤 값이 새지 않는다")
+    @DisplayName("그 봉까지 공시된 판의 순이익을 쓴다 — 정정 전 봉에 정정 뒤 값이 새지 않는다")
     void gateOnPairsTheVintageKnownOnTheBar() {
-        List<IndicatorPoint> points = calculator.calculate(context(true));
+        List<IndicatorPoint> points = calculator.calculate(context());
 
         assertThat(valueOn(points, BEFORE_RESTATEMENT)).isEqualByComparingTo("50");
         assertThat(valueOn(points, AFTER_RESTATEMENT)).isEqualByComparingTo("25");
@@ -55,7 +46,7 @@ class DividendPayoutCalculatorTest {
         return points.stream().filter(p -> p.tradeDate().equals(date)).findFirst().orElseThrow().value();
     }
 
-    private static IndicatorContext context(boolean gateOn) {
+    private static IndicatorContext context() {
         FinancialFigures original = FinancialFiguresFixture.annual(FY_END).publishedAt(ORIGINAL)
                 .netIncome(new BigDecimal("100")).netIncomeControlling(new BigDecimal("100")).build();
         FinancialFigures restated = FinancialFiguresFixture.annual(FY_END).publishedAt(RESTATED)
@@ -67,7 +58,7 @@ class DividendPayoutCalculatorTest {
                 // 리더 계약대로 기말 내림차순 · 같은 기말이면 공시일 내림차순(판 이력 전부)
                 List.of(restated, original), List.of(),
                 List.of(), List.of(), new TreeMap<>(), List.of(dividend), Map.of())
-                .withGateOn(gateOn);
+                ;
     }
 
     private static PriceBar bar(LocalDate date) {

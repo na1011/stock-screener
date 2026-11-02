@@ -28,9 +28,9 @@ class SecEdgarRevenueConceptTest {
                 .formatted(start, end, val, accn, fy, fp, form, filed);
     }
 
-    private static List<RawFinancialReport> build(String usGaap, boolean usGate) throws Exception {
+    private static List<RawFinancialReport> build(String usGaap) throws Exception {
         JsonNode facts = new ObjectMapper().readTree("{\"facts\":{\"us-gaap\":{" + usGaap + "}}}").path("facts");
-        return SecEdgarFacts.build(facts, 2015, usGate).reports();
+        return SecEdgarFacts.build(facts, 2015).reports();
     }
 
     private static String tag(String name, List<String> facts) {
@@ -43,17 +43,15 @@ class SecEdgarRevenueConceptTest {
     }
 
     @Test
-    @DisplayName("관문 켬: 순수익 총계만 내는 발행사는 그것이 매출이다 — 꺼짐은 옛 출력(빔) 그대로")
+    @DisplayName("순수익 총계만 내는 발행사는 그것이 매출이다 — 꺼짐은 옛 출력(빔) 그대로")
     void netRevenueIsTheTopLineOfANetReporter() throws Exception {
         String json = tag("RevenuesNetOfInterestExpense", List.of(
                 fact("2017-01-01", "2017-12-31", 5_101 * MILLION, "0000000001-18-000001", "10-K", "FY", 2017, "2018-02-15")));
-        assertThat(latest(build(json, true), "FY").revenue()).isEqualByComparingTo("5101000000");
-        assertThat(build(json, false)).as("관문 꺼짐은 그 해 매출이 없다(보고서도 안 생긴다)")
-                .noneMatch(r -> r.fiscalYear() == 2017 && r.revenue() != null);
+        assertThat(latest(build(json), "FY").revenue()).isEqualByComparingTo("5101000000");
     }
 
     @Test
-    @DisplayName("관문 켬: 같은 공시가 그 창에 순수익을 냈으면 순수익이 매출이다 — FY · 분기 · 4분기가 한 기저다")
+    @DisplayName("같은 공시가 그 창에 순수익을 냈으면 순수익이 매출이다 — FY · 분기 · 4분기가 한 기저다")
     void netRevenueWinsInEveryWindowItIsReported() throws Exception {
         String tenK = "0000000001-18-000004";
         List<String> gross = new ArrayList<>();
@@ -71,14 +69,14 @@ class SecEdgarRevenueConceptTest {
         net.add(fact("2017-10-01", "2017-12-31", 350 * MILLION, tenK, "10-K", "FY", 2017, "2018-02-15"));
         String json = tag("Revenues", gross) + "," + tag("RevenuesNetOfInterestExpense", net);
         // 순수익 기준: FY 1,100 · 4분기 350(= 1,100 − 250 × 3 · 10-K 4분기 문맥과 같다). 최댓값 경쟁이면 FY는 총수익 1,300이고 4분기가 순수익 350으로 섞였다.
-        List<RawFinancialReport> on = build(json, true);
+        List<RawFinancialReport> on = build(json);
         assertThat(latest(on, "FY").revenue()).isEqualByComparingTo("1100000000");
         assertThat(latest(on, "Q4").revenue()).isEqualByComparingTo("350000000");
         assertThat(latest(on, "Q1").revenue()).isEqualByComparingTo("250000000");
     }
 
     @Test
-    @DisplayName("관문 켬: 같은 공시 · 같은 창의 매출총이익보다 작은 순수익은 매출이 아니다 — 원가를 후보 밖 태그로 실어도(SNEX)")
+    @DisplayName("같은 공시 · 같은 창의 매출총이익보다 작은 순수익은 매출이 아니다 — 원가를 후보 밖 태그로 실어도(SNEX)")
     void netRevenueBelowItsOwnGrossProfitIsNotTheTopLine() throws Exception {
         String accn = "0000000001-18-000001";
         String filed = "2018-02-15";
@@ -88,7 +86,7 @@ class SecEdgarRevenueConceptTest {
                 tag("RevenuesNetOfInterestExpense", List.of(
                         fact("2017-01-01", "2017-12-31", 2_052 * MILLION, accn, "10-K", "FY", 2017, filed))),
                 tag("GrossProfit", List.of(fact("2017-01-01", "2017-12-31", 4_126 * MILLION, accn, "10-K", "FY", 2017, filed))));
-        assertThat(latest(build(json, true), "FY").revenue()).isEqualByComparingTo("132378000000");
+        assertThat(latest(build(json), "FY").revenue()).isEqualByComparingTo("132378000000");
 
         // 매출총이익이 순수익 아래면(RKT) 순수익이 그대로 매출이다.
         String below = String.join(",",
@@ -96,11 +94,11 @@ class SecEdgarRevenueConceptTest {
                 tag("RevenuesNetOfInterestExpense", List.of(
                         fact("2017-01-01", "2017-12-31", 5_838 * MILLION, accn, "10-K", "FY", 2017, filed))),
                 tag("GrossProfit", List.of(fact("2017-01-01", "2017-12-31", 2_599 * MILLION, accn, "10-K", "FY", 2017, filed))));
-        assertThat(latest(build(below, true), "FY").revenue()).isEqualByComparingTo("5838000000");
+        assertThat(latest(build(below), "FY").revenue()).isEqualByComparingTo("5838000000");
     }
 
     @Test
-    @DisplayName("관문 켬: 고른 매출이 같은 공시의 원가 + 총이익보다 작고 다른 후보가 그 줄을 닫으면 그 후보 — 큰 쪽은 안 건드린다")
+    @DisplayName("고른 매출이 같은 공시의 원가 + 총이익보다 작고 다른 후보가 그 줄을 닫으면 그 후보 — 큰 쪽은 안 건드린다")
     void revenueBelowItsOwnGrossMarginLineTakesTheConfirmingSibling() throws Exception {
         String accn = "0000000001-18-000001";
         String filed = "2018-02-15";
@@ -114,8 +112,7 @@ class SecEdgarRevenueConceptTest {
                         fact("2017-01-01", "2017-12-31", 875 * MILLION, accn, "10-K", "FY", 2017, filed))),
                 tag("GrossProfit", List.of(
                         fact("2017-01-01", "2017-12-31", 100 * MILLION, accn, "10-K", "FY", 2017, filed))));
-        assertThat(latest(build(broken, true), "FY").revenue()).isEqualByComparingTo("975000000");
-        assertThat(latest(build(broken, false), "FY").revenue()).as("관문 꺼짐은 옛 출력 그대로").isEqualByComparingTo("975000");
+        assertThat(latest(build(broken), "FY").revenue()).isEqualByComparingTo("975000000");
 
         // 총매출이 기타 수익을 품어 원가 + 총이익보다 크다(ABT · AMGN) — 정당한 개념 차이라 그대로다.
         String wider = String.join(",",
@@ -124,11 +121,11 @@ class SecEdgarRevenueConceptTest {
                 tag("CostOfGoodsAndServicesSold", List.of(
                         fact("2017-01-01", "2017-12-31", 875 * MILLION, accn, "10-K", "FY", 2017, filed))),
                 tag("GrossProfit", List.of(fact("2017-01-01", "2017-12-31", 100 * MILLION, accn, "10-K", "FY", 2017, filed))));
-        assertThat(latest(build(wider, true), "FY").revenue()).isEqualByComparingTo("1050000000");
+        assertThat(latest(build(wider), "FY").revenue()).isEqualByComparingTo("1050000000");
     }
 
     @Test
-    @DisplayName("관문 켬 P4: 은행이 이자수익 후보 태그를 안 내면 같은 판의 순이자손익 + 이자비용으로 채운다 — 은행형 영업이익 재료")
+    @DisplayName("P4: 은행이 이자수익 후보 태그를 안 내면 같은 판의 순이자손익 + 이자비용으로 채운다 — 은행형 영업이익 재료")
     void bankInterestIncomeFromNetInterestIdentity() throws Exception {
         String accn = "0000000001-18-000001";
         String filed = "2018-02-15";
@@ -137,12 +134,11 @@ class SecEdgarRevenueConceptTest {
                 tag("InterestExpense", List.of(fact("2017-01-01", "2017-12-31", 30 * MILLION, accn, "10-K", "FY", 2017, filed))),
                 tag("NoninterestIncome", List.of(fact("2017-01-01", "2017-12-31", 70 * MILLION, accn, "10-K", "FY", 2017, filed))),
                 tag("NoninterestExpense", List.of(fact("2017-01-01", "2017-12-31", 100 * MILLION, accn, "10-K", "FY", 2017, filed))));
-        assertThat(latest(build(json, true), "FY").interestAndDividendIncome()).isEqualByComparingTo("120000000");
-        assertThat(latest(build(json, false), "FY").interestAndDividendIncome()).as("관문 꺼짐은 옛 출력 그대로").isNull();
+        assertThat(latest(build(json), "FY").interestAndDividendIncome()).isEqualByComparingTo("120000000");
     }
 
     @Test
-    @DisplayName("관문 켬: 뒤 판의 고정 태그 매출이 떨어져도 같은 판이 다른 후보 태그로 앞 판 값을 실었으면 앞 판 값을 잇는다(태그 변경)")
+    @DisplayName("뒤 판의 고정 태그 매출이 떨어져도 같은 판이 다른 후보 태그로 앞 판 값을 실었으면 앞 판 값을 잇는다(태그 변경)")
     void retaggedRevenueKeepsThePreviousTotal() throws Exception {
         String first = "0000000001-18-000001";
         String later = "0000000001-19-000001";
@@ -156,7 +152,7 @@ class SecEdgarRevenueConceptTest {
                 tag("NetIncomeLoss", List.of(
                         fact("2017-01-01", "2017-12-31", 50 * MILLION, first, "10-K", "FY", 2017, "2018-02-15"),
                         fact("2017-01-01", "2017-12-31", 55 * MILLION, later, "10-K", "FY", 2018, "2019-02-15"))));
-        RawFinancialReport on = latest(build(json, true), "FY");
+        RawFinancialReport on = latest(build(json), "FY");
         assertThat(on.revenue()).isEqualByComparingTo("1000000000");
         assertThat(on.netIncome()).as("같은 판의 다른 재작성은 그대로 받는다").isEqualByComparingTo("55000000");
     }

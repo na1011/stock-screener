@@ -372,7 +372,8 @@ class CorporateActionCollectorTest {
                 List.of(prices), List.of(), List.of(), List.of(), List.of(), List.of(source), List.of(),
                 List.of(), List.of(), List.of());
         return new CorporateActionCollector(registry, ledger, recalculator, priceCalendar,
-                new SpinOffValuer(registry, jdbcTemplate), new PriceObservationWindow(jdbcTemplate), new CorporateActionSupplement(), null, false);
+                new SpinOffValuer(registry, jdbcTemplate), new PriceObservationWindow(jdbcTemplate), new CorporateActionSupplement(),
+                new KrBasePriceEvents(jdbcTemplate, org.mockito.Mockito.mock(com.stockscreener.pipeline.datasource.kr.KrSpinOffResolver.class)));
     }
 
     /** 소스가 알린 분사 — 주식수 그대로(1)이고 가치는 아직 모른다. */
@@ -400,7 +401,8 @@ class CorporateActionCollectorTest {
                 List.of(),
                 List.of());
         return new CorporateActionCollector(registry, ledger, recalculator, priceCalendar,
-                new SpinOffValuer(registry, jdbcTemplate), new PriceObservationWindow(jdbcTemplate), new CorporateActionSupplement(), null, false);
+                new SpinOffValuer(registry, jdbcTemplate), new PriceObservationWindow(jdbcTemplate), new CorporateActionSupplement(),
+                new KrBasePriceEvents(jdbcTemplate, org.mockito.Mockito.mock(com.stockscreener.pipeline.datasource.kr.KrSpinOffResolver.class)));
     }
 
     private static CorporateAction disclosed(String date, String ratio) {

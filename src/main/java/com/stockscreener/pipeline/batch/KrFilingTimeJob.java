@@ -6,7 +6,6 @@ import com.stockscreener.pipeline.datasource.kr.DartFilingTimeClient;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
@@ -34,15 +33,12 @@ public class KrFilingTimeJob {
     private final KrFilingTimeStore store;
     private final JdbcTemplate jdbc;
     private final BatchExecutions batchExecutions;
-    private final boolean krGate;
 
-    public KrFilingTimeJob(DartFilingTimeClient client, KrFilingTimeStore store, JdbcTemplate jdbc, BatchExecutions batchExecutions,
-                           @Value("${stockscreener.gate.kr}") boolean krGate) {
+    public KrFilingTimeJob(DartFilingTimeClient client, KrFilingTimeStore store, JdbcTemplate jdbc, BatchExecutions batchExecutions) {
         this.client = client;
         this.store = store;
         this.jdbc = jdbc;
         this.batchExecutions = batchExecutions;
-        this.krGate = krGate;
     }
 
     /** 그 시점의 국내 원자료 공시일 중 캐시에 없는 지난 날짜(오래된 순). */
@@ -96,7 +92,7 @@ public class KrFilingTimeJob {
                     log.warn("게시 시각 날짜를 못 받았다 — 다음 실행이 다시 묻는다. day={} {}", day, e.getMessage());
                 }
             }
-            long loaded = krGate ? store.loadAll() : 0;
+            long loaded = store.loadAll();
             if (failed > 0) {
                 execution.recordUnfinishedListing("KR", "게시 시각 " + failed + "일 실패");
             }

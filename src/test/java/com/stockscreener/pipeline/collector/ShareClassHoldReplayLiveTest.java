@@ -36,7 +36,7 @@ class ShareClassHoldReplayLiveTest {
         DriverManagerDataSource ds = new DriverManagerDataSource(
                 "jdbc:postgresql://localhost:5432/" + System.getenv("SHARE_CLASS_HOLD_DB") + "?readOnlyMode=always");
         JdbcTemplate jdbc = new JdbcTemplate(ds);
-        StoredShareCounts on = new JdbcStoredShareCounts(jdbc, new ShareClassStore(jdbc), true);
+        StoredShareCounts on = new JdbcStoredShareCounts(jdbc, new ShareClassStore(jdbc));
         List<String> lines = new ArrayList<>();
         lines.add("date\tticker\tstate\theld_shares\tshown_shares");
         for (LocalDate d : DATES) {

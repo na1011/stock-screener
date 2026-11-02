@@ -72,7 +72,8 @@ class MembershipGapFillerTest {
         filler = new MembershipGapFiller(stockRegistrar, initialLoadJob, companyProfileJob,
                 fullStatementRefillJob, governanceLoadJob, governanceDeriveJob,
                 alerter, alertPort, batchExecutionReader,
-                org.mockito.Mockito.mock(KrXbrlCollectJob.class), null, false);
+                org.mockito.Mockito.mock(KrXbrlCollectJob.class),
+                org.mockito.Mockito.mock(com.stockscreener.pipeline.datasource.kr.xbrl.KrCommonIncomeDeriver.class));
     }
 
     @Test

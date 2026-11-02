@@ -13,7 +13,6 @@ import com.stockscreener.pipeline.datasource.us.UsPastRanking;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
@@ -66,14 +65,11 @@ public class UniverseRestoreJob {
     private final MembershipGapFiller gapFiller;
     private final ObjectProvider<UsPastRanking> pastRanking;
     private final UniverseRebalanceJob rebalanceJob;
-    /** 미국 관문 설정 — 켜졌으면 미국 복원 격자를 과거 날짜 순위(행 · 그날 범주 · 닻 봉)로 짓는다(D4). */
-    private final boolean usGate;
 
     public UniverseRestoreJob(DataSourceRegistry registry, StockRegistrar stockRegistrar,
                               UniverseLedgerRestorer restorer, JdbcTemplate jdbcTemplate,
                               MembershipGapFiller gapFiller, ObjectProvider<UsPastRanking> pastRanking,
-                              UniverseRebalanceJob rebalanceJob,
-                              @Value("${stockscreener.gate.us}") boolean usGate) {
+                              UniverseRebalanceJob rebalanceJob) {
         this.registry = registry;
         this.stockRegistrar = stockRegistrar;
         this.restorer = restorer;
@@ -81,7 +77,6 @@ public class UniverseRestoreJob {
         this.gapFiller = gapFiller;
         this.pastRanking = pastRanking;
         this.rebalanceJob = rebalanceJob;
-        this.usGate = usGate;
     }
 
     /**
@@ -100,7 +95,7 @@ public class UniverseRestoreJob {
     }
 
     /**
-     * @param rebuildObserved 관측 평면까지 관문 켬 기저로 다시 짓는다({@link #rebuildObserved}) — 관문 날 한 번
+     * @param rebuildObserved 관측 평면까지 과거 날짜 순위 기저로 다시 짓는다({@link #rebuildObserved}) — 관문 날 한 번
      */
     public Report run(LocalDate asOf, String universeCode, boolean apply, boolean replace, List<LocalDate> dates,
                       boolean rebuildObserved) {
@@ -130,12 +125,13 @@ public class UniverseRestoreJob {
         Set<String> unresolved = new TreeSet<>();
         int fetched = 0;
         Map<Long, LocalDate> eraTo = Map.of();
-        boolean pastRanked = usGate && UsMarketCapUniverseAdapter.UNIVERSE_CODE.equals(universeCode);
+        // 미국 복원 격자는 과거 날짜 순위(행 · 그날 범주 · 닻 봉)로 짓는다(D4).
+        boolean pastRanked = UsMarketCapUniverseAdapter.UNIVERSE_CODE.equals(universeCode);
         if (pastRanked) {
-            // 미국 관문 갈래(D4) — 후보가 행이라 해석도 행 만들기도 없다(해석 못 한 티커 0). 구간은 행의 시대 끝에서 자른다.
+            // 후보가 행이라 해석도 행 만들기도 없다(해석 못 한 티커 0). 구간은 행의 시대 끝에서 자른다.
             UsPastRanking ranking = pastRanking.getIfAvailable();
             if (ranking == null) {
-                throw new IllegalStateException("미국 관문이 켜졌는데 과거 날짜 순위가 없다(Alpaca 키) — 오늘 기호로 과거를 고르지 않는다.");
+                throw new IllegalStateException("미국 복원인데 과거 날짜 순위가 없다(Alpaca 키) — 오늘 기호로 과거를 고르지 않는다.");
             }
             try {
                 for (UsPastRanking.Roster roster : ranking.rosters(grid)) {
@@ -148,7 +144,7 @@ public class UniverseRestoreJob {
             }
             eraTo = eraTo();
         }
-        // 앞 편입 — 미국 클래스 축의 편입 보류가 쓴다(관문 뒤). 복원 구간의 첫 격자는 편입이 없다(빈 집합).
+        // 앞 편입 — 미국 클래스 축의 편입 보류가 쓴다. 복원 구간의 첫 격자는 편입이 없다(빈 집합).
         Set<String> previous = Set.of();
         for (LocalDate date : pastRanked ? List.<LocalDate>of() : grid) {
             // MUST: 격자점 하나가 실패하면 그 유니버스를 통째로 중단한다. 그 날짜만 빼고
@@ -196,7 +192,7 @@ public class UniverseRestoreJob {
     }
 
     /**
-     * 관측 평면을 관문 켬 기저로 다시 짓는다 — 관문 날 한 번(탐색 {@code explore/universe/OBSERVED-PLANE-PLAN-1023.md} v1.1).
+     * 관측 평면을 과거 날짜 순위 기저로 다시 짓는다 — 관문 날 한 번(탐색 {@code explore/universe/OBSERVED-PLANE-PLAN-1023.md} v1.1).
      *
      * <p>관측 평면(08-31~)은 꺼진 순위 판독기가 고른 명부다. 복원 하한 앞만 다시 지으면 창 안에 기저가 둘 섞인다. 그래서:
      * <ol>
@@ -212,11 +208,11 @@ public class UniverseRestoreJob {
      */
     private Report rebuildObserved(LocalDate asOf, String universeCode, boolean apply, boolean replace,
                                    List<LocalDate> dates) {
-        if (!usGate || !UsMarketCapUniverseAdapter.UNIVERSE_CODE.equals(universeCode) || !apply || !replace
+        if (!UsMarketCapUniverseAdapter.UNIVERSE_CODE.equals(universeCode) || !apply || !replace
                 || (dates != null && !dates.isEmpty())) {
-            throw new IllegalArgumentException(("--rebuild-observed=true는 미국 관문 켬(--stockscreener.gate.us=true) · --universe=%s · "
-                    + "--apply=true · --replace=true일 때만 받고 --dates와 함께 못 쓴다 — 받은 것: 관문=%s 유니버스=%s apply=%s replace=%s "
-                    + "dates=%s").formatted(UsMarketCapUniverseAdapter.UNIVERSE_CODE, usGate, universeCode, apply, replace, dates));
+            throw new IllegalArgumentException(("--rebuild-observed=true는 --universe=%s · "
+                    + "--apply=true · --replace=true일 때만 받고 --dates와 함께 못 쓴다 — 받은 것: 유니버스=%s apply=%s replace=%s "
+                    + "dates=%s").formatted(UsMarketCapUniverseAdapter.UNIVERSE_CODE, universeCode, apply, replace, dates));
         }
         Target target = target(universeCode);
         LocalDate oldFloor = restorer.observedFloor(universeCode).orElseThrow(() -> new IllegalStateException(
@@ -228,7 +224,7 @@ public class UniverseRestoreJob {
         }
         UsPastRanking ranking = pastRanking.getIfAvailable();
         if (ranking == null) {
-            throw new IllegalStateException("미국 관문이 켜졌는데 과거 날짜 순위가 없다(Alpaca 키) — 오늘 기호로 과거를 고르지 않는다.");
+            throw new IllegalStateException("미국 복원인데 과거 날짜 순위가 없다(Alpaca 키) — 오늘 기호로 과거를 고르지 않는다.");
         }
         List<LocalDate> chain = new ArrayList<>(grid);
         chain.add(floor);

@@ -91,7 +91,7 @@ class UsMembershipReplayLiveTest {
                 new SecFilingClient(factory, properties, secLimiter), factory, properties, secLimiter));
         UsMarketCapUniverseAdapter adapter = new UsMarketCapUniverseAdapter(
                 new AlpacaUniverseAdapter(factory, properties, alpacaLimiter, names),
-                shareCounts, cikCache, names, factory, properties, alpacaLimiter, false, covers);
+                shareCounts, cikCache, names, factory, properties, alpacaLimiter, covers);
 
         // 판정 이력: 스윕 TSV(티커 · 공시일 · 접수번호 · 종류 · 상태 · 갈래 · 범주 · N_L · n) → CIK. 티커 → CIK는 재료 목록(JSON)이
         // 정본이다. 앵커가 아닌 보인 판('d')의 N_L은 지금 경로의 값 — companyfacts 표지 주식수다.

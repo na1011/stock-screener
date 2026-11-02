@@ -13,7 +13,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -89,8 +88,6 @@ public class AlpacaPriceAdapter implements PriceDataSource {
     private final RateLimiter rateLimiter;
     private final boolean credentialsPresent;
     private final int maxPages;
-    /** 미국 관문 설정 — 켜졌을 때만 거래대금({@code vw × v})을 싣는다(ADR-0196 · 관문 재적재가 보존 창을 한 번에 채운다). */
-    private final boolean usGate;
 
     /**
      * MUST — {@code @Autowired}를 유지한다. 생성자가 둘이면 Spring이 어느 쪽을 쓸지 정하지
@@ -99,10 +96,9 @@ public class AlpacaPriceAdapter implements PriceDataSource {
     @Autowired
     public AlpacaPriceAdapter(ExternalApiClientFactory clientFactory,
                               DataSourceProperties properties,
-                              @Qualifier("alpacaRateLimiter") RateLimiter rateLimiter,
-                              @Value("${stockscreener.gate.us}") boolean usGate) {
+                              @Qualifier("alpacaRateLimiter") RateLimiter rateLimiter) {
         this(clientFactory, properties, rateLimiter, properties.getAlpacaMarketDataBaseUrl(),
-                MAX_PAGES, usGate);
+                MAX_PAGES);
     }
 
     // MockWebServer 테스트 전용 — base URL과 페이지 상한을 바꿔 끼운다.
@@ -113,16 +109,6 @@ public class AlpacaPriceAdapter implements PriceDataSource {
                        RateLimiter rateLimiter,
                        String baseUrl,
                        int maxPages) {
-        this(clientFactory, properties, rateLimiter, baseUrl, maxPages, false);
-    }
-
-    AlpacaPriceAdapter(ExternalApiClientFactory clientFactory,
-                       DataSourceProperties properties,
-                       RateLimiter rateLimiter,
-                       String baseUrl,
-                       int maxPages,
-                       boolean usGate) {
-        this.usGate = usGate;
         DataSourceProperties.Source source = properties.getAlpaca();
         this.client = clientFactory.create(source, baseUrl, AlpacaHeaders.of(source));
         this.rateLimiter = rateLimiter;
@@ -311,9 +297,9 @@ public class AlpacaPriceAdapter implements PriceDataSource {
     /**
      * 봉 하나를 옮긴다.
      *
-     * <p><b>{@code tradeValue}는 관문 켬에서 {@code vw × v}다</b>(ADR-0196) — 그 봉에 든 체결 전부의 Σ가격×수량(VWAP의 정의)이라
+     * <p><b>{@code tradeValue}는 {@code vw × v}다</b>(ADR-0196) — 그 봉에 든 체결 전부의 Σ가격×수량(VWAP의 정의)이라
      * 「소스가 주는 그날 체결 금액 총계」이고 합성이 아니다. 거래량이 0이면 0(국내 정지 봉이 0으로 오는 것과 같다 · 거래 드문 클래스주),
-     * 거래량이 있는데 {@code vw}가 없거나 0 이하면 null(못 받은 것). 꺼짐은 null 그대로다.
+     * 거래량이 있는데 {@code vw}가 없거나 0 이하면 null(못 받은 것).
      * MUST NOT: {@code close × volume}으로 합성하지 않는다 — 정규장 종가 × 전 세션 거래량이라 다른 값이다.
      * 정규장으로 자르는 길(분봉 합 · 30분 봉 합)은 버렸다 — 종가 경매(하루 거래량의 10~15%)가 16:00~16:03 ET에 찍혀 경계 밖에
      * 떨어지고 봉에 안 실리는 체결도 있다(ADR-0196 §버린 대안 · {@code AlpacaClosingAuctionProbeLiveTest}).
@@ -333,7 +319,7 @@ public class AlpacaPriceAdapter implements PriceDataSource {
                     tradeDate,
                     decimal(node, "o"), decimal(node, "h"), decimal(node, "l"), decimal(node, "c"),
                     node.path("v").asLong(0L),
-                    usGate ? tradeValueOf(node) : null,
+                    tradeValueOf(node),
                     null,
                     false);
         } catch (RuntimeException e) {

@@ -19,7 +19,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -257,8 +256,6 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
     private final RateLimiter rateLimiter;
     private final boolean credentialsPresent;
     private final int topN;
-    /** 미국 관문 설정 — 켜졌으면 주식수 클래스 축의 편입 보류·발행사 제외를 순위에 건다({@link #applyClassHolds}). */
-    private final boolean usGate;
     /** 예탁증권 비율을 가릴 표지({@link #screenDepositary}) — SEC 키가 없으면 빈 값이고, 범위 안 후보가 있으면 실행이 선다. */
     private final Supplier<DepositaryCovers> depositaryCovers;
 
@@ -275,10 +272,9 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
                                       ExternalApiClientFactory clientFactory,
                                       DataSourceProperties properties,
                                       @Qualifier("alpacaRateLimiter") RateLimiter rateLimiter,
-                                      @Value("${stockscreener.gate.us}") boolean usGate,
                                       ObjectProvider<DepositaryCovers> depositaryCovers) {
         this(listing, shareCounts, cikCache, nameCache, clientFactory, properties, rateLimiter,
-                properties.getAlpacaMarketDataBaseUrl(), TOP_N, usGate, depositaryCovers::getIfAvailable);
+                properties.getAlpacaMarketDataBaseUrl(), TOP_N, depositaryCovers::getIfAvailable);
     }
 
     /** 운영 크기(상위 1,000) · 운영 base URL로 표지 조회를 직접 준다 — 재생 도구(live)와 시험이 쓴다. */
@@ -289,10 +285,9 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
                                ExternalApiClientFactory clientFactory,
                                DataSourceProperties properties,
                                RateLimiter rateLimiter,
-                               boolean usGate,
                                DepositaryCovers depositaryCovers) {
         this(listing, shareCounts, cikCache, nameCache, clientFactory, properties, rateLimiter,
-                properties.getAlpacaMarketDataBaseUrl(), TOP_N, usGate, () -> depositaryCovers);
+                properties.getAlpacaMarketDataBaseUrl(), TOP_N, () -> depositaryCovers);
     }
 
     /**
@@ -311,20 +306,7 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
                                RateLimiter rateLimiter,
                                String marketDataBaseUrl,
                                int topN) {
-        this(listing, shareCounts, cikCache, nameCache, clientFactory, properties, rateLimiter, marketDataBaseUrl, topN, false);
-    }
-
-    UsMarketCapUniverseAdapter(AlpacaUniverseAdapter listing,
-                               StoredShareCounts shareCounts,
-                               SecTickerCikCache cikCache,
-                               SecurityNameCache nameCache,
-                               ExternalApiClientFactory clientFactory,
-                               DataSourceProperties properties,
-                               RateLimiter rateLimiter,
-                               String marketDataBaseUrl,
-                               int topN,
-                               boolean usGate) {
-        this(listing, shareCounts, cikCache, nameCache, clientFactory, properties, rateLimiter, marketDataBaseUrl, topN, usGate,
+        this(listing, shareCounts, cikCache, nameCache, clientFactory, properties, rateLimiter, marketDataBaseUrl, topN,
                 () -> null);
     }
 
@@ -337,7 +319,6 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
                                RateLimiter rateLimiter,
                                String marketDataBaseUrl,
                                int topN,
-                               boolean usGate,
                                Supplier<DepositaryCovers> depositaryCovers) {
         DataSourceProperties.Source source = properties.getAlpaca();
         this.listing = listing;
@@ -348,7 +329,6 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
         this.rateLimiter = rateLimiter;
         this.credentialsPresent = source.hasApiKey() && source.hasSecretKey();
         this.topN = topN;
-        this.usGate = usGate;
         this.depositaryCovers = depositaryCovers;
     }
 
@@ -419,8 +399,8 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
         Map<String, String> storedNames = new HashMap<>();
         Map<String, String> reportForms = new HashMap<>();
         Exclusions excluded = new Exclusions();
-        // 관문 켬: 판마다 예탁 비율로 이미 ADS 단위인 종목(ADR-0183) — 표지 판정(A′)에 다시 안 넘긴다.
-        Set<Long> depositaryIds = usGate ? shareCounts.depositaryStocks(UsMarket.CODE) : Set.of();
+        // 판마다 예탁 비율로 이미 ADS 단위인 종목(ADR-0183) — 표지 판정(A′)에 다시 안 넘긴다.
+        Set<Long> depositaryIds = shareCounts.depositaryStocks(UsMarket.CODE);
         Set<String> depositaryResolved = new HashSet<>();
         for (StoredShareCounts.ShareCount count :
                 shareCounts.activeByMarket(UsMarket.CODE, asOf.minusYears(SHARES_MAX_AGE_YEARS), asOf)) {
@@ -439,9 +419,7 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
             storedNames.put(count.ticker(), count.name());
             reportForms.put(count.ticker(), count.reportForm());
         }
-        if (usGate) {
-            applyClassHolds(asOf, previous, sharesByTicker, storedNames, excluded);
-        }
+        applyClassHolds(asOf, previous, sharesByTicker, storedNames, excluded);
 
         List<AlpacaAsset> candidates = new ArrayList<>();
         for (AlpacaAsset asset : assets) {
@@ -608,7 +586,7 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
             }
             String symbol = row.asset().symbol();
             if (depositaryResolved.contains(symbol)) {
-                // 관문 켬 — 주식수가 이미 판마다 비율로 ADS 단위다(ADR-0183). 표지로 「비율 1만」을 다시 가리지 않는다.
+                // 주식수가 이미 판마다 비율로 ADS 단위다(ADR-0183). 표지로 「비율 1만」을 다시 가리지 않는다.
                 resolved++;
                 kept.add(row);
                 accepted++;
@@ -616,7 +594,7 @@ public class UsMarketCapUniverseAdapter implements UniverseDataSource {
             }
             boolean nameSaysDepositary = DepositaryRatio.isDepositary(row.asset().name())
                     || DepositaryRatio.isDepositary(storedNames.get(symbol));
-            // 판 양식을 모르면(시험 픽스처 · 관문 켬의 보류 후보) 이름 범위만 탄다 — Set.of는 null을 물으면 던진다.
+            // 판 양식을 모르면(시험 픽스처 · 보류 후보) 이름 범위만 탄다 — Set.of는 null을 물으면 던진다.
             String form = reportForms.get(symbol);
             if ((form != null && FOREIGN_FORMS.contains(form)) || nameSaysDepositary) {
                 looked++;

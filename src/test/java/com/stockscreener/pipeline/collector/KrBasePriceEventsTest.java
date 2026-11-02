@@ -148,7 +148,7 @@ class KrBasePriceEventsTest {
     }
 
     @Test
-    @DisplayName("국내 관문 켬 반증 — 원장 무상증자 효력일에 거래소가 조정하지 않았으면(기준가 = 직전 종가) 보류한다 · 관문 꺼짐은 그대로(알테오젠 id 10)")
+    @DisplayName("국내 반증 — 원장 무상증자 효력일에 거래소가 조정하지 않았으면(기준가 = 직전 종가) 보류한다(알테오젠 id 10)")
     void ledgerRowTheExchangeContradictsIsHeld() {
         bar(stockId, "2022-10-06", 43_800, 40_400, 1_058_859, 42_933_685, 43_700L, "KOSDAQ");
         bar(stockId, "2022-10-07", 40_600, 37_650, 918_113, 42_933_685, 40_400L, "KOSDAQ");
@@ -156,15 +156,13 @@ class KrBasePriceEventsTest {
                 INSERT INTO corporate_action (stock_id, effective_date, listing_date, type, ratio, detection_source, status)
                 VALUES (?, '2022-10-07', '2022-11-14', 'BONUS_ISSUE', 1.2, 'SOURCE_DISCLOSURE', 'APPLIED') RETURNING id
                 """, Long.class, stockId);
-        CorporateActionLedger off = new CorporateActionLedger(jdbc, false);
-        assertThat(off.screenBeforeApplying(stockId, off.findApplicable(stockId))).hasSize(1);
-        CorporateActionLedger on = new CorporateActionLedger(jdbc, true);
+        CorporateActionLedger on = new CorporateActionLedger(jdbc);
         assertThat(on.screenBeforeApplying(stockId, on.findApplicable(stockId))).isEmpty();
         assertThat(jdbc.queryForObject("SELECT status FROM corporate_action WHERE id = ?", String.class, id)).isEqualTo("OBSERVED");
     }
 
     @Test
-    @DisplayName("상장일 없는 무상 요소 행 — 판독기가 주식수 계단으로 짓는다(권리락 순 · 계단 하나에 사건 하나) · 계단이 아직 없으면 상장 전 · 관문 꺼짐은 효력일로 접는다")
+    @DisplayName("상장일 없는 무상 요소 행 — 판독기가 주식수 계단으로 짓는다(권리락 순 · 계단 하나에 사건 하나) · 계단이 아직 없으면 상장 전")
     void listingDateComesFromTheShareSteps() {
         bar(stockId, "2020-06-22", 10_000, 10_000, 1, 1_000_000, 10_000L, "KOSDAQ");
         bar(stockId, "2020-06-23", 9_000, 9_000, 1, 1_000_000, 8_800L, "KOSDAQ");     // 유상 권리락 ×1.1364
@@ -180,11 +178,8 @@ class KrBasePriceEventsTest {
         }
         ShareClassStore shareClasses = Mockito.mock(ShareClassStore.class);
         CorporateActionLedger ledger = new CorporateActionLedger(jdbc);
-        List<ShareAdjustment> on = new IndicatorDataReader(jdbc, ledger, shareClasses, false, true).readShareAdjustments(stockId);
+        List<ShareAdjustment> on = new IndicatorDataReader(jdbc, ledger, shareClasses).readShareAdjustments(stockId);
         assertThat(on).extracting(ShareAdjustment::listingDate).containsExactly(
                 LocalDate.parse("2020-08-18"), LocalDate.parse("2020-08-26"), LocalDate.parse("2026-10-27"));
-        List<ShareAdjustment> off = new IndicatorDataReader(jdbc, ledger, shareClasses, false, false).readShareAdjustments(stockId);
-        assertThat(off).extracting(ShareAdjustment::listingDate).containsExactly(
-                LocalDate.parse("2020-06-23"), LocalDate.parse("2020-08-04"), LocalDate.parse("2026-10-26"));
     }
 }

@@ -70,7 +70,8 @@ class AlpacaPriceAdapterTest {
         assertThat(first.close()).isEqualByComparingTo(new BigDecimal("185.64"));
         assertThat(first.low()).as("소수 자릿수를 보존한다").isEqualByComparingTo(new BigDecimal("183.885"));
         assertThat(first.volume()).isEqualTo(82_496_943L);
-        assertThat(first.tradeValue()).as("소스가 안 준다 — close × volume으로 합성하지 않는다").isNull();
+        assertThat(first.tradeValue()).as("vw × v(ADR-0196) — close × volume(15,314,732,498.52)으로 합성하지 않는다")
+                .isEqualByComparingTo("15331746090.57");
         assertThat(first.listedShares()).as("소스가 안 준다 — 재무 쪽으로 폴백한다").isNull();
         assertThat(first.splitAdjustedBySource())
                 .as("adjustment=raw를 보내므로 false다. 바꾸면 원장 계수가 두 번 적용된다").isFalse();
@@ -311,7 +312,7 @@ class AlpacaPriceAdapterTest {
     }
 
     @Test
-    @DisplayName("관문 켬은 거래대금을 vw × v로 싣는다 — 거래량 0이면 0, vw가 없으면 null · 꺼짐은 null 그대로(ADR-0196)")
+    @DisplayName("거래대금을 vw × v로 싣는다 — 거래량 0이면 0, vw가 없으면 null(ADR-0196)")
     void carriesTradeValueOnlyWhenGateIsOn() throws Exception {
         String body = """
                 {"bars":{"AAPL":[
@@ -319,17 +320,11 @@ class AlpacaPriceAdapterTest {
                  {"t":"2026-08-25T04:00:00Z","o":310,"h":310,"l":310,"c":310,"v":0,"n":0},
                  {"t":"2026-08-26T04:00:00Z","o":311,"h":312,"l":310,"c":311,"v":500,"n":3}]},"next_page_token":null}""";
         enqueue(200, body);
-        enqueue(200, body);
 
-        List<RawPriceBar> on = new AlpacaPriceAdapter(
-                new ExternalApiClientFactory(), properties("test-key-id", "test-secret"),
-                new TokenBucketRateLimiter("alpaca", 0, 0), server.url("/").toString(), 50, true)
-                .fetchDailyBars(AAPL, FROM, TO);
-        List<RawPriceBar> off = adapter().fetchDailyBars(AAPL, FROM, TO);
+        List<RawPriceBar> on = adapter().fetchDailyBars(AAPL, FROM, TO);
 
         assertThat(on).extracting(RawPriceBar::tradeValue)
                 .containsExactly(new BigDecimal("310500.00"), BigDecimal.ZERO, null);
-        assertThat(off).extracting(RawPriceBar::tradeValue).containsOnlyNulls();
     }
 
     private AlpacaPriceAdapter adapter() {
