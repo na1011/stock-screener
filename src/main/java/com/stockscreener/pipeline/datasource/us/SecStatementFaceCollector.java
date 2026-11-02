@@ -46,7 +46,7 @@ public class SecStatementFaceCollector {
         this.cacheDir = Path.of(cacheDir);
     }
 
-    /** 그 발행사 공시들의 본문 — 캐시에 없으면 받는다. 모르는 공시는 결과에 없다. 폴더가 없는(404) 공시는 모른다(캐시 안 함) · 일시 실패는 던진다(종목 실패). */
+    /** 그 발행사 공시들의 본문 — 캐시에 없으면 받는다. 모르는 공시는 결과에 없다. 원장이 재료를 안 주는(NOT_FOUND — 폴더 404 · 빈 본문) 공시는 모른다(캐시 안 함) · 일시 실패는 던진다(종목 실패). */
     public SecStatementFaces faces(long cik, Set<String> accessions, String context) throws DataSourceException {
         Map<String, Face> known = new HashMap<>();
         int fetched = 0;
@@ -61,9 +61,9 @@ public class SecStatementFaceCollector {
                     if (e.kind() != DataSourceException.Kind.NOT_FOUND) {
                         throw e;
                     }
-                    // 그 공시 폴더가 소스에 없다(VOD 2018 · 2026-11-02 404) — 본문을 모르는 공시다. 캐시하지 않는다: 다음 실행이 다시 묻는다.
+                    // 원장이 그 공시의 재료를 안 준다(VOD 2018 폴더 404 · WF 2019 빈 xsd — 2026-11-02) — 본문을 모르는 공시다. 캐시하지 않는다: 다음 실행이 다시 묻는다.
                     // 일시 실패는 위로 던진다 — 「모름」으로 접으면 실행마다 그 판의 본문 판정이 갈린다.
-                    log.warn("공시 본문 재료의 폴더가 없다 — 이 공시는 본문 모름. {} {} — {}", context, accession, e.getMessage());
+                    log.warn("공시 본문 재료를 원장이 주지 않는다 — 이 공시는 본문 모름. {} {} — {}", context, accession, e.getMessage());
                     cached = Optional.empty();
                 }
             }
