@@ -1326,6 +1326,45 @@ class FinancialWriterTest {
     }
 
     @Test
+    @DisplayName("한 기간 창은 라벨 하나다 — 판 이력을 다 주는 소스가 같은 창을 새 라벨로 내면 옛 라벨 행을 걷는다(결산월 변경 · TULP · EVOX)")
+    void relabelledWindowRetiresTheOldLabel() {
+        LocalDate start = LocalDate.of(2026, 1, 1);
+        LocalDate end = LocalDate.of(2026, 3, 31);
+        writer.write(stockId, List.of(labelled(2026, "Q3", start, end)));
+        writer.write(stockId, List.of(labelled(2026, "Q2", LocalDate.of(2025, 10, 1), LocalDate.of(2025, 12, 31))));
+
+        writer.writeDetailed(stockId, List.of(labelled(2026, "Q1", start, end)), WriteMode.FILL_MISSING, true);
+
+        assertThat(jdbcTemplate.queryForList("SELECT fiscal_period FROM financial_statement WHERE stock_id = ? AND period_end = ?",
+                String.class, stockId, end)).containsExactly("Q1");
+        assertThat(jdbcTemplate.queryForList("SELECT fiscal_period FROM financial_statement WHERE stock_id = ? AND period_end = ?",
+                String.class, stockId, LocalDate.of(2025, 12, 31))).as("출력에 없는 창은 안 건드린다").containsExactly("Q2");
+
+        // 판 이력을 다 안 주는 소스(국내)는 라벨을 정하지 못한다 — 안 걷는다.
+        writer.write(stockId, List.of(labelled(2027, "Q3", LocalDate.of(2027, 1, 1), LocalDate.of(2027, 3, 31))));
+        writer.writeDetailed(stockId, List.of(labelled(2027, "Q1", LocalDate.of(2027, 1, 1), LocalDate.of(2027, 3, 31))),
+                WriteMode.FILL_MISSING, false);
+        assertThat(jdbcTemplate.queryForList("SELECT fiscal_period FROM financial_statement WHERE stock_id = ? AND fiscal_year = 2027 ORDER BY 1",
+                String.class, stockId)).containsExactly("Q1", "Q3");
+    }
+
+    private static RawFinancialReport labelled(int fiscalYear, String period, LocalDate start, LocalDate end) {
+        return new RawFinancialReport(
+                fiscalYear, period, start, end, end.plusMonths(1).plusDays(10),
+                "10-Q", "USD",
+                new BigDecimal("5000"), new BigDecimal("1200"), new BigDecimal("1000"),
+                new BigDecimal("20000"), new BigDecimal("12000"), null, new BigDecimal("8000"),
+                null, null, null,
+                null, new BigDecimal("100"),
+                null, null,
+                null,
+                null, null, null,
+                null,
+                null, null, null, null, null, null, null, null, null, null,
+                false, java.util.Set.of());
+    }
+
+    @Test
     @DisplayName("「없다」 판정만 실은 호출도 그 칸의 관할이다 — 호출 전체에 값이 한 번도 안 나도 옛 값을 지운다(ADR-0202 본문 밖 영업이익)")
     void absenceOnlyCallStillManagesTheColumn() {
         writer.write(stockId, List.of(report(2025, "FY", "2026-03-15", "1000")));

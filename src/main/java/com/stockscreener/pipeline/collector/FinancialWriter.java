@@ -343,6 +343,7 @@ public class FinancialWriter {
                 log.warn("판 이력의 빈칸을 몰라 이 종목의 판 회수를 멈춘다. stockId={}", stockId);
             } else {
                 retractStaleVintages(stockId, reports, completeVintageHistory, guard.unconfirmed(), guard.withheld(), tally);
+                retractRelabelledWindows(stockId, reports, completeVintageHistory, tally);
             }
         }
         boolean earlierAllowed = mode == WriteMode.FILL_MISSING && completeVintageHistory;
@@ -552,6 +553,57 @@ public class FinancialWriter {
             tally.corrected += removed;
             invalidationPort.invalidate(stockId, entry.getValue().get(0).periodStart(),
                     IndicatorInvalidationPort.InvalidationReason.FINANCIAL_REVISED);
+        }
+    }
+
+    /**
+     * <b>한 기간 창은 라벨 하나다.</b> 이번 출력이 낸 창(시작 · 끝)을 다른 (회계연도, 기간) 라벨로 든 저장 행은 옛 라벨이라 지운다 — 결산월을 바꾼
+     * 발행사를 다시 받으면 새 라벨 행이 들고 옛 라벨 행이 같은 창 · 같은 공시로 남아 TTM이 같은 분기를 두 번 더한다(2026-11-03 TULP · EVOX
+     * 관문 재적재 · ADR-0124 펜스 8건).
+     *
+     * <p>판 이력을 다 주는 소스(미국)에서만 — 그 출력이 그 창의 라벨을 정한다. 출력에 없는 창은 안 건드린다({@link #retractStaleVintages}의
+     * 「그 라벨을 하나도 안 내면 안 건드린다」와 같은 안전장치 · 적재 창을 좁혀도 창 밖은 그대로다).
+     */
+    private void retractRelabelledWindows(long stockId, List<RawFinancialReport> reports, boolean completeVintageHistory, Tally tally) {
+        if (!completeVintageHistory) {
+            return;
+        }
+        Map<String, Set<DerivedLabel>> labelsByWindow = new LinkedHashMap<>();
+        for (RawFinancialReport r : reports) {
+            if (r.periodStart() != null && r.periodEnd() != null) {
+                labelsByWindow.computeIfAbsent(r.periodStart() + "|" + r.periodEnd(), k -> new LinkedHashSet<>())
+                        .add(new DerivedLabel(r.fiscalYear(), r.fiscalPeriod()));
+            }
+        }
+        Set<DerivedLabel> touched = new LinkedHashSet<>();
+        LocalDate earliest = null;
+        for (Map<String, Object> row : jdbcTemplate.queryForList("""
+                SELECT id, fiscal_year, fiscal_period, period_start, period_end FROM financial_statement
+                 WHERE stock_id = ? AND period_start IS NOT NULL AND period_end IS NOT NULL
+                """, stockId)) {
+            Set<DerivedLabel> labels = labelsByWindow.get(row.get("period_start") + "|" + row.get("period_end"));
+            DerivedLabel stored = new DerivedLabel(((Number) row.get("fiscal_year")).intValue(), (String) row.get("fiscal_period"));
+            if (labels == null || labels.contains(stored)) {
+                continue;
+            }
+            jdbcTemplate.update("DELETE FROM financial_statement WHERE id = ?", row.get("id"));
+            touched.add(stored);
+            LocalDate start = ((java.sql.Date) row.get("period_start")).toLocalDate();
+            earliest = earliest == null || start.isBefore(earliest) ? start : earliest;
+            tally.corrected++;
+        }
+        for (DerivedLabel label : touched) {
+            jdbcTemplate.update("UPDATE financial_statement SET is_latest = false WHERE stock_id = ? AND fiscal_year = ? AND fiscal_period = ? AND is_latest",
+                    stockId, label.fiscalYear(), label.fiscalPeriod());
+            jdbcTemplate.update("""
+                    UPDATE financial_statement SET is_latest = true WHERE id = (
+                        SELECT id FROM financial_statement WHERE stock_id = ? AND fiscal_year = ? AND fiscal_period = ?
+                         ORDER BY published_at DESC, revision_no DESC LIMIT 1)
+                    """, stockId, label.fiscalYear(), label.fiscalPeriod());
+        }
+        if (earliest != null) {
+            log.warn("옛 라벨로 남은 기간 창을 걷는다. stockId={} 라벨={}", stockId, touched);
+            invalidationPort.invalidate(stockId, earliest, IndicatorInvalidationPort.InvalidationReason.FINANCIAL_REVISED);
         }
     }
 

@@ -57,6 +57,8 @@ applies_to:
 ```premise 유도된 4분기가 FY 판의 공시일에 찍혀 있다
 # 면제 셋째(관문 켬 P3a · 2026-11-03): 4분기가 같은 해 FY 행의 공시 코드를 달고 그 FY 판보다 뒤에 찍혔으면 「FY가 같은 값으로 다시 실린
 # 날」 사건이다 — 값이 같은 FY 판은 접혀 그날 FY 행이 없다(관문 07 326행 · 캐시로 321행이 그날 FY 팩트 재제출 확인 · 5행은 캐시 없음).
+# 면제 둘째의 넓힘(2026-11-03): 그 해 1~3분기를 그날 다시 실은 공시의 코드를 단 4분기도 같은 사건이다 — 그 공시가 4분기를 직접 실었거나
+# (WTW 2017 10-Q 재작성) 앞 분기 재게재로 4분기 유량을 「모른다」로 비운 판(A6 · EXE 2020 · JEF 2017 · 유량이 비어 보통주 몫 사슬과 무관)이다.
 psql -d stock_screener -At -c "WITH q4 AS (
   SELECT q.stock_id, q.fiscal_year, q.published_at, q.report_code FROM financial_statement q
   WHERE q.fiscal_period = 'Q4' AND q.stock_id IN (
@@ -68,8 +70,10 @@ bad AS (
       AND y.fiscal_year = q4.fiscal_year AND y.fiscal_period = 'FY' AND y.published_at = q4.published_at)
     AND NOT EXISTS (SELECT 1 FROM financial_statement o WHERE o.stock_id = q4.stock_id
       AND o.report_code = q4.report_code AND o.fiscal_year > q4.fiscal_year)
-    AND NOT (EXISTS (SELECT 1 FROM financial_statement f WHERE f.stock_id = q4.stock_id
+    AND NOT ((EXISTS (SELECT 1 FROM financial_statement f WHERE f.stock_id = q4.stock_id
         AND f.fiscal_year = q4.fiscal_year AND f.fiscal_period = 'FY' AND f.report_code = q4.report_code)
+        OR EXISTS (SELECT 1 FROM financial_statement pc WHERE pc.stock_id = q4.stock_id AND pc.fiscal_year = q4.fiscal_year
+          AND pc.fiscal_period IN ('Q1', 'Q2', 'Q3') AND pc.published_at = q4.published_at AND pc.report_code = q4.report_code))
       AND EXISTS (SELECT 1 FROM financial_statement p WHERE p.stock_id = q4.stock_id
         AND p.fiscal_year = q4.fiscal_year AND p.fiscal_period IN ('Q1', 'Q2', 'Q3') AND p.published_at = q4.published_at))
     AND NOT (q4.report_code LIKE '8-K%' AND NOT EXISTS (SELECT 1 FROM financial_statement f8
