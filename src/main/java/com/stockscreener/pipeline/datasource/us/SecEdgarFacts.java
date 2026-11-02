@@ -849,6 +849,13 @@ final class SecEdgarFacts {
         byColumn.getOrDefault(SecEdgarColumn.COST_OF_SALES, Map.of()).values()
                 .forEach(slots -> slots.keySet().forEach(slot -> costFilings.add(slot.accn())));
         net.keySet().removeIf(slot -> costFilings.contains(slot.accn()));
+        // 매출은 매출총이익보다 작을 수 없다 — 같은 공시 · 같은 창의 매출총이익보다 작은 순수익은 원가 위의 매출이 아니다. 원가를 후보 밖 태그로
+        // 실은 공시가 위 거름을 지나간다(SNEX FY2025 원가 `CostOfGoodsAndServiceExcludingDepreciationDepletionAndAmortization` · 순수익 2,052.8M
+        // 대 매출총이익 4,126.9M · 매출총이익률 201%). 매출총이익이 순수익 아래인 발행사(RKT)는 그대로 순수익이다.
+        Map<String, Map<Slot, Fact>> gross = byColumn.getOrDefault(SecEdgarColumn.GROSS_PROFIT, Map.of());
+        net.entrySet().removeIf(e -> gross.values().stream()
+                .map(slots -> slots.get(e.getKey()))
+                .anyMatch(g -> g != null && g.value().compareTo(e.getValue().value()) > 0));
         if (net.isEmpty()) {
             revenue.remove(SecEdgarColumn.NET_REVENUE_TAG);
             return;

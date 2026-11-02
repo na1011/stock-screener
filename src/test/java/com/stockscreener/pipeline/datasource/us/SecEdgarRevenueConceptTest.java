@@ -78,6 +78,28 @@ class SecEdgarRevenueConceptTest {
     }
 
     @Test
+    @DisplayName("관문 켬: 같은 공시 · 같은 창의 매출총이익보다 작은 순수익은 매출이 아니다 — 원가를 후보 밖 태그로 실어도(SNEX)")
+    void netRevenueBelowItsOwnGrossProfitIsNotTheTopLine() throws Exception {
+        String accn = "0000000001-18-000001";
+        String filed = "2018-02-15";
+        // SNEX FY2025 꼴: 원가는 후보 밖 태그 · 순수익 2,052.8 < 매출총이익 4,126.9 < 총수익 132,378.2.
+        String json = String.join(",",
+                tag("Revenues", List.of(fact("2017-01-01", "2017-12-31", 132_378 * MILLION, accn, "10-K", "FY", 2017, filed))),
+                tag("RevenuesNetOfInterestExpense", List.of(
+                        fact("2017-01-01", "2017-12-31", 2_052 * MILLION, accn, "10-K", "FY", 2017, filed))),
+                tag("GrossProfit", List.of(fact("2017-01-01", "2017-12-31", 4_126 * MILLION, accn, "10-K", "FY", 2017, filed))));
+        assertThat(latest(build(json, true), "FY").revenue()).isEqualByComparingTo("132378000000");
+
+        // 매출총이익이 순수익 아래면(RKT) 순수익이 그대로 매출이다.
+        String below = String.join(",",
+                tag("Revenues", List.of(fact("2017-01-01", "2017-12-31", 6_500 * MILLION, accn, "10-K", "FY", 2017, filed))),
+                tag("RevenuesNetOfInterestExpense", List.of(
+                        fact("2017-01-01", "2017-12-31", 5_838 * MILLION, accn, "10-K", "FY", 2017, filed))),
+                tag("GrossProfit", List.of(fact("2017-01-01", "2017-12-31", 2_599 * MILLION, accn, "10-K", "FY", 2017, filed))));
+        assertThat(latest(build(below, true), "FY").revenue()).isEqualByComparingTo("5838000000");
+    }
+
+    @Test
     @DisplayName("관문 켬: 고른 매출이 같은 공시의 원가 + 총이익보다 작고 다른 후보가 그 줄을 닫으면 그 후보 — 큰 쪽은 안 건드린다")
     void revenueBelowItsOwnGrossMarginLineTakesTheConfirmingSibling() throws Exception {
         String accn = "0000000001-18-000001";
