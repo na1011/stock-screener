@@ -83,6 +83,18 @@ class SecListingFormClientTest {
     }
 
     @Test
+    void injectedScriptPathMayCarryAnyUrlCharacter() {
+        // 1828185/000110465926106382 tm2624972d7_25.htm(2026-11-02 받음 15447 · 색인 15338)의 끝 그대로 — 경로에 「-」가 있다.
+        String tail = "<P>&nbsp;</P>\n\n<script type=\"text/javascript\"  src=\"/yt0Omj4t/iRa/njL/nRf-WhIKSa/muuQGrJDQmrGwV/UQF7/dl4/HSHxhJkA\">"
+                + "</script></BODY>\n</HTML>\n</TEXT>\n</DOCUMENT>\n";
+        String clean = "<P>&nbsp;</P>\n\n</BODY>\n</HTML>\n</TEXT>\n</DOCUMENT>\n";
+        byte[] served = tail.getBytes(StandardCharsets.ISO_8859_1);
+
+        assertThat(served.length - clean.length()).isEqualTo(109);
+        assertThat(SecListingFormClient.sizeMismatch(served, clean.length())).isNull();
+    }
+
+    @Test
     void truncatedDocumentIsAFetchFailureNotARead() throws Exception {
         byte[] served = fixture("leu-25-2025-12-11.htm");
         folder(1065059, "0001628280-25-056420", Map.of("form25_20251211.htm", 16613L));

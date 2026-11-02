@@ -46,10 +46,12 @@ public class SecListingFormClient {
 
     /**
      * HTML 응답 끝에 SEC 가장자리가 끼우는 스크립트 하나 — 폴더 색인의 크기와 받은 길이가 이것만큼 다르다(2026-10-18 고정물 HTML 8/8이
-     * 112바이트 · 빼면 8/8 크기 일치 · XML과 작은 HTML 13/13은 그대로 일치). 이것을 뺀 길이로 끊긴 전송을 가른다.
+     * 112바이트 · 빼면 8/8 크기 일치 · XML과 작은 HTML 13/13은 그대로 일치). 이것을 뺀 길이로 끊긴 전송을 가른다. 경로는 받을 때마다
+     * 무작위이고 {@code -} · {@code _}도 싣는다(1828185/000110465926106382 2026-11-02 — 영숫자만 받던 식이 못 빼 109바이트 어긋남을
+     * 끊긴 전송으로 읽었고 같은 판정을 매번 내 잡 전체가 섰다) — 경로 글자로 가르지 않고 자리(본문 끝)로 가른다.
      */
     private static final Pattern INJECTED = Pattern.compile(
-            "<script type=\"text/javascript\"  src=\"/[A-Za-z0-9/]+\"></script>(?=\\s*</(?:BODY|body)>|\\s*</(?:HTML|html)>)");
+            "<script type=\"text/javascript\"  src=\"/[^\"<>]+\"></script>(?=\\s*</(?:BODY|body)>|\\s*</(?:HTML|html)>)");
     /** 저장 문서의 SGML 머리 — 주 문서가 무슨 양식인지 원장이 적는다. */
     private static final Pattern TYPE_LINE = Pattern.compile("\\A\\s*<DOCUMENT>\\s*<TYPE>([^\\r\\n<]+)");
     /** 표지를 찾아 거슬러 오를 정기 공시의 상한 — 6-K처럼 XBRL 표지가 없는 공시가 끼면 다음 것으로 간다. */
