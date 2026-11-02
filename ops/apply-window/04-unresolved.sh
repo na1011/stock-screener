@@ -2,6 +2,7 @@
 # 사용: 04-unresolved.sh   — 읽기만. 재적재 뒤 하드 단언(계획 v2 결정 4 · docs/reload-gate.md 순서 10의 「미해결 판정」 문장 그대로).
 # 하나라도 서지 않으면 다음 단계로 안 간다. 판정은 사람이 $A/verdicts.tsv에 적는다 — 종류<TAB>열쇠<TAB>판정(원장에 무엇을 물었나 · 진짜/가짜 한계):
 #   CLASS_UNREADABLE  <cik>:<접수번호>   클래스 축 인스턴스를 해석하지 못함 — 원장에 물어 진짜 한계인지
+#   CLASS_FAILED      <cik>:<접수번호>   클래스 축 인스턴스를 받지 못함 — 다시 받아도 같은 답(폴더 404 · 빈 본문 · 같은 길이 어긋남)이면 원장의 답을 적는다
 #   SUPP_FAILED       <cik>:<접수번호>   공시 보충 실패
 #   SUPP_STALE        <cik>:<접수번호>   공시 보충이 옛 판을 썼다
 #   RETRACT_HOLD      <티커>             실행 기록의 회수정지종목=
@@ -10,12 +11,14 @@ source "$(dirname "$0")/env.sh"
 V="$A/verdicts.tsv"; [ -f "$V" ] || : > "$V"
 have() { awk -F'\t' -v k="$1" -v c="$2" '$1==k && $2==c && NF>=3 && $3!="" {f=1} END {exit !f}' "$V"; }
 FAIL=()
-# ① 클래스 축 — 해석 실패가 아닌 FAILED가 지금 판독 판에서 0. 판독 판 번호는 코드에서 읽는다(숫자를 박지 않는다).
+# ① 클래스 축 — 지금 판독 판의 FAILED 전원에 판정(②와 같은 규칙). 받기 실패는 먼저 다시 받고, 다시 받아도 같은 답인 것만 판정으로 닫는다 —
+#   「받기 실패는 다시 받으면 0이 된다」는 전제는 원장이 폴더 404 · 빈 본문으로 답하는 공시에서 안 선다(2026-11-02 CRL · GRNT). 판독 판 번호는 코드에서 읽는다.
 RV=$(sed -n 's/.*static final int READER_VERSION = \([0-9]*\);.*/\1/p' "$REPO/src/main/java/com/stockscreener/pipeline/datasource/us/shareclass/ClassFactReader.java")
 [ -n "$RV" ] || die "ClassFactReader.READER_VERSION을 못 읽었다"
 n=$(q "$PROD" "select count(*) from sec_filing_class_fact where status='FAILED' and failure_kind <> 'UNREADABLE' and reader_version=$RV")
 echo "① 클래스 축 미해결(FAILED · 해석 실패 아님 · 판 $RV) $n"
-[ "$n" = 0 ] || { q "$PROD" "select f.cik, f.accession, f.failure_kind, string_agg(distinct s.ticker, ',') from sec_filing_class_fact f left join sec_share_class_input i on i.cik=f.cik left join stock s on s.id=i.stock_id where f.status='FAILED' and f.failure_kind <> 'UNREADABLE' and f.reader_version=$RV group by 1,2,3 order by 4" | head -20; FAIL+=("① 클래스 축 미해결 $n"); }
+while IFS=$'\t' read -r cik acc; do have CLASS_FAILED "$cik:$acc" || FAIL+=("① 받기 실패 판정 없음 $cik:$acc"); done \
+  < <(q "$PROD" "select cik, accession from sec_filing_class_fact where status='FAILED' and failure_kind <> 'UNREADABLE' and reader_version=$RV order by 1,2")
 while IFS=$'\t' read -r cik acc; do have CLASS_UNREADABLE "$cik:$acc" || FAIL+=("① 해석 실패 판정 없음 $cik:$acc"); done \
   < <(q "$PROD" "select cik, accession from sec_filing_class_fact where status='FAILED' and failure_kind='UNREADABLE' and reader_version=$RV order by 1,2")
 # ② 공시 보충 — FAILED와 옛 판을 쓴 행 전원에 판정. 표 전체를 본다(실행 기록의 미해결보충=N은 그 실행이 본 행뿐이다).
