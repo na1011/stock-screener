@@ -1348,10 +1348,27 @@ class FinancialWriterTest {
                 String.class, stockId)).containsExactly("Q1", "Q3");
     }
 
+    @Test
+    @DisplayName("통화도 같은 공시의 산물이다 — 우리 추출이 같은 판의 통화를 다르게 판정하면 고친다(MLR 2025 Q1 GBP 오태깅 잔재)")
+    void currencyLabelFollowsTheExtraction() {
+        LocalDate start = LocalDate.of(2025, 1, 1);
+        LocalDate end = LocalDate.of(2025, 3, 31);
+        writer.write(stockId, List.of(labelled(2025, "Q1", start, end, "GBP")));
+
+        writer.write(stockId, List.of(labelled(2025, "Q1", start, end, "USD")), WriteMode.FILL_MISSING);
+
+        assertThat(latestRow().get("currency_code")).isEqualTo("USD");
+        assertThat(rowCount()).as("같은 판을 고친다 — 정정본을 쌓지 않는다").isEqualTo(1);
+    }
+
     private static RawFinancialReport labelled(int fiscalYear, String period, LocalDate start, LocalDate end) {
+        return labelled(fiscalYear, period, start, end, "USD");
+    }
+
+    private static RawFinancialReport labelled(int fiscalYear, String period, LocalDate start, LocalDate end, String currency) {
         return new RawFinancialReport(
                 fiscalYear, period, start, end, end.plusMonths(1).plusDays(10),
-                "10-Q", "USD",
+                "10-Q", currency,
                 new BigDecimal("5000"), new BigDecimal("1200"), new BigDecimal("1000"),
                 new BigDecimal("20000"), new BigDecimal("12000"), null, new BigDecimal("8000"),
                 null, null, null,

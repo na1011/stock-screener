@@ -909,8 +909,12 @@ public class FinancialWriter {
         // 이고, 국내는 비12월 결산 종목이 **3개월** 어긋난 채 얼어 있다.
         // 그 결손을 안 열면 국내 회계기간을 고쳐도 **재적재가 0행을 바꾼다.**
         //
-        // MUST NOT: `currency_code`는 여기 안 넣는다. 같은 공시일에 통화가 다른 행은
-        // **실측 0**이고, 그 컬럼은 ADR-0094의 읽기 게이트를 흔든다 — 근거 없이 건드릴 자리가 아니다.
+        // `currency_code`도 같은 공시의 산물이다 — 우리 추출이 통화를 다르게 판정하면 고친다. 「같은 공시일에 통화가 다른 행 0」을 근거로
+        // 안 고쳤는데(2026-09-16) 반례가 났다: MLR 2025 Q1은 원 10-Q가 매출 팩트를 GBP 단위로 오태깅했고 옛 추출이 GBP 라벨을 달았는데,
+        // 지금 어댑터는 USD로 낸다 — 라벨만 남아 ADR-0094 읽기 게이트와 4분기 유도 펜스(ADR-0110)가 그 해를 통화가 갈린 해로 읽었다.
+        String storedCurrency = jdbcTemplate.queryForObject(
+                "SELECT currency_code FROM financial_statement WHERE id = ?", String.class, existing.id());
+        boolean currencyDiffers = report.currencyCode() != null && !report.currencyCode().equals(storedCurrency);
         boolean periodDiffers = !existing.periodStart().equals(report.periodStart())
                 || !existing.periodEnd().equals(report.periodEnd());
         boolean reportCodeDiffers =
@@ -926,7 +930,7 @@ public class FinancialWriter {
         }
 
         if (toFill.isEmpty() && toCorrect.isEmpty() && toClear.isEmpty()
-                && !periodDiffers && !reportCodeDiffers && !openedDiffers) {
+                && !periodDiffers && !reportCodeDiffers && !openedDiffers && !currencyDiffers) {
             tally.untouched++;
             return;
         }
@@ -950,6 +954,10 @@ public class FinancialWriter {
         if (reportCodeDiffers) {
             setParts.add("report_code = ?");
             values.add(report.reportCode());
+        }
+        if (currencyDiffers) {
+            setParts.add("currency_code = ?");
+            values.add(report.currencyCode());
         }
         if (openedDiffers) {
             setParts.add("accepted_at = ?");
@@ -976,6 +984,13 @@ public class FinancialWriter {
                     IndicatorInvalidationPort.InvalidationReason.FINANCIAL_REVISED);
         }
 
+        if (currencyDiffers) {
+            // 통화 게이트(ADR-0094)가 그 판을 읽는지가 바뀐다 — 그 기간부터 다시 낸다.
+            log.warn("통화를 고쳐 쓴다. stockId={} {}/{} 공시일={} {} -> {}", stockId, report.fiscalYear(), report.fiscalPeriod(),
+                    report.publishedAt(), storedCurrency, report.currencyCode());
+            tally.corrected++;
+            invalidationPort.invalidate(stockId, report.periodStart(), IndicatorInvalidationPort.InvalidationReason.FINANCIAL_REVISED);
+        }
         if (openedDiffers) {
             // 보이는 날이 바뀐다 — 그 판 공시일부터의 봉이 다른 판을 본다.
             invalidationPort.invalidate(stockId, report.publishedAt(),
