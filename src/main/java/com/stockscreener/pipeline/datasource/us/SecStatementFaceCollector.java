@@ -7,6 +7,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
@@ -45,7 +46,7 @@ public class SecStatementFaceCollector {
         this.cacheDir = Path.of(cacheDir);
     }
 
-    /** 그 발행사 공시들의 본문 — 캐시에 없으면 받는다. 모르는 공시는 결과에 없다. 받기 실패는 던진다(종목 실패). */
+    /** 그 발행사 공시들의 본문 — 캐시에 없으면 받는다. 모르는 공시는 결과에 없다. 폴더가 없는(404) 공시는 모른다(캐시 안 함) · 일시 실패는 던진다(종목 실패). */
     public SecStatementFaces faces(long cik, Set<String> accessions, String context) throws DataSourceException {
         Map<String, Face> known = new HashMap<>();
         int fetched = 0;
@@ -53,8 +54,18 @@ public class SecStatementFaceCollector {
         for (String accession : accessions) {
             Optional<Face> cached = read(cacheDir, cik, accession);
             if (cached == null) {
-                cached = fetch(cik, accession);
-                fetched++;
+                try {
+                    cached = fetch(cik, accession);
+                    fetched++;
+                } catch (DataSourceException e) {
+                    if (e.kind() != DataSourceException.Kind.NOT_FOUND) {
+                        throw e;
+                    }
+                    // 그 공시 폴더가 소스에 없다(VOD 2018 · 2026-11-02 404) — 본문을 모르는 공시다. 캐시하지 않는다: 다음 실행이 다시 묻는다.
+                    // 일시 실패는 위로 던진다 — 「모름」으로 접으면 실행마다 그 판의 본문 판정이 갈린다.
+                    log.warn("공시 본문 재료의 폴더가 없다 — 이 공시는 본문 모름. {} {} — {}", context, accession, e.getMessage());
+                    cached = Optional.empty();
+                }
             }
             if (cached.isPresent()) {
                 known.put(accession, cached.get());
@@ -122,9 +133,17 @@ public class SecStatementFaceCollector {
         Set<String> face = Set.of();
         String source = "none";
         if (meta != null) {
-            face = SecStatementFace.fromMetaLinks(json.readTree(client.instance(cik, accession, meta)));
-            source = "metalinks";
-        } else {
+            try {
+                face = SecStatementFace.fromMetaLinks(json.readTree(client.instance(cik, accession, meta)));
+                source = "metalinks";
+            } catch (JacksonException e) {
+                // MetaLinks.json이 JSON 문법에 안 맞는다(문자열 안 날 줄바꿈 · 잘못된 escape — LOOP · BBAR 2026-11-02) — 같은 폴더의
+                // 링크베이스가 같은 본문 재료다. 그것도 없으면 아래에서 「모름」이 된다.
+                log.warn("MetaLinks.json을 읽지 못해 링크베이스로 읽는다. CIK {} {} — {}", cik, accession, e.getOriginalMessage());
+                meta = null;
+            }
+        }
+        if (meta == null) {
             SecFilingClient.FolderItem summary = item(items, n -> n.equals("FilingSummary.xml"));
             SecFilingClient.FolderItem pre = item(items, n -> n.endsWith("_pre.xml"));
             SecFilingClient.FolderItem xsd = item(items, n -> n.endsWith(".xsd"));

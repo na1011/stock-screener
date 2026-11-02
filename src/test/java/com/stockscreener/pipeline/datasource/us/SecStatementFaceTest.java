@@ -2,9 +2,21 @@ package com.stockscreener.pipeline.datasource.us;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import com.stockscreener.pipeline.datasource.DataSourceException;
 import tools.jackson.databind.ObjectMapper;
 
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
+import java.util.List;
+import java.util.Set;
+
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 /**
  * 공시 본문 개념(재고 「부문 합계가 영업이익 자리에 앉음」) — 모양은 2026-11-01 탐침에서 옮겼다: SHW는 영업이익이 부문 주석 역할에만 · MSFT는
@@ -47,6 +59,40 @@ class SecStatementFaceTest {
                   <Report><MenuCategory>Statements</MenuCategory><Role>http://x/role/Segments</Role></Report>
                 </MyReports></FilingSummary>""";
         assertThat(SecStatementFace.fromLinkbase(categorised, presentation, null)).as("분류가 있으면 정의보다 분류").containsExactly("us-gaap_Revenues");
+    }
+
+    @Test
+    @DisplayName("MetaLinks.json이 JSON으로 안 읽히면 같은 폴더의 링크베이스로 읽는다 — 종목 전체가 던지지 않는다(LOOP · BBAR 2026-11-02)")
+    void brokenMetaLinksFallsBackToLinkbase(@TempDir Path cache) throws Exception {
+        SecFilingClient client = mock(SecFilingClient.class);
+        var meta = new SecFilingClient.FolderItem("MetaLinks.json", "1");
+        var summary = new SecFilingClient.FolderItem("FilingSummary.xml", "1");
+        var pre = new SecFilingClient.FolderItem("x_pre.xml", "1");
+        when(client.folder(1L, "a")).thenReturn(List.of(meta, summary, pre));
+        when(client.instance(1L, "a", meta)).thenReturn("{\"instance\": \"줄\n바꿈\"}".getBytes(StandardCharsets.UTF_8));
+        when(client.instance(1L, "a", summary)).thenReturn(("<FilingSummary><MyReports><Report><MenuCategory>Statements</MenuCategory>"
+                + "<Role>http://x/role/StatementOfIncome</Role></Report></MyReports></FilingSummary>").getBytes(StandardCharsets.UTF_8));
+        when(client.instance(1L, "a", pre)).thenReturn("""
+                <link:linkbase xmlns:link="http://www.xbrl.org/2003/linkbase" xmlns:xlink="http://www.w3.org/1999/xlink">
+                  <link:presentationLink xlink:type="extended" xlink:role="http://x/role/StatementOfIncome">
+                    <link:loc xlink:type="locator" xlink:href="us-gaap.xsd#us-gaap_NetIncomeLoss" xlink:label="a"/>
+                  </link:presentationLink>
+                </link:linkbase>""".getBytes(StandardCharsets.UTF_8));
+        var faces = new SecStatementFaceCollector(client, cache.toString()).faces(1L, Set.of("a"), "t");
+        assertThat(faces.carries("a", Set.of("us-gaap_NetIncomeLoss"))).isTrue();
+    }
+
+    @Test
+    @DisplayName("공시 폴더가 없으면(404) 그 공시는 본문 모름 · 캐시하지 않는다 — 일시 실패는 종목 실패로 던진다(VOD 2026-11-02)")
+    void missingFolderIsUnknownButTransientThrows(@TempDir Path cache) throws Exception {
+        SecFilingClient client = mock(SecFilingClient.class);
+        when(client.folder(1L, "gone")).thenThrow(new DataSourceException(DataSourceException.Kind.NOT_FOUND, "sec-edgar", "HTTP 404"));
+        when(client.folder(1L, "busy")).thenThrow(new DataSourceException(DataSourceException.Kind.TRANSIENT, "sec-edgar", "HTTP 503"));
+        var collector = new SecStatementFaceCollector(client, cache.toString());
+        assertThat(collector.faces(1L, Set.of("gone"), "t").carries("gone", Set.of("us-gaap_NetIncomeLoss"))).isNull();
+        collector.faces(1L, Set.of("gone"), "t");
+        verify(client, times(2)).folder(1L, "gone");
+        assertThatThrownBy(() -> collector.faces(1L, Set.of("busy"), "t")).isInstanceOf(DataSourceException.class);
     }
 
     @Test
