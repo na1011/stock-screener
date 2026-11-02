@@ -217,10 +217,11 @@ class IndicatorRunnerTest {
         runner.run(stockId, AS_OF, Optional.empty(), Map.of());
 
         List<LocalDate> per = storedDatesOf(PerCalculator.CODE);
-        assertThat(per).as("잠정 전 · 분기보고서 뒤에는 값이 있다")
-                .contains(LocalDate.of(2026, 4, 6), LocalDate.of(2026, 5, 15), LocalDate.of(2026, 7, 6));
-        assertThat(per).as("잠정 공개 ~ 분기보고서 전 · 둘째 잠정 뒤는 값이 없다 — 가격은 새 실적, 재무는 옛 분기다")
-                .noneMatch(d -> !d.isBefore(LocalDate.of(2026, 4, 7)) && d.isBefore(LocalDate.of(2026, 5, 15)))
+        // 분기보고서(05-15 · 게시 시각 모름)는 관문 켬에서 다음 날(05-16 — 이 픽스처는 봉이 매일이다)부터 보인다(ReportingBasis.visibleFrom).
+        assertThat(per).as("잠정 전 · 분기보고서가 보인 뒤에는 값이 있다")
+                .contains(LocalDate.of(2026, 4, 6), LocalDate.of(2026, 5, 16), LocalDate.of(2026, 7, 6));
+        assertThat(per).as("잠정 공개 ~ 분기보고서가 보이기 전 · 둘째 잠정 뒤는 값이 없다 — 가격은 새 실적, 재무는 옛 분기다")
+                .noneMatch(d -> !d.isBefore(LocalDate.of(2026, 4, 7)) && d.isBefore(LocalDate.of(2026, 5, 16)))
                 .noneMatch(d -> !d.isBefore(LocalDate.of(2026, 7, 7)));
         assertThat(storedDatesOf(Sma20Calculator.CODE)).as("시세 지표는 그대로다").contains(LocalDate.of(2026, 7, 7));
         assertThat(storedDatesOf(MarketCapCalculator.CODE)).as("주식수만 읽는 지표는 막지 않는다 — 실적 발표는 주식수를 안 바꾼다")
@@ -252,6 +253,13 @@ class IndicatorRunnerTest {
                         + " 1000000000, 2000000000, 1000000)",
                 stockId, fiscalYear, period, periodEnd.minusMonths(3), periodEnd, publishedAt,
                 netIncome, netIncome);
+        // 국내 관문 켬(ADR-0192): 주당 지표 분자는 보통주 몫 행만 읽는다 — 운영은 국내 재무 행 전부에 그 행이 있다(2026-11-03 빠진 행 0).
+        jdbcTemplate.update("""
+                INSERT INTO financial_common_income (financial_statement_id, report_code, common, basis, branch, engine_version,
+                                                     income_snapshot, published_snapshot)
+                SELECT id, 'test', net_income_controlling, 'T', 'kr-ni', 1, net_income_controlling, published_at
+                  FROM financial_statement WHERE stock_id = ? AND fiscal_year = ? AND fiscal_period = ? AND published_at = ?
+                """, stockId, fiscalYear, period, publishedAt);
     }
 
     /** 같은 기(期)의 판 하나. {@code revisionNo}가 클수록 늦게 공시된 정정본이다. */
