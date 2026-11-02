@@ -109,7 +109,14 @@ public class AdjustmentRecalculator {
     public RebuildResult rebuild(long stockId) {
         // 미국 소스 공시는 적용 직전 가격으로 한 번 반박받는다(ADR-0181) — 소스 레코드가 틀린 실측이 넷 있다.
         List<CorporateActionLedger.Entry> events = ledger.screenBeforeApplying(stockId, ledger.findApplicable(stockId));
-        List<Segment> segments = segmentsOf(events);
+        // 구간 계수는 첫 저장 봉 뒤의 사건으로만 짓는다 — 효력일이 첫 봉 이하인 사건의 구간(trade_date < 효력일)에는 행이 없고, 뒤 구간의 계수는
+        // 「그 사건 이후 비율의 곱」이라 앞 사건을 빼도 같다. 빼지 않으면 봉 없는 종목의 연쇄 병합 누적 곱이 numeric(18,10) 상한을 넘어
+        // 던진다(2026-11-03 관문: EJH · SXTC · SMX · VCIG 27건 · 봉 0행 · 매 미국 사슬 PARTIAL).
+        LocalDate firstBar = jdbcTemplate.queryForObject(
+                "SELECT min(trade_date) FROM price_daily WHERE stock_id = ?", LocalDate.class, stockId);
+        List<Segment> segments = segmentsOf(events.stream()
+                .filter(e -> firstBar != null && e.effectiveDate().isAfter(firstBar))
+                .toList());
 
         RebuildResult result = assignFactors(stockId, segments, events.size());
 

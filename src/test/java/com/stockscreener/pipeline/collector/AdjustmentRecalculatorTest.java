@@ -239,6 +239,24 @@ class AdjustmentRecalculatorTest {
     }
 
     @Test
+    @DisplayName("첫 봉 앞 사건은 구간 계수를 안 짓는다 — 연쇄 병합 누적 곱이 계수 상한을 넘어도 던지지 않고 뒤 사건의 계수는 같다")
+    void eventsBeforeTheFirstBarDoNotBuildSegments() {
+        // SMX 꼴: 첫 봉 앞 병합 셋의 누적 곱 10⁻⁹ — 그 구간까지 지으면 계수 10⁹가 numeric(18,10) 상한 10⁸을 넘는다.
+        long a = approveDisclosed("2025-01-02", CorporateAction.Type.REVERSE_SPLIT, "0.001");
+        long b = approveDisclosed("2025-03-03", CorporateAction.Type.REVERSE_SPLIT, "0.001");
+        long c = approveDisclosed("2025-06-02", CorporateAction.Type.REVERSE_SPLIT, "0.001");
+        writer.write(stockId, List.of(bar("2026-01-02", "10"), bar("2026-03-02", "1000")));
+        long d = approveDisclosed("2026-02-02", CorporateAction.Type.REVERSE_SPLIT, "0.01");
+
+        recalculator.rebuild(stockId);
+
+        assertThat(adjFactor("2026-01-02")).as("첫 봉 뒤 사건(×0.01)만 짓는다").isEqualByComparingTo("100");
+        assertThat(adjFactor("2026-03-02")).isEqualByComparingTo("1");
+        assertThat(jdbcTemplate.queryForList("SELECT status FROM corporate_action WHERE id IN (?, ?, ?, ?)", String.class, a, b, c, d))
+                .as("첫 봉 앞 사건도 반영이 끝난 것이다").containsOnly("APPLIED");
+    }
+
+    @Test
     @DisplayName("적용 대상이 원장에 들어오면 APPLIED로 표시된다 — 조정할 봉이 없어도 마찬가지다")
     void marksAppliedEvenWhenNothingToAdjust() {
         writer.write(stockId, List.of(bar("2026-03-02", "1000")));
