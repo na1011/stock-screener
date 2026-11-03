@@ -306,7 +306,9 @@ public class BootstrapRunner implements ApplicationRunner {
             // 못 가고 **닫으려던 그 exit 0으로 되돌아간다.** exit을 앞에 놓는 것으로는 안 된다 —
             // System.exit은 돌아오지 않으므로 로그가 아예 안 남는다. finally라야 둘 다 된다.
             try {
-                log.error("부트스트랩 러너가 실패했다. 아무것도 적재되거나 판정되지 않았다.", e);
+                // 「아무것도 안 됐다」고 적지 않는다 — 잡은 종목마다 커밋하므로(ADR-0007) 실패 전에 끝난 쓰기는 남는다
+                // (2026-11-04 initial-load가 5종목 봉을 쓰고 SUCCESS로 끝난 뒤 꼬리 화해에서 실패했다).
+                log.error("부트스트랩 러너가 실패했다. 실패 전에 커밋된 쓰기는 남는다 — 범위는 batch_execution과 이 로그로 본다.", e);
             } finally {
                 System.exit(1);
             }
