@@ -658,6 +658,10 @@ final class SecEdgarFacts {
                     }
                 }
             }
+            // 한 분기 · 한 원 판(before) 구간의 사건은 쌓인다 — 날마다 한 판이고, 앞 사건이 모르게 한 열은 되살아날 때까지 뒤 사건의 판에서도 모른다.
+            // 사건마다 따로 내면 같은 날 되살림 판이 둘 나 저장이 한 실행에 두 값으로 번갈아 덮고(OABI 2022 · UPWK 2019 4분기 — 매 소비마다 정정 ·
+            // 무효화), 뒤 사건의 모른다 판이 앞 사건의 열을 옛 기저로 되돌렸다. 국내 DartFlowBasis가 칸마다 이른 대체일 하나를 두는 것과 같은 원칙이다.
+            Map<Integer, Map<RawFinancialReport, java.util.TreeMap<LocalDate, Map<String, BigDecimal>>>> segments = new HashMap<>();
             for (Map.Entry<LocalDate, Map<Integer, Set<String>>> event : events.entrySet()) {
                 LocalDate day = event.getKey();
                 for (int j = 2; j <= lastQuarter; j++) {
@@ -688,36 +692,58 @@ final class SecEdgarFacts {
                     // 그 분기의 다음 원 판(재작성 판)까지만 — 그 판이 그 분기의 새 값이다.
                     LocalDate limit = later.stream().map(RawFinancialReport::publishedAt).filter(d -> d.isAfter(day)).findFirst().orElse(null);
                     // 모른다가 풀리는 날 — 뒤 분기는 그 기간이 다시 실린 날(값이 같아도 — 같은 값이면 판 조립이 접어 새 판이 안 난다 · JPM 2019),
-                    // 4분기는 그 해 FY가 다시 실린 날의 FY − 분기 셋(하나라도 모르면 계속 모른다).
-                    java.util.TreeMap<LocalDate, Map<String, BigDecimal>> restore = new java.util.TreeMap<>();
+                    // 4분기는 그 해 FY가 다시 실린 날의 FY − 분기 셋(하나라도 모르면 계속 모른다). 신호 그날도 든다 — 그날 다시 실린 기간은 그 공시의
+                    // 기저로 확인됐다(그날 그 분기 판이 있으면 위에서 건너뛰는 것과 같은 규칙 · 같은 날 모른다와 되살림이 갈리지 않는다).
+                    java.util.TreeMap<LocalDate, Map<String, BigDecimal>> changes = segments.computeIfAbsent(quarter, q -> new java.util.LinkedHashMap<>())
+                            .computeIfAbsent(before, b -> new java.util.TreeMap<>());
+                    columns.forEach(column -> changes.computeIfAbsent(day, d -> new HashMap<>()).put(column, null));
                     RawFinancialReport fy = year.getOrDefault("FY", List.of()).stream().findFirst().orElse(null);
                     for (String column : columns) {
                         LocalDate start = quarter == 4 ? (fy == null ? null : fy.periodStart()) : before.periodStart();
                         LocalDate end = quarter == 4 ? (fy == null ? null : fy.periodEnd()) : before.periodEnd();
                         java.util.TreeSet<LocalDate> dates = start == null ? null : carried.get(column + "|" + start + "|" + end);
-                        LocalDate again = dates == null ? null : dates.higher(day);
+                        LocalDate again = dates == null ? null : dates.ceiling(day);
                         if (again == null || (limit != null && !again.isBefore(limit))) {
                             continue;
                         }
                         BigDecimal value = quarter == 4 ? fourthOn(year, column, again) : before.flow(column);
                         if (value != null) {
-                            restore.computeIfAbsent(again, d -> new HashMap<>()).put(column, value);
+                            changes.computeIfAbsent(again, d -> new HashMap<>()).put(column, value);
                         }
-                    }
-                    out.add(before.withFlowsUnknown(columns, day, codes.get(day)));
-                    Map<String, BigDecimal> known = new HashMap<>();
-                    for (Map.Entry<LocalDate, Map<String, BigDecimal>> r : restore.entrySet()) {
-                        known.putAll(r.getValue());
-                        Map<String, BigDecimal> values = new HashMap<>();
-                        for (String column : columns) {
-                            values.put(column, known.get(column));
-                        }
-                        out.add(before.withFlows(values, r.getKey(), before.reportCode()));
                     }
                 }
             }
+            segments.values().forEach(byBefore -> byBefore.forEach((before, changes) -> {
+                Map<String, BigDecimal> state = new HashMap<>();
+                RawFinancialReport shown = before;
+                for (Map.Entry<LocalDate, Map<String, BigDecimal>> change : changes.entrySet()) {
+                    state.putAll(change.getValue());
+                    LocalDate on = change.getKey();
+                    RawFinancialReport next = before.withFlows(state, on, codes.getOrDefault(on, before.reportCode()));
+                    if (sameFlows(shown, next)) {
+                        continue;   // 그날 보이는 값이 앞 판과 같다 — 값이 같은 판을 다시 내지 않는다
+                    }
+                    out.add(next);
+                    shown = next;
+                }
+            }));
         }
         return out;
+    }
+
+    /** 손익 유량 열의 값과 부재 판정이 같은가 — {@link #laterQuartersUnknown}이 낸 판끼리만 비교한다(나머지 열은 같은 원 판에서 온다). */
+    private static boolean sameFlows(RawFinancialReport a, RawFinancialReport b) {
+        for (String column : RawFinancialReport.STALE_FLOWS) {
+            BigDecimal x = a.flow(column);
+            BigDecimal y = b.flow(column);
+            if (x == null ? y != null : y == null || x.compareTo(y) != 0) {
+                return false;
+            }
+            if (a.assertedAbsent().contains(column) != b.assertedAbsent().contains(column)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /** 그날 보이는 FY − 그날 보이는 분기 셋(그 열) — 하나라도 모르면 {@code null}. */
