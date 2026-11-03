@@ -31,13 +31,15 @@ public class ShareClassStore {
     }
 
     /**
-     * 유도 단위 — 상장 줄 하나와 그 companyfacts 재료.
+     * 유도 단위 — 상장 줄 하나. companyfacts 재료는 줄마다 {@link #companyFacts}로 읽는다 — 시장 전체를 한 결과 집합으로 받으면
+     * 텍스트로 약 900MB(2026-11-04 · 6,969줄)라 그 전송이 끊기면 시장 전체 판정이 서고(macOS 소켓 버퍼 ENOBUFS · 같은 날 한 번),
+     * 그 크기가 그대로 JVM 힙에 오른다.
      *
      * @param ticker 행의 표지(로그 · 실패 목록) — 닫힌 행은 비운 표지({@code T~마지막 날} · ADR-0180)다
      * @param symbol 표지 기호와 맞댈 기호 — 닫힌 행은 비운 표지에서 되찾은 마지막 기호. 비운 표지를 그대로 맞대면 어떤 표지 기호와도
      *               안 맞아 다중 클래스의 상장 클래스가 원리적으로 안 이어진다(클래스 스윕 2026-10-21 WKEY~2026-10-04)
      */
-    public record Input(long stockId, String ticker, String symbol, long cik, String companyFacts) {
+    public record Input(long stockId, String ticker, String symbol, long cik) {
     }
 
     private final JdbcTemplate jdbcTemplate;
@@ -102,13 +104,19 @@ public class ShareClassStore {
     public List<Input> inputs(String marketCode) {
         return jdbcTemplate.query("""
                 SELECT i.stock_id, s.ticker, """ + StockReader.DISPLAY_TICKER + """
-                 AS symbol, i.cik, i.company_facts::text AS company_facts
+                 AS symbol, i.cik
                 FROM sec_share_class_input i JOIN stock s ON s.id = i.stock_id
                 WHERE s.market_code = ? AND s.is_active
                 -- 시대 무관: 행마다의 판정 재료 — 닫힌 행도 과거 기준일 순위가 읽는 판정이 있어야 한다
                 ORDER BY s.ticker
-                """, (rs, n) -> new Input(rs.getLong("stock_id"), rs.getString("ticker"), rs.getString("symbol"), rs.getLong("cik"),
-                rs.getString("company_facts")), marketCode);
+                """, (rs, n) -> new Input(rs.getLong("stock_id"), rs.getString("ticker"), rs.getString("symbol"), rs.getLong("cik")),
+                marketCode);
+    }
+
+    /** 줄 하나의 companyfacts 재료(JSON 텍스트). */
+    public String companyFacts(long stockId) {
+        return jdbcTemplate.queryForObject("SELECT company_facts::text FROM sec_share_class_input WHERE stock_id = ?",
+                String.class, stockId);
     }
 
     /** 그 CIK의 지금 판으로 읽은 인스턴스 팩트(OK). 판이 다른 행은 없는 것으로 친다 — 다음 받기가 다시 받는다. */

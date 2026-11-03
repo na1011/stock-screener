@@ -108,19 +108,24 @@ public class ShareClassFileStore extends ShareClassStore {
                     symbols.put(rs.getLong("id"), rs.getString("symbol"));
                 }, marketCode);
         List<Input> out = new ArrayList<>();
-        try {
-            for (Map.Entry<Long, Path> e : inputs().entrySet()) {
-                String ticker = active.get(e.getKey());
-                if (ticker != null) {
-                    String[] key = e.getValue().getFileName().toString().replace(".json", "").split("_");
-                    out.add(new Input(e.getKey(), ticker, symbols.get(e.getKey()), Long.parseLong(key[1]), Files.readString(e.getValue())));
-                }
+        for (Map.Entry<Long, Path> e : inputs().entrySet()) {
+            String ticker = active.get(e.getKey());
+            if (ticker != null) {
+                String[] key = e.getValue().getFileName().toString().replace(".json", "").split("_");
+                out.add(new Input(e.getKey(), ticker, symbols.get(e.getKey()), Long.parseLong(key[1])));
             }
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
         }
         out.sort(java.util.Comparator.comparing(Input::ticker));
         return out;
+    }
+
+    @Override
+    public String companyFacts(long stockId) {
+        try {
+            return Files.readString(inputs().get(stockId));
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
     }
 
     @Override
