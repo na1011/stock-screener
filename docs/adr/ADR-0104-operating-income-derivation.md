@@ -49,6 +49,9 @@ applies_to:
 # 미국이 휴장이고 국내가 개장인 날(예: 2026-09-07 노동절)에 국내 날짜가 뽑혀
 # 미국 종목이 한 행도 없고 '잴 것이 없었다'로 거짓 발화한다. ADR-0128 의 펜스가
 # 같은 자리에서 같은 수정을 했다(하한을 시장마다 잡는다).
+# MUST: 최신 분기의 투하자본(자산 - 유동부채)이 0보다 큰 종목만 센다. 계산기가 0 이하에서
+# 값을 안 내는 것은 규칙이다(RoicPretaxCalculator) — 빼지 않으면 DPZ(2026 Q3 유동부채가
+# 자산을 넘었다)처럼 유도와 무관한 미표시를 결함으로 신고한다.
 psql -d stock_screener -At -c "WITH d AS (SELECT max(trade_date) t FROM indicator_trade_date WHERE market_code = 'US'),
 mem AS (SELECT DISTINCT um.stock_id AS sid FROM universe_membership um
         WHERE um.universe_code = 'US_TOP1000' AND um.effective_to IS NULL),
@@ -56,7 +59,8 @@ have AS (SELECT iv.indicator_code AS code, iv.stock_id AS sid FROM indicator_val
          CROSS JOIN d JOIN mem m ON m.sid = iv.stock_id WHERE iv.trade_date = d.t),
 gap AS (SELECT sid FROM have WHERE code = 'ROIC_MIN_3Y'
         EXCEPT SELECT sid FROM have WHERE code = 'ROIC_PRETAX'),
-q AS (SELECT g.sid, count(*) FILTER (WHERE t.rn <= 4 AND t.der IS NOT NULL) der4
+q AS (SELECT g.sid, count(*) FILTER (WHERE t.rn <= 4 AND t.der IS NOT NULL) der4,
+             bool_or(t.rn = 1 AND t.ic > 0) ic_ok
       FROM gap g JOIN (
         SELECT f.stock_id AS sid2,
                COALESCE(f.operating_income,
@@ -65,6 +69,7 @@ q AS (SELECT g.sid, count(*) FILTER (WHERE t.rn <= 4 AND t.der IS NOT NULL) der4
                  f.revenue - f.benefits_losses_and_expenses,
                  f.gross_profit - f.operating_expenses,
                  f.revenue - f.costs_and_expenses) AS der,
+               f.total_assets - f.current_liabilities AS ic,
                row_number() OVER (PARTITION BY f.stock_id ORDER BY f.period_end DESC) AS rn
         FROM financial_statement f WHERE f.is_latest AND f.fiscal_period <> 'FY') t
         ON t.sid2 = g.sid GROUP BY 1)
@@ -74,7 +79,7 @@ SELECT CASE
   WHEN count(*) = 0 THEN 'OK 유도로 분기 넷을 채울 수 있는데 ROIC_PRETAX가 없는 종목 0'
   ELSE '영업이익 유도를 안 타는 계산기가 있다: ' || count(*) || '종목이 3년 최저 ROIC는 내면서 현재 ROIC를 못 낸다'
   END
-FROM q WHERE der4 = 4"
+FROM q WHERE der4 = 4 AND ic_ok"
 ```
 
 **모집단을 「분기 넷을 유도로 채울 수 있는 종목」으로 좁힌 것이 이 펜스의 전부다.**

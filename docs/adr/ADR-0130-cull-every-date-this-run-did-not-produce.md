@@ -96,12 +96,16 @@ ADR-0128은 계산을 바꾸고 값을 다시 썼지만 **새 규칙이 못 내�
 production 변경이 안 걸리면 그 시험이 그대로 붉는다.
 
 ```premise 저장 지표에 어느 시점 규칙으로도 재현되지 않는 행이 남아 있는가
-psql -d stock_screener -At -c "WITH act AS (SELECT DISTINCT m.stock_id FROM universe_membership m JOIN universe u ON u.code = m.universe_code WHERE m.effective_to IS NULL AND u.is_active AND u.code = 'US_TOP1000'), d AS (SELECT trade_date, row_number() OVER (ORDER BY trade_date) rn FROM indicator_trade_date WHERE market_code = 'US'), edge AS (SELECT max(trade_date) FILTER (WHERE rn = 74) prev, max(trade_date) FILTER (WHERE rn = 75) cur FROM d), a AS (SELECT indicator_code, count(*) n FROM indicator_value, edge WHERE trade_date = edge.prev AND stock_id IN (SELECT stock_id FROM act) GROUP BY 1), b AS (SELECT indicator_code, count(*) n FROM indicator_value, edge WHERE trade_date = edge.cur AND stock_id IN (SELECT stock_id FROM act) GROUP BY 1) SELECT CASE WHEN (SELECT count(*) FROM b) = 0 THEN '잴 것이 없었다 — 그 거래일에 US 지표가 한 행도 없다' WHEN (SELECT count(*) FROM edge WHERE prev IS NULL OR cur IS NULL) > 0 THEN '잴 것이 없었다 — US 지표 달력이 75거래일에 못 미친다' WHEN (SELECT sum(greatest(b.n - coalesce(a.n, 0), 0)) FROM b LEFT JOIN a USING (indicator_code)) <= 200 THEN 'OK 옛 보존 창 경계의 계단이 ' || (SELECT sum(greatest(b.n - coalesce(a.n, 0), 0))::text FROM b LEFT JOIN a USING (indicator_code)) || '칸이다(' || (SELECT count(*) FROM b) || '코드 검사 · 기준선 43)' ELSE (SELECT sum(greatest(b.n - coalesce(a.n, 0), 0))::text FROM b LEFT JOIN a USING (indicator_code)) || '칸이 경계 뒤쪽에만 있다 — 옛 판의 잔재가 안 걷혔다. 보존 창을 한 판 다시 돌린다' END"
+psql -d stock_screener -At -c "WITH act AS (SELECT DISTINCT m.stock_id FROM universe_membership m JOIN universe u ON u.code = m.universe_code WHERE m.effective_to IS NULL AND u.is_active AND u.code = 'US_TOP1000'), edge AS (SELECT date '2025-12-16' prev, date '2025-12-17' cur), a AS (SELECT indicator_code, count(*) n FROM indicator_value, edge WHERE trade_date = edge.prev AND stock_id IN (SELECT stock_id FROM act) GROUP BY 1), b AS (SELECT indicator_code, count(*) n FROM indicator_value, edge WHERE trade_date = edge.cur AND stock_id IN (SELECT stock_id FROM act) GROUP BY 1) SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM indicator_trade_date, edge WHERE market_code = 'US' AND trade_date = edge.prev) THEN '옛 경계(2025-12-16)가 보존 창 밖으로 나갔다 — 이 전제는 할 일을 다 했다. 걷는다' WHEN (SELECT count(*) FROM b) = 0 THEN '잴 것이 없었다 — 그 거래일에 US 지표가 한 행도 없다' WHEN (SELECT sum(greatest(b.n - coalesce(a.n, 0), 0)) FROM b LEFT JOIN a USING (indicator_code)) <= 200 THEN 'OK 옛 보존 창 경계의 계단이 ' || (SELECT sum(greatest(b.n - coalesce(a.n, 0), 0))::text FROM b LEFT JOIN a USING (indicator_code)) || '칸이다(' || (SELECT count(*) FROM b) || '코드 검사 · 기준선 43)' ELSE (SELECT sum(greatest(b.n - coalesce(a.n, 0), 0))::text FROM b LEFT JOIN a USING (indicator_code)) || '칸이 경계 뒤쪽에만 있다 — 옛 판의 잔재가 안 걷혔다. 보존 창을 한 판 다시 돌린다' END"
 ```
 
 **이 전제가 재는 것은 「값이 맞는가」가 아니라 「경계에 계단이 있는가」다.** 계단은 옛 창의
-경계에서만 생기므로, 창을 다시 넓히면 그 경계도 함께 움직인다 — `rn = 74/75`가 그 뜻이고
-**보존 창 길이를 바꾸면 이 전제의 수를 함께 고친다.**
+경계에서만 생긴다. **MUST: 경계를 날짜로 잡는다 — 달력 순위로 잡지 않는다.** 창의 시작이 매일
+굴러가므로 순위는 날마다 다른 날짜를 가리킨다. 순위(`rn = 74/75`)로 잡았던 판은 두 달 뒤
+옛 경계가 rn 35/36으로 내려간 동안 엉뚱한 쌍을 재다가, 그 쌍이 실적 발표 차단 구간
+(ADR-0195 — 발표일부터 정기 공시가 보이는 날까지 재무 지표를 안 낸다)에 걸리자
+1,215칸을 잔재로 신고했다(2026-11-03 · 차단 중인 종목을 빼면 30칸).
+옛 경계가 보존 창 밖으로 나가면 잔재도 함께 걷히므로 이 전제는 그때 걷는다.
 
 **문턱을 0이 아니라 200으로 둔 근거는 잔여가 정상 동작이라는 것이다.** 걷기 전 **2,515칸**이던
 것이 걷은 뒤 **43칸**인데, 그 43은 **그날 모집단이 1종목 늘어서** 생긴다 — `ADJ_CLOSE`와
