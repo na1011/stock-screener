@@ -96,6 +96,13 @@ if [ "$(psql -d "${DB_NAME:-stock_screener}" -At -c "SELECT to_regclass('public.
   src="financial_statement f LEFT JOIN us_share_class_effective e ON e.financial_statement_id = f.id"
   sh="CASE WHEN e.financial_statement_id IS NULL THEN f.shares_outstanding ELSE e.shares END"
 fi
+# 원장 오류로 판정한 종목은 뺀다 — docs/rank-guard-evidence.tsv(티커 · 원장 근거)를 ADR-0125 펜스와 같이 읽는다(사본 없음).
+evidence="$HERE/../../docs/rank-guard-evidence.tsv"
+exclude_sql=""
+if [ -f "$evidence" ]; then
+  excluded=$(awk -F'\t' '$1 !~ /^#/ && NF >= 2 && $2 != "" {printf "%s\047%s\047", (n++ ? "," : ""), $1}' "$evidence")
+  [ -n "$excluded" ] && exclude_sql="AND s.ticker NOT IN ($excluded)"
+fi
 outliers=$(psql -d "${DB_NAME:-stock_screener}" -At -F'|' -c "
 WITH cur AS (
   SELECT DISTINCT ON (f.stock_id) f.stock_id, $sh AS sh,
@@ -105,7 +112,7 @@ WITH cur AS (
 SELECT string_agg(t, ', ' ORDER BY t) FROM (
   SELECT s.ticker || ' ' || round(c.imp / c.sh, 0) || '배' AS t, c.imp / c.sh AS x
   FROM cur c JOIN stock s ON s.id = c.stock_id
-  WHERE c.imp IS NOT NULL AND c.imp / c.sh >= 100 AND c.imp / c.sh < 10000
+  WHERE c.imp IS NOT NULL AND c.imp / c.sh >= 100 AND c.imp / c.sh < 10000 $exclude_sql
   ORDER BY 2 DESC LIMIT 10) z" 2>/dev/null) || {
   echo "[guard-rebalance] 순위 축 질의가 실패했다. 판정하지 못했다." >&2
   exit 1
