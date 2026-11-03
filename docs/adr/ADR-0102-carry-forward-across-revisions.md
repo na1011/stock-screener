@@ -17,6 +17,9 @@ applies_to:
 **겹치는 범위는 라벨 하나 안이다** — 같은 `(회계연도, 기)`의 판들 사이에서만이고, 기간을
 넘지 않는다.
 
+**예외는 영업이익 하나다**(ADR-0202 · `SecEdgarFacts.HEADLINE`) — 뒤 판이 그 열을 본문 밖 줄로만
+실었으면 「안 실었다」이고 앞 판 값을 잇지 않는다.
+
 ## 규칙
 
 - **MUST: 라벨 하나 안에서만 겹친다.** 기간을 넘어 겹치면 **낡은 해의 값이 다음 해로 번지고**,
@@ -42,24 +45,22 @@ applies_to:
 **대조군으로 확인했다**: `carryForward`가 `values`를 그대로 돌려주게 만들면 **정확히 그 시험
 하나만 붉고** 나머지 열여덟은 초록이다.
 
-```premise 노출 유니버스에서 뒤 판이 앞 판의 영업이익을 지운 행
-psql -d stock_screener -At -c "SELECT CASE
-  WHEN (SELECT count(*) FROM financial_statement f
-        JOIN universe_membership m ON m.stock_id = f.stock_id
-        WHERE m.universe_code = 'US_TOP1000' AND m.effective_to IS NULL
-          AND f.fiscal_period = 'FY') = 0
-    THEN '잴 것이 없었다 — US_TOP1000에 FY 재무가 한 행도 없다'
-  WHEN count(*) = 0 THEN 'OK 0행'
-  ELSE '뒤 판이 앞 판의 영업이익을 지운 FY 행이 ' || count(*) || '개다 — 겹치기가 되돌아갔거나, 겹치기 이후 적재되지 않은 종목이 편입됐다'
-  END
-FROM financial_statement l
-JOIN universe_membership m ON m.stock_id = l.stock_id
-  AND m.universe_code = 'US_TOP1000' AND m.effective_to IS NULL
-WHERE l.is_latest AND l.fiscal_period = 'FY' AND l.operating_income IS NULL
-  AND EXISTS (SELECT 1 FROM financial_statement o
-              WHERE o.stock_id = l.stock_id AND o.fiscal_year = l.fiscal_year
-                AND o.fiscal_period = l.fiscal_period AND NOT o.is_latest
-                AND o.operating_income IS NOT NULL)"
+```premise 노출 유니버스에서 뒤 판이 앞 판의 값을 지운 행
+# MUST: 이어받기만 서는 칸으로 잰다(순이익 · 매출 · 영업현금흐름). 영업이익은 ADR-0202가 예외를 둔다 — 그 판이
+# 그 열을 본문 밖 줄로만 실었으면 앞 판 값을 잇지 않는다(SecEdgarFacts.HEADLINE). 영업이익으로 재면 그 의도한 거두기가
+# 결함으로 운다(2026-11-04 · ELV 2021·2022 · FTI 2016 · PAAS 2017 — ELV 10-K 세 건이 부문 주석에만 실었다).
+psql -d stock_screener -At -c "WITH l AS (SELECT l.* FROM financial_statement l
+  JOIN universe_membership m ON m.stock_id = l.stock_id AND m.universe_code = 'US_TOP1000' AND m.effective_to IS NULL
+  WHERE l.is_latest AND l.fiscal_period = 'FY'),
+lost AS (SELECT l.id FROM l WHERE EXISTS (SELECT 1 FROM financial_statement o
+  WHERE o.stock_id = l.stock_id AND o.fiscal_year = l.fiscal_year AND o.fiscal_period = l.fiscal_period AND NOT o.is_latest
+    AND ((l.net_income IS NULL AND o.net_income IS NOT NULL) OR (l.revenue IS NULL AND o.revenue IS NOT NULL)
+      OR (l.operating_cash_flow IS NULL AND o.operating_cash_flow IS NOT NULL))))
+SELECT CASE
+  WHEN (SELECT count(*) FROM l) = 0 THEN '잴 것이 없었다 — US_TOP1000에 FY 재무가 한 행도 없다'
+  WHEN (SELECT count(*) FROM lost) = 0 THEN 'OK 0행(최신 FY ' || (SELECT count(*) FROM l) || '행 중)'
+  ELSE '뒤 판이 앞 판의 순이익 · 매출 · 영업현금흐름을 지운 FY 행이 ' || (SELECT count(*) FROM lost) || '개다 — 겹치기가 되돌아갔거나, 겹치기 이후 적재되지 않은 종목이 편입됐다'
+  END"
 ```
 
 **MUST: 모집단을 `US_TOP1000`으로 좁힌 근거를 함께 읽는다.** 이 결정은 **코드**에 걸리지만
