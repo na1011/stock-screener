@@ -288,9 +288,10 @@ class CommonEquityTest {
     @Test
     @DisplayName("행: 신호 없는 발행사의 companyfacts 공시는 none, companyfacts가 안 덮는 보충 공시 · 신호 발행사는 못 정함")
     void rowsWithoutAValueAreNoneOnlyWhereCompanyFactsCovers() {
-        CommonIncomeRows.Row covered = new CommonIncomeRows.Row(2025, "FY", 0, FY.minusYears(1).plusDays(1), FY, FY.plusMonths(2), "cf", null);
-        CommonIncomeRows.Row supplement = new CommonIncomeRows.Row(2026, "Q2", 0, Q2.minusMonths(3).plusDays(1), Q2, Q2.plusMonths(1), "supp",
+        CommonIncomeRows.Row covered = new CommonIncomeRows.Row(2025, "FY", 0, FY.minusYears(1).plusDays(1), FY, FY.plusMonths(2), "10-K:cf",
                 null);
+        CommonIncomeRows.Row supplement = new CommonIncomeRows.Row(2026, "Q2", 0, Q2.minusMonths(3).plusDays(1), Q2, Q2.plusMonths(1),
+                "10-Q:supp", null);
         Map<String, IssuerFacts.Filing> filings = Map.of("cf", new IssuerFacts.Filing("10-K", FY.plusMonths(2)),
                 "supp", new IssuerFacts.Filing("10-Q", Q2.plusMonths(1)));
 
@@ -305,10 +306,34 @@ class CommonEquityTest {
     }
 
     @Test
+    @DisplayName("행: 저장 보고서 코드는 폼 접두가 붙은 「폼:접수번호」 — 판정 열쇠 · companyfacts 공시는 접두 없는 접수번호로 찾는다")
+    void rowsMatchTheAccessionBehindTheFormPrefix() {
+        // 운영 꼴 그대로다 — 위 시험들처럼 행과 열쇠를 같은 낱말로 지으면 접두를 안 벗겨도 맞아 결함이 안 보인다(AAPL 등 비신호 발행사가 nokey).
+        CommonIncomeRows.Row quiet = new CommonIncomeRows.Row(2025, "FY", 0, FY.minusYears(1).plusDays(1), FY, FY.plusMonths(2),
+                "10-K:0000320193-26-000026", null);
+        CommonIncomeRows.Row judgedRow = new CommonIncomeRows.Row(2026, "Q2", 0, Q2.minusMonths(3).plusDays(1), Q2, Q2.plusMonths(1),
+                "10-Q:0000320193-26-000077", null);
+        Map<String, IssuerFacts.Filing> filings = Map.of("0000320193-26-000026", new IssuerFacts.Filing("10-K", FY.plusMonths(2)),
+                "0000320193-26-000077", new IssuerFacts.Filing("10-Q", Q2.plusMonths(1)));
+        Map<CommonEquity.Key, CommonEquity.Value> judged = Map.of(
+                new CommonEquity.Key("0000320193-26-000077", Q2), new CommonEquity.Value(5e6, 5e6, "stmt"));
+
+        List<CommonEquityRows.Resolved> rows = CommonEquityRows.resolve(List.of(quiet), Map.of(), filings,
+                Set.of("0000320193-26-000026"), false);
+        CommonEquityRows.Resolved own = CommonEquityRows.resolve(List.of(judgedRow), judged, filings,
+                Set.of("0000320193-26-000077"), true).get(0);
+
+        assertThat(rows.get(0).branch()).isEqualTo("none");
+        assertThat(rows.get(0).nonCommon()).isZero();
+        assertThat(own.branch()).isEqualTo("stmt");
+        assertThat(own.nonCommon()).isEqualTo(5e6);
+    }
+
+    @Test
     @DisplayName("행: 행 공시가 그 날짜를 안 실었으면 제출일 ≤ 행 공시일인 최신 공시의 같은 날짜 값")
     void aRowTakesTheLatestEarlierFilingOfTheSameDate() {
         CommonIncomeRows.Row row = new CommonIncomeRows.Row(2025, "FY", 1, FY.minusYears(1).plusDays(1), FY, LocalDate.of(2026, 5, 1),
-                "later", null);
+                "10-Q:later", null);
         Map<String, IssuerFacts.Filing> filings = Map.of("k", new IssuerFacts.Filing("10-K", LocalDate.of(2026, 2, 20)),
                 "late", new IssuerFacts.Filing("10-K/A", LocalDate.of(2026, 9, 1)),
                 "later", new IssuerFacts.Filing("10-Q", LocalDate.of(2026, 5, 1)));

@@ -115,6 +115,8 @@ applies_to:
 
 - 큰 변화(최신 PBR 배수): GSAT 2.04 · VST 1.82 · ARES 1.58 · SMCI 1.41 · BRKR 1.41 · MCHP 1.30 · ALB 1.28 · IVZ 1.25 · OXY 1.25 · PAA 1.23 · NRG 1.16 · VOYA 1.15 · 대형 · 지방은행 1.06~1.15 · ET 1.11.
 - 드라이런이 잡아 고친 것: 시리즈 합 중복(STT · NTRS) · 주당 금액을 총액에 실은 청산가(NTRS) · 성분 명시 0(NI) · 증거 없는 성분(ZETA) · 연 배당과 안 맞는 청산가(FLR) · 곱의 거부권(STT) · 곱의 단위(MS) · 비교열의 0(FLR) · 국내 관문 켬 행이 「못 정함」으로 비던 것(`CommonIncomeRead.equityRead`).
+- **운영 결함(2026-11-06 발견 · 고침)**: `CommonEquityRows.resolve`가 저장 보고서 코드(「10-K:접수번호」)를 접두째로 판정 열쇠 · companyfacts 공시 집합(둘 다 접수번호뿐)에서 찾아, 직접 열쇠와 `none` 갈래가 운영에서 한 번도 안 섰다 — 결정된 행은 전부 날짜로 다시 찾는 `earlier()`가 낸 것이고 비신호 발행사는 `nokey`(PBR 결손)였다. 미국 관문 전후 스냅숏으로 PBR 268,656 → 94,174칸(−64.9%) · 11-04 ROE 802 중 PBR 303. 위 표의 「새로 빔 19」는 엔진 열쇠만 재고 행 붙이기(`resolve`)를 안 거쳐 이 축을 못 봤다 — 시험 픽스처도 행과 열쇠를 같은 접두 없는 낱말로 지었다. 고침: `CommonIncomeRows.accessionOf`로 벗겨 찾는다 — 0콜 실측(반증) `nokey` → `none` 168,800행 · 11-04 갭 499종목 중 상한 475 · 자기 공시 열쇠가 `earlier()`보다 먼저 이겨 이미 결정된 행이 옮겨 갈 수 있는 상한 1,955. 작은 DB 드라이런(표본 12 · 2026-11-06): AAPL · MSFT · NVDA · KO · OGE · EVC `nokey` → `none` · 결정된 대조군 JPM · IOT · RNG 불변 · 보통주 밖 금액이 바뀐 결정 행 0(FRHC 2021 Q2 이름만 `none` → `zero` · 둘 다 0) · AAPL PBR 45.31 = 시총 5,079B ÷ 자본 112.09B · JPM 2.6615 = 운영 값. 6-K · 20-F 최신 행(TSEM · GFI 등 20종목)은 `nokey`로 남는다.
+- **반영 경로(새 설정 없음 — 그 사정거리)**: 미국은 관문 설정이 없는 「전부 켬」이고 이 고침은 위 결정대로 되돌린다. `ShareClassDeriver`는 저장 재료로 0콜이고 평일 14:18 입력 유도 → 14:20 화해가 두 시장 원본층 · 파생층을 창 전체로 한 판에 다시 쓰므로 과거와 최신이 다른 규칙으로 남는 중간 상태가 없다. 「화해는 계산기 변경을 퍼뜨리는 통로가 아니다」(`IndicatorReconciler`)의 예외는 **켬 상태 시장 · 0콜 유도 · 창 전체 한 판 화해** 셋이 다 설 때만이다.
 - 재지 않았다:
   - 5년 창 전 공시의 결과 — 표집은 연도마다 하나다. 관문 날 받기가 전 행 폼 공시를 받는다(신호 발행사 약 6,200공시 · 앵커 · 분모 · 분자 후보와 겹치는 것은 이미 받는다).
   - 관문 켬 재무 행 기저(ADR-0188 LP 자본 · 지배 null) — 위 배수의 분모는 인스턴스 축 없는 지배 자본이다.
@@ -126,4 +128,4 @@ applies_to:
 - `./gradlew test --tests '*CommonEquityTest' --tests '*CommonEquityBasisTest'`
 - 대조군: 이어받기 · 메자닌 · 성분 명시 0 · 전환형 · 액면 지문 · LP 클래스 · 자회사 배당 일곱을 하나씩 끄면 각자의 시험 하나가 붉다(2026-10-26 실제로 바꿔 확인).
 - 0콜 스윕: `EQUITY_INST_DIRS=<인스턴스 폴더> EQUITY_OUT=<tsv> ./gradlew test --tests '*CommonEquitySweepTest' --rerun-tasks`
-- 이 결정은 운영 자동 검증 대상이 아니다. 관문 뒤 경로다.
+- 행 붙이기는 운영 꼴(「10-Q:접수번호」 행 · 접수번호 열쇠)로 잰다 — `CommonEquityTest.rowsMatchTheAccessionBehindTheFormPrefix`. 위 0콜 스윕은 엔진 열쇠만 재고 `resolve`를 안 거치므로 이 결정의 운영 결과(비신호 발행사가 `none`으로 서는가)를 답하지 않는다.

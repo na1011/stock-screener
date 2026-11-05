@@ -240,7 +240,8 @@ public final class CommonIncomeRows {
                 && Math.abs(ChronoUnit.DAYS.between(p.end(), end)) <= SAME_DAYS;
     }
 
-    private static String accessionOf(String reportCode) {
+    /** 저장 보고서 코드(「폼:접수번호」)의 접수번호. 판정 열쇠 · companyfacts 공시 집합은 접두 없는 접수번호다. */
+    static String accessionOf(String reportCode) {
         int colon = reportCode == null ? -1 : reportCode.indexOf(':');
         return colon < 0 ? "" : reportCode.substring(colon + 1);
     }

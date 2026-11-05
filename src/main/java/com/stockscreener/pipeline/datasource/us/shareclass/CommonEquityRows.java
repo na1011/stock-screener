@@ -33,13 +33,16 @@ public final class CommonEquityRows {
                                          Map<String, IssuerFacts.Filing> filings, Set<String> companyFactsFilings, boolean signal) {
         List<Resolved> out = new ArrayList<>(rows.size());
         for (CommonIncomeRows.Row r : rows) {
-            CommonEquity.Value v = r.end() == null ? null : judged.get(new CommonEquity.Key(r.reportCode(), r.end()));
+            // MUST: 접두를 벗겨 찾는다 — 행의 보고서 코드는 「10-K:접수번호」이고 판정 열쇠 · companyfacts 공시는 접수번호뿐이다.
+            // 그대로 찾으면 직접 열쇠와 아래 none 갈래가 원리적으로 안 서서 비신호 발행사가 전부 nokey(PBR 결손)가 된다.
+            String accession = CommonIncomeRows.accessionOf(r.reportCode());
+            CommonEquity.Value v = r.end() == null ? null : judged.get(new CommonEquity.Key(accession, r.end()));
             if (v == null && r.end() != null) {
                 v = earlier(r, judged, filings);
             }
             if (v != null) {
                 out.add(new Resolved(r, v.nonCommon(), v.ncavNonCommon(), v.branch()));
-            } else if (!signal && r.reportCode() != null && companyFactsFilings.contains(r.reportCode())) {
+            } else if (!signal && companyFactsFilings.contains(accession)) {
                 out.add(new Resolved(r, 0.0, 0.0, "none"));
             } else {
                 out.add(new Resolved(r, null, null, "nokey"));
