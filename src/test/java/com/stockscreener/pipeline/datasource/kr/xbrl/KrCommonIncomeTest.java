@@ -133,6 +133,23 @@ class KrCommonIncomeTest {
     }
 
     @Test
+    void p1JudgesTheMixedPreferenceByOutstandingShares() {
+        // 보통주 1,000만 · 우선주 100만 중 90만이 자기주식 — 발행 기준 보통주 밖 9%지만 유통 기준 1%다. W 1,010만은 유통 합계와 같아도
+        // 우선주를 섞은 것이 아니다(국내 관문 켬 P1).
+        Register treasuryPreferred = register(row("보통주", 10_000_000, 0), row("우선주", 1_000_000, 900_000));
+        Judged off = judge(rowNi(10_000_000_000L), treasuryPreferred, owners(10_000_000_000L), eps(990), weighted(10_100_000));
+        Judged on = judgeV4(rowNi(10_000_000_000L), treasuryPreferred, owners(10_000_000_000L), eps(990), weighted(10_100_000));
+        // 대조군 — 우선주가 유통 중이면(보통주 밖 유통 9%) 그대로 섞음이다.
+        Register circulating = register(row("보통주", 10_000_000, 0), row("우선주", 1_000_000, 0));
+        Judged mixed = judgeV4(rowNi(10_000_000_000L), circulating, owners(10_000_000_000L), eps(990), weighted(11_000_000));
+
+        assertThat(off.branch()).as("꺼짐 — 지금 동작").isEqualTo("none:w-includes-pref");
+        assertThat(on.branch()).isEqualTo("exw");
+        assertThat(on.common()).isEqualByComparingTo("9999000000");
+        assertThat(mixed.branch()).isEqualTo("none:w-includes-pref");
+    }
+
+    @Test
     void ncTakesTheConsolidatedIncomeWhenEquityShowsNoNoncontrollingInterest() {
         // 행 지배 NI가 빈 연결 행 — 연결 순이익 100억 · 기초(03-31) · 기말(06-30) 자본총계 = 지배 자본 · 비지배 손익 줄 없음(국내 관문 켬 NC-b).
         RowIncome row = new RowIncome(null, BigDecimal.valueOf(10_000_000_000L));

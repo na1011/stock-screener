@@ -109,7 +109,12 @@ public final class KrCommonIncome {
          * 갚은 신종자본 — 신종자본 증거가 그 판의 당기 열(사실 끝이 사업연도 시작 뒤 · 또는 기간 끝 시점)에 하나도 없고 앞 열에 상환({@code Repayment})
          * 개념이 있으면 신종자본 증거로 안 센다(전년 비교열에만 남은 상환 줄이 지분상품 있음을 만들어 멀쩡한 행이 E × W로 갔다 · 계획 HY-b).
          */
-        HY
+        HY,
+        /**
+         * 구형우선주 섞음({@code w-includes-pref}) 판정의 보통주 밖 비중을 유통 기준으로 — 발행 기준으로 3%를 넘어도 우선주 대부분이 자기주식이면
+         * (유통 기준 3% 이하) W가 발행 합계와 비슷해도 섞은 것이 아니다(계획 P1).
+         */
+        P1
     }
 
     /**
@@ -251,7 +256,7 @@ public final class KrCommonIncome {
         if (e.size() == 1 && w.size() == 1) {
             BigDecimal eps = e.iterator().next();
             BigDecimal weighted = w.iterator().next();
-            String wrong = weightedCheck(weighted, reference, period, multiple);
+            String wrong = weightedCheck(weighted, reference, period, multiple, rules);
             if (wrong != null) {
                 return Judged.none(wrong, anchor.statement());
             }
@@ -282,7 +287,7 @@ public final class KrCommonIncome {
                 Set<BigDecimal> continuing = m.values(EPS_CONTINUING, period, COMMON_MEMBERS);
                 if (rules.has(Rule.E2) && w.size() == 1 && continuing.size() == 1) {
                     BigDecimal weighted = w.iterator().next();
-                    String wrong = weightedCheck(weighted, reference, period, multiple);
+                    String wrong = weightedCheck(weighted, reference, period, multiple, rules);
                     if (wrong != null) {
                         return Judged.none(wrong, anchor.statement());
                     }
@@ -392,7 +397,7 @@ public final class KrCommonIncome {
     }
 
     /** W의 큰 오류 둘 — 단위 · 주식-일({@code w-unit}) · 구형우선주를 보통주에 섞음({@code w-includes-pref}). 괜찮으면 {@code null}. */
-    private static String weightedCheck(BigDecimal weighted, Register reference, Period period, Multiple multiple) {
+    private static String weightedCheck(BigDecimal weighted, Register reference, Period period, Multiple multiple, Rules rules) {
         BigDecimal base = adjusted(reference, period, multiple);
         if (base == null || base.signum() <= 0) {
             return null;
@@ -404,7 +409,9 @@ public final class KrCommonIncome {
         if (reference.multiClass() && reference.totalOutstanding().signum() > 0) {
             double mixed = weighted.divide(reference.totalOutstanding(), MathContext.DECIMAL64).doubleValue()
                     / scale(reference, period, multiple);
-            if (Math.abs(mixed - 1) <= MIXED_PREF_BAND && reference.nonCommonShare().doubleValue() > MIXED_PREF_BAND) {
+            if (Math.abs(mixed - 1) <= MIXED_PREF_BAND && reference.nonCommonShare().doubleValue() > MIXED_PREF_BAND
+                    && !(rules.has(Rule.P1) && reference.totalOutstanding().subtract(reference.commonOutstanding())
+                    .divide(reference.totalOutstanding(), MathContext.DECIMAL64).doubleValue() <= MIXED_PREF_BAND)) {
                 return "w-includes-pref";
             }
         }
