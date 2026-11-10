@@ -8,6 +8,7 @@ import com.stockscreener.pipeline.datasource.SecurityRef;
 import com.stockscreener.pipeline.datasource.StatementPeriod;
 import com.stockscreener.pipeline.datasource.http.TokenBucketRateLimiter;
 import com.stockscreener.pipeline.datasource.kr.xbrl.KrCommonIncomeDeriver;
+import com.stockscreener.pipeline.datasource.kr.xbrl.KrXbrlCollector;
 import com.stockscreener.pipeline.datasource.kr.xbrl.KrXbrlStore;
 
 import org.junit.jupiter.api.Test;
@@ -32,7 +33,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 녹화본 시점으로 덮인다.
  *
  * <pre>
- * FSR_DB=stock_screener_gate_fsr_test DART_REPLAY_DIR=$PWD/.dartcache FSR_KR_GATE=true|false ./gradlew test --tests "*FsrReplayDerivationTest*" --rerun
+ * FSR_DB=stock_screener_gate_fsr_test DART_REPLAY_DIR=$PWD/.dartcache FSR_KR_GATE=true|false [FSR_SKIP_REFILL=true] [FSR_REREAD=true] \
+ *     ./gradlew test --tests "*FsrReplayDerivationTest*" --rerun
  * </pre>
  */
 @EnabledIfEnvironmentVariable(named = "FSR_DB", matches = "stock_screener_gate_.*_test")
@@ -78,7 +80,24 @@ class FsrReplayDerivationTest {
                 System.out.println("[fsr-replay] 건너뜀 " + s.ticker() + ": " + e.getMessage());
             }
         }
-        KrCommonIncomeDeriver deriver = new KrCommonIncomeDeriver(jdbc, new KrXbrlStore(jdbc), new DataSourceTransactionManager(ds));
+        KrXbrlStore store = new KrXbrlStore(jdbc);
+        store.krGate(gate);
+        // FSR_REREAD=true — 재료 표의 OK 판을 디스크 캐시에서만 그 관문 상태의 판독기 판으로 다시 읽는다(판독기 판이 바뀐 뒤 · 0콜).
+        if (Boolean.parseBoolean(System.getenv().getOrDefault("FSR_REREAD", "false"))) {
+            org.springframework.beans.factory.support.StaticListableBeanFactory none = new org.springframework.beans.factory.support.StaticListableBeanFactory();
+            KrXbrlCollector collector = new KrXbrlCollector(none.getBeanProvider(com.stockscreener.pipeline.datasource.kr.DartXbrlClient.class),
+                    none.getBeanProvider(DartCorpCodeCache.class), store,
+                    System.getenv().getOrDefault("KR_XBRL_CACHE", System.getProperty("user.home") + "/.stock-screener/kr-xbrl"));
+            int[] tally = new int[3];
+            jdbc.query("SELECT DISTINCT x.stock_id, s.ticker, x.corp_code FROM kr_report_xbrl x JOIN stock s ON s.id = x.stock_id ORDER BY 1", rs -> {
+                KrXbrlCollector.Reread r = collector.rereadCached(rs.getLong(1), rs.getString(2), rs.getString(3));
+                tally[0] += r.reread();
+                tally[1] += r.missing();
+                tally[2] += r.unreadable();
+            });
+            System.out.printf("[fsr-replay] 재판독 판 %d · 캐시 없음 %d · 판독 실패 %d%n", tally[0], tally[1], tally[2]);
+        }
+        KrCommonIncomeDeriver deriver = new KrCommonIncomeDeriver(jdbc, store, new DataSourceTransactionManager(ds));
         deriver.krGate(gate);
         KrCommonIncomeDeriver.Derived derived = deriver.derive();
         System.out.printf("[fsr-replay] 관문=%s 쓴 종목 %d · 건너뜀 %d · 유도 %s%n", gate, written, skipped, derived);

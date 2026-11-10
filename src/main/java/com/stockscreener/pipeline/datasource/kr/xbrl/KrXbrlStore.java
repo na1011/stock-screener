@@ -32,6 +32,27 @@ public class KrXbrlStore {
         this.jdbc = jdbc;
     }
 
+    /**
+     * 국내 관문({@code stockscreener.gate.kr-provisional}) — 켜면 재료를 판독기 판 {@link DartXbrlFactReader#READER_VERSION_KR_GATE}로 쓰고 읽는다
+     * (희석 EPS까지 남긴 재료 · 계획 C+⑵). 꺼짐은 지금 판 그대로다. 시험은 생성자만 부른다.
+     */
+    private boolean krGate;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public void krGate(@org.springframework.beans.factory.annotation.Value("${stockscreener.gate.kr-provisional}") boolean on) {
+        this.krGate = on;
+    }
+
+    /** 이 저장소가 쓰고 읽는 판독기 판. */
+    public int readerVersion() {
+        return DartXbrlFactReader.version(krGate);
+    }
+
+    /** 수집기가 판독기에 넘기는 관문 상태 — 쓰는 판과 남기는 재료가 한 설정에서 나온다. */
+    public boolean krGate() {
+        return krGate;
+    }
+
     /** 받기 대상 — 국내 재무 행이 있는 종목 전원(편입 · 과거 편입 · 비활성 무관 · ADR-0192). */
     public record Target(long stockId, String ticker, String market, Integer accountingMonth) {
     }
@@ -102,7 +123,7 @@ public class KrXbrlStore {
                 UPDATE kr_report_xbrl SET xbrl_status = 'OK', reader_version = ?, facts = ?::jsonb, unreadable_values = ?,
                        failure_kind = NULL, failure_message = NULL, fetched_at = now()
                  WHERE rcept_no = ? AND stock_id = ?
-                """, DartXbrlFactReader.READER_VERSION, encode(facts), unreadable, rceptNo, stockId);
+                """, readerVersion(), encode(facts), unreadable, rceptNo, stockId);
     }
 
     public void recordNoFile(long stockId, String rceptNo) {
@@ -110,7 +131,7 @@ public class KrXbrlStore {
                 UPDATE kr_report_xbrl SET xbrl_status = 'NO_FILE', reader_version = ?, facts = NULL, unreadable_values = NULL,
                        failure_kind = NULL, failure_message = NULL, fetched_at = now()
                  WHERE rcept_no = ? AND stock_id = ?
-                """, DartXbrlFactReader.READER_VERSION, rceptNo, stockId);
+                """, readerVersion(), rceptNo, stockId);
     }
 
     public void recordFailure(long stockId, String rceptNo, String status, String kind, String message) {
@@ -118,7 +139,7 @@ public class KrXbrlStore {
                 UPDATE kr_report_xbrl SET xbrl_status = ?, reader_version = ?, facts = NULL, unreadable_values = NULL,
                        failure_kind = ?, failure_message = ?, fetched_at = now()
                  WHERE rcept_no = ? AND stock_id = ?
-                """, status, DartXbrlFactReader.READER_VERSION, kind, message, rceptNo, stockId);
+                """, status, readerVersion(), kind, message, rceptNo, stockId);
     }
 
     /** 명부를 받은 사업연도. */
@@ -188,7 +209,7 @@ public class KrXbrlStore {
         Long n = jdbc.queryForObject("""
                 SELECT count(*) FROM kr_report_xbrl
                  WHERE xbrl_status = 'FAILED' OR (xbrl_status IN ('OK', 'UNREADABLE') AND reader_version <> ?)
-                """, Long.class, DartXbrlFactReader.READER_VERSION);
+                """, Long.class, readerVersion());
         return n == null ? 0 : n;
     }
 
@@ -263,7 +284,7 @@ public class KrXbrlStore {
                  WHERE stock_id = ? AND xbrl_status = 'OK' AND reader_version = ?
                 """, rs -> {
             out.put(rs.getString(1), decode(rs.getString(2)));
-        }, stockId, DartXbrlFactReader.READER_VERSION);
+        }, stockId, readerVersion());
         return out;
     }
 }

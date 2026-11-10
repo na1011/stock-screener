@@ -66,6 +66,7 @@ class DartXbrlFactReaderTest {
               <entity00164742:udf_BasicEarningsLossPerShare contextRef="Q2c" decimals="0" unitRef="KRWS">1</entity00164742:udf_BasicEarningsLossPerShare>
               <ifrs-full:Revenue contextRef="Q2c" decimals="-6" unitRef="KRW">48000000000000</ifrs-full:Revenue>
               <ifrs-full:WeightedAverageShares contextRef="Q2c" xsi:nil="true" unitRef="SHR"/>
+              <ifrs-full:DilutedEarningsLossPerShare contextRef="Q2cOrd" decimals="0" unitRef="KRWS">9590</ifrs-full:DilutedEarningsLossPerShare>
             </xbrli:xbrl>
             """;
 
@@ -88,6 +89,19 @@ class DartXbrlFactReaderTest {
               <ifrs-full:BasicEarningsLossPerShare contextRef="FY2020" decimals="0" unitRef="KRWS">3,672</ifrs-full:BasicEarningsLossPerShare>
             </xbrl>
             """;
+
+    @Test
+    void keepsTheDilutedEpsOnlyBehindTheKrGate() throws DataSourceException {
+        // 국내 관문 켬은 희석 EPS까지 남기고 판 2로 적는다(보통주 몫 상충 해소 C+⑵) · 꺼짐은 지금 재료 그대로다.
+        DartXbrlFactReader.Result on = DartXbrlFactReader.read(new ByteArrayInputStream(CURRENT.getBytes(StandardCharsets.UTF_8)), "test", true);
+
+        assertThat(read(CURRENT).facts()).extracting(Fact::concept).doesNotContain("DilutedEarningsLossPerShare");
+        assertThat(on.facts()).extracting(Fact::concept).containsExactly(
+                "ProfitLossAttributableToOwnersOfParent", "BasicEarningsLossPerShare", "WeightedAverageShares",
+                "BasicEarningsLossPerSharePreferredStock", "HybridBonds", "DilutedEarningsLossPerShare");
+        assertThat(DartXbrlFactReader.version(false)).isEqualTo(DartXbrlFactReader.READER_VERSION);
+        assertThat(DartXbrlFactReader.version(true)).isNotEqualTo(DartXbrlFactReader.READER_VERSION);
+    }
 
     @Test
     void readsTheCurrentFormatAndKeepsOnlyMaterialStandardConcepts() throws DataSourceException {

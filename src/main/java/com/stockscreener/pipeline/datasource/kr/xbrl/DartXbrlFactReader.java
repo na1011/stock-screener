@@ -35,6 +35,12 @@ public final class DartXbrlFactReader {
     /** 판독기 판. 재료 표({@code kr_report_xbrl.reader_version})가 이 값과 다르면 캐시에서 다시 읽는다. */
     public static final int READER_VERSION = 1;
 
+    /**
+     * 국내 관문 켬({@code stockscreener.gate.kr-provisional})의 판독기 판 — {@link #KR_GATE_MATERIAL}까지 남긴다. 꺼짐은 {@link #READER_VERSION}
+     * 그대로라 재료 표가 한 톨도 안 바뀐다. 켬으로 도는 첫 재료 받기가 캐시에서 다시 읽는다(외부 0콜).
+     */
+    public static final int READER_VERSION_KR_GATE = 2;
+
     static final String SOURCE = "dart";
 
     private static final String XBRLI = "http://www.xbrl.org/2003/instance";
@@ -56,6 +62,12 @@ public final class DartXbrlFactReader {
             "EquityAttributableToOwnersOfParent",
             "Equity",
             "IssuedCapital");
+
+    /**
+     * 관문 켬에서만 더 남기는 IFRS 개념 — 보통주 희석 EPS. 보통주 몫 상충 해소(계획 C+⑵)가 지분상품 있는 행에서 버리는 E가 같은 기간 희석 EPS로도
+     * 실렸는지 본다(파마리서치 2025 FY · 2026 Q1은 기본 · 희석 열이 맥락마다 엇갈려 기본 EPS 개념에 둘이 함께 실렸다).
+     */
+    static final Set<String> KR_GATE_MATERIAL = Set.of("DilutedEarningsLossPerShare");
 
     /** 남기는 DART 표준 개념(이름에 {@code Hybrid} · {@code PreferredStock}이 든 것은 따로 전부 남긴다). */
     static final Set<String> DART_MATERIAL = Set.of("IssuedCapitalOfCommonStock");
@@ -126,8 +138,20 @@ public final class DartXbrlFactReader {
     }
 
     public static Result read(InputStream xml, String context) throws DataSourceException {
-        Parsed parsed = parse(xml, context, DartXbrlFactReader::material);
+        return read(xml, context, false);
+    }
+
+    /** @param krGate 국내 관문 켬 — {@link #KR_GATE_MATERIAL}까지 남긴다(판 {@link #READER_VERSION_KR_GATE}) */
+    public static Result read(InputStream xml, String context, boolean krGate) throws DataSourceException {
+        Parsed parsed = parse(xml, context, krGate
+                ? (source, local) -> material(source, local) || source == Source.IFRS && KR_GATE_MATERIAL.contains(local)
+                : DartXbrlFactReader::material);
         return new Result(parsed.facts().stream().map(StatementFact::fact).toList(), parsed.unreadable());
+    }
+
+    /** 그 관문 상태의 판독기 판 — 재료 표 행의 {@code reader_version}이 이 값이어야 그 상태의 재료다. */
+    public static int version(boolean krGate) {
+        return krGate ? READER_VERSION_KR_GATE : READER_VERSION;
     }
 
     /** 수 사실 전부(회사 확장 개념 포함 — 그 줄은 이름표로만 옮긴다). 남기는 재료 집합과 무관해 판독기 판을 안 탄다. */

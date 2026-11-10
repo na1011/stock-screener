@@ -164,16 +164,10 @@ public class KrXbrlCollector implements DartEarlierInstances {
                 firstFailure = firstFailure == null ? filing.rceptNo() + " 캐시 " + e.getMessage() : firstFailure;
                 continue;
             }
-            try (InputStream in = new ByteArrayInputStream(instance)) {
-                DartXbrlFactReader.Result read = DartXbrlFactReader.read(in, target.ticker() + " " + filing.rceptNo());
-                store.recordOk(target.stockId(), filing.rceptNo(), read.facts(), read.unreadableValues());
-            } catch (DataSourceException e) {
-                // 판독 실패는 평생이다(판독기 판이 바뀌면 다시) — 받기 실패와 갈라 센다.
-                store.recordFailure(target.stockId(), filing.rceptNo(), "UNREADABLE", e.kind().name(), e.getMessage());
+            String unreadable = readAndRecord(target.stockId(), target.ticker(), filing.rceptNo(), instance);
+            if (unreadable != null) {
                 failed++;
-                firstFailure = firstFailure == null ? filing.rceptNo() + " " + e.getMessage() : firstFailure;
-            } catch (IOException e) {
-                throw new IllegalStateException("바이트 배열 스트림이 닫히다 실패했다", e);
+                firstFailure = firstFailure == null ? filing.rceptNo() + " " + unreadable : firstFailure;
             }
         }
         // 비최신 판의 한국어 이름표 — 이른 판을 그 판의 인스턴스로 지을 때 표준계정코드 없는 줄의 계정명이다(ADR-0201). 인스턴스만 캐시하던 때
@@ -253,6 +247,58 @@ public class KrXbrlCollector implements DartEarlierInstances {
         return found;
     }
 
+    /** 판 하나를 판독해 재료 표에 적는다. 판독 실패면 그 사유(표에는 UNREADABLE로 남긴다) · 성공이면 {@code null}. */
+    private String readAndRecord(long stockId, String ticker, String rceptNo, byte[] instance) {
+        try (InputStream in = new ByteArrayInputStream(instance)) {
+            DartXbrlFactReader.Result read = DartXbrlFactReader.read(in, ticker + " " + rceptNo, store.krGate());
+            store.recordOk(stockId, rceptNo, read.facts(), read.unreadableValues());
+            return null;
+        } catch (DataSourceException e) {
+            // 판독 실패는 평생이다(판독기 판이 바뀌면 다시) — 받기 실패와 갈라 센다.
+            store.recordFailure(stockId, rceptNo, "UNREADABLE", e.kind().name(), e.getMessage());
+            return e.getMessage();
+        } catch (IOException e) {
+            throw new IllegalStateException("바이트 배열 스트림이 닫히다 실패했다", e);
+        }
+    }
+
+    /** 캐시 재판독 결과 — 다시 읽은 판 · 캐시에 원본이 없어 못 읽은 판 · 판독 실패. */
+    public record Reread(int reread, int missing, int unreadable) {
+    }
+
+    /**
+     * 재료 표에 OK로 있는데 판독기 판이 지금과 다른 판을 <b>디스크 캐시에서만</b> 다시 읽는다 — 외부 0콜 · 목록 · 명부를 안 묻는다. 작은 DB 재생
+     * 도구가 판독기 판이 바뀐 뒤 부른다({@link #collect}는 짝 없는 행이 있으면 목록을 다시 받는다).
+     */
+    public Reread rereadCached(long stockId, String ticker, String corpCode) {
+        int reread = 0;
+        int missing = 0;
+        int unreadable = 0;
+        for (Filing f : store.filings(stockId)) {
+            if (!"OK".equals(f.status()) || !needs(f)) {
+                continue;
+            }
+            Path cached = cachePath(corpCode, f.rceptNo());
+            if (!Files.exists(cached)) {
+                missing++;
+                log.warn("재료 표에 OK인 판의 캐시 원본이 없다. stockId={} 접수번호={}", stockId, f.rceptNo());
+                continue;
+            }
+            byte[] instance;
+            try {
+                instance = readCache(cached);
+            } catch (IOException e) {
+                throw new IllegalStateException("인스턴스 캐시를 못 읽었다: " + cached, e);
+            }
+            if (readAndRecord(stockId, ticker, f.rceptNo(), instance) == null) {
+                reread++;
+            } else {
+                unreadable++;
+            }
+        }
+        return new Reread(reread, missing, unreadable);
+    }
+
     /** 같은 (사업연도, 보고서 코드)에서 {@code bound}보다 앞서 접수된 판들. */
     static List<Filing> earlier(Filing bound, List<Filing> filings) {
         return filings.stream()
@@ -262,11 +308,11 @@ public class KrXbrlCollector implements DartEarlierInstances {
                 .toList();
     }
 
-    private static boolean needs(Filing f) {
+    private boolean needs(Filing f) {
         if (f.status() == null || "FAILED".equals(f.status())) {
             return true;
         }
-        return !"NO_FILE".equals(f.status()) && (f.readerVersion() == null || f.readerVersion() != DartXbrlFactReader.READER_VERSION);
+        return !"NO_FILE".equals(f.status()) && (f.readerVersion() == null || f.readerVersion() != store.readerVersion());
     }
 
     /** {@link DartEarlierInstances} — 저장 이른 판의 인스턴스를 디스크 캐시에서(0콜). */
