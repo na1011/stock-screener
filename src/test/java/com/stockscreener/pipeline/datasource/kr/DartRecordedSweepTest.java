@@ -62,6 +62,8 @@ class DartRecordedSweepTest {
         DartCorpCodeCache corpCodes = new DartCorpCodeCache(http, properties, limiter, quota);
         DartFinancialAdapter summary = new DartFinancialAdapter(http, properties, limiter, quota, corpCodes);
         DartFullStatementAdapter full = new DartFullStatementAdapter(http, properties, limiter, quota, corpCodes);
+        // 국내 관문 켬 갈래를 재생한다(DART_SWEEP_KR_GATE=true · 꺼짐과 diff해 그 관문의 적재 영향을 0콜로 잰다).
+        full.krGate(Boolean.parseBoolean(System.getenv().getOrDefault("DART_SWEEP_KR_GATE", "false")));
         int from = Integer.parseInt(System.getenv().getOrDefault("DART_FROM", "2019"));
         int to = java.time.LocalDate.now().getYear();
         List<String> tickers = Files.readAllLines(Path.of(System.getenv("DART_TICKERS"))).stream()

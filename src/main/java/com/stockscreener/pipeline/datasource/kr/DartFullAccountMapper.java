@@ -574,6 +574,35 @@ final class DartFullAccountMapper {
         return false;
     }
 
+    /**
+     * <b>비지배가 실재하는 증거</b>(국내 관문 켬 · 계획 K9) — 값이 0이 아닌 손익 비지배 귀속 줄 또는 재무상태표 비지배지분(당기말 · 전기말)이 0이 아님.
+     * 존재만 보던 {@link #hasAnyNoncontrollingIncome}은 당기순이익 비지배 줄을 0원이어도 증거로 셌다 — 171090은 7년 내내 재무상태표 비지배지분이
+     * 0인데 2026 1분기 0원 줄 하나가 그 뒤 · 앞 기간 전부의 게이트를 닫아 맞는 FY 지배 NI 7칸이 빈다(G1 녹화본 재생 · 457190 1칸). 비지배 몫이 0인데
+     * 비지배 자본이 있는 회사는 재무상태표 줄이 증거가 된다.
+     */
+    static boolean hasNonzeroNoncontrolling(List<JsonNode> income, List<JsonNode> balance) {
+        for (JsonNode row : income) {
+            String id = row.path("account_id").asString("");
+            if (id.contains("NoncontrollingInterests") || ID_NET_INCOME_NONCONTROLLING.contains(id)) {
+                BigDecimal value = DartAccountMapper.parseAmount(row.path("thstrm_amount").asString(""));
+                if (value != null && value.signum() != 0) {
+                    return true;
+                }
+            }
+        }
+        for (JsonNode row : balance) {
+            if (ID_NONCONTROLLING_INTERESTS.contains(row.path("account_id").asString(""))) {
+                for (String column : new String[]{"thstrm_amount", "frmtrm_amount"}) {
+                    BigDecimal value = DartAccountMapper.parseAmount(row.path(column).asString(""));
+                    if (value != null && value.signum() != 0) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
     static boolean hasNoncontrollingIncome(List<JsonNode> income) {
         for (JsonNode row : income) {
             if (ID_NET_INCOME_NONCONTROLLING.contains(row.path("account_id").asString(""))) {

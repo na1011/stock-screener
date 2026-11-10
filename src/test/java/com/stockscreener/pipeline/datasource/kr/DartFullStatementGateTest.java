@@ -47,6 +47,30 @@ class DartFullStatementGateTest {
     }
 
     @Test
+    @DisplayName("국내 관문 켬(K9): 0원 비지배 줄은 증거가 아니다 — 값이 있는 비지배 줄이나 재무상태표 비지배지분이 증거다(꺼짐은 0원 줄도 센다 · 대조군)")
+    void zeroNoncontrollingLineIsNotEvidenceWhenGated() {
+        DartFullStatementAdapter.Pending zeroLine = new DartFullStatementAdapter.Pending(2026, StatementPeriod.Q1, withNoncontrolling(), true);
+        assertThat(DartFullStatementAdapter.lastNoncontrollingIncome(List.of(zeroLine))).as("꺼짐 — 지금 동작").isEqualTo(LocalDate.of(2026, 3, 31));
+        assertThat(DartFullStatementAdapter.lastNoncontrollingIncome(List.of(zeroLine), true)).as("171090 꼴 — 0원 줄 하나").isNull();
+
+        JsonNode balanceNci = MAPPER.readTree("""
+                {"list":[
+                  {"account_id":"ifrs-full_ProfitLossAttributableToNoncontrollingInterests","sj_div":"CIS","thstrm_amount":"0"},
+                  {"account_id":"ifrs-full_NoncontrollingInterests","sj_div":"BS","thstrm_amount":"500","frmtrm_amount":"480"}
+                ]}""").get("list");
+        assertThat(DartFullStatementAdapter.lastNoncontrollingIncome(List.of(
+                new DartFullStatementAdapter.Pending(2026, StatementPeriod.Q1, balanceNci, true)), true))
+                .as("비지배 몫은 0이어도 비지배 자본이 있으면 증거").isEqualTo(LocalDate.of(2026, 3, 31));
+
+        JsonNode nonzeroLine = MAPPER.readTree("""
+                {"list":[
+                  {"account_id":"ifrs-full_ProfitLossAttributableToNoncontrollingInterests","sj_div":"CIS","thstrm_amount":"-12"}
+                ]}""").get("list");
+        assertThat(DartFullStatementAdapter.lastNoncontrollingIncome(List.of(
+                new DartFullStatementAdapter.Pending(2025, StatementPeriod.FY, nonzeroLine, true)), true)).isEqualTo(LocalDate.of(2025, 12, 31));
+    }
+
+    @Test
     @DisplayName("CFS 응답의 비지배 행만 증거로 센다 — OFS의 부재는 증거가 아니다")
     void onlyConsolidatedResponsesCountAsEvidence() {
         // 대조군 — 같은 응답을 CFS로 받으면 증거가 된다.

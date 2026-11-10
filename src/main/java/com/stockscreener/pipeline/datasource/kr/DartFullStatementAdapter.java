@@ -104,6 +104,14 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
                 earlierInstances == null ? null : earlierInstances.getIfAvailable());
     }
 
+    /** 국내 관문({@code stockscreener.gate.kr-provisional}) — 켜면 비지배 증거를 값이 0이 아닌 줄로 좁힌다(K9). 시험은 생성자만 부른다. */
+    private boolean krGate;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    void krGate(@org.springframework.beans.factory.annotation.Value("${stockscreener.gate.kr-provisional}") boolean on) {
+        this.krGate = on;
+    }
+
     DartFullStatementAdapter(ExternalApiClientFactory clientFactory, DataSourceProperties properties, RateLimiter rateLimiter,
                              DartDailyQuota dailyQuota, DartCorpCodeCache corpCodes,
                              DartEarlierInstances earlierInstances) {
@@ -185,7 +193,7 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
         }
 
         // ── 2패스: 종목 단위 판정(순수). 외부 호출 0.
-        LocalDate lastNoncontrolling = lastNoncontrollingIncome(pending);
+        LocalDate lastNoncontrolling = lastNoncontrollingIncome(pending, krGate);
         // MUST: 게이트가 몇 판에서 열렸는지 남긴다. 스윕이 이 축을 못 태우므로(픽스처가
         // 종목당 한 기간뿐이다) **적재 직후 검침이 유일한 확인 수단**이고, 로그가 없으면
         // 「게이트가 돌았는가」를 저장된 값으로만 추정하게 된다 — 그 값은 폴백이 쓰던 것과
@@ -317,6 +325,11 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
      * 그것이 「비지배를 낸 적 있다」의 증거다.
      */
     static LocalDate lastNoncontrollingIncome(List<Pending> pending) {
+        return lastNoncontrollingIncome(pending, false);
+    }
+
+    /** @param nonzeroOnly 국내 관문 켬(계획 K9) — 증거를 값이 0이 아닌 비지배 줄 · 재무상태표 비지배지분으로 좁힌다({@link DartFullAccountMapper#hasNonzeroNoncontrolling}) */
+    static LocalDate lastNoncontrollingIncome(List<Pending> pending, boolean nonzeroOnly) {
         LocalDate last = null;
         for (Pending p : pending) {
             if (!p.consolidated()) {
@@ -325,8 +338,12 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
             List<JsonNode> income = DartFullAccountMapper.sections(p.list(),
                     DartFullAccountMapper.SJ_INCOME,
                     DartFullAccountMapper.SJ_COMPREHENSIVE_INCOME);
-            // 비지배 귀속 줄이면 무엇이든 증거로 센다(DartFullAccountMapper.hasAnyNoncontrollingIncome).
-            if (!DartFullAccountMapper.hasAnyNoncontrollingIncome(income)) {
+            // 꺼짐: 비지배 귀속 줄이면 무엇이든 증거로 센다(DartFullAccountMapper.hasAnyNoncontrollingIncome).
+            boolean evidence = nonzeroOnly
+                    ? DartFullAccountMapper.hasNonzeroNoncontrolling(income,
+                            DartFullAccountMapper.sections(p.list(), DartFullAccountMapper.SJ_BALANCE))
+                    : DartFullAccountMapper.hasAnyNoncontrollingIncome(income);
+            if (!evidence) {
                 continue;
             }
             LocalDate end = DartReportPeriods.periodRange(p.year(), p.period().label())[1];
