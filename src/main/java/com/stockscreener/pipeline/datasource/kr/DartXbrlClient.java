@@ -187,6 +187,34 @@ public class DartXbrlClient {
         }
     }
 
+    /**
+     * 정기보고서 하나(사업연도 · 보고서 코드)의 주식수 표 줄들 — {@code endpoint}는 {@code stockTotqySttus} · {@code irdsSttus} ·
+     * {@code tesstkAcqsDspsSttus}(계획 K3 · 국내 관문 켬). {@code 013}이면 빈 목록이다. 원장은 그 보고서 코드의 가장 늦은 판을 주고 줄마다
+     * {@code rcept_no}를 싣는다(탐침 {@code DartQuarterShareCountProbeLiveTest} · 표본 330콜 전부 {@code 000}).
+     */
+    public List<JsonNode> reportTable(String endpoint, String corpCode, int bsnsYear, String reprtCode) throws DataSourceException {
+        requireKey();
+        String path = "/" + endpoint + ".json";
+        String context = "%s corp_code=%s bsns_year=%d reprt_code=%s".formatted(endpoint, corpCode, bsnsYear, reprtCode);
+        DartResponse.acquire(rateLimiter, dailyQuota, path, context);
+        ResponseEntity<byte[]> response = get(context, uri -> uri.path(path)
+                .queryParam("crtfc_key", apiKey)
+                .queryParam("corp_code", corpCode)
+                .queryParam("bsns_year", bsnsYear)
+                .queryParam("reprt_code", reprtCode)
+                .build());
+        try {
+            List<JsonNode> rows = new ArrayList<>();
+            DartResponse.requireList(DartResponse.read(response, context), context).forEach(rows::add);
+            return rows;
+        } catch (DataSourceException e) {
+            if (DartResponse.isNoData(e)) {
+                return List.of();
+            }
+            throw e;
+        }
+    }
+
     private ResponseEntity<byte[]> get(String context,
                                        java.util.function.Function<org.springframework.web.util.UriBuilder, java.net.URI> uri)
             throws DataSourceException {

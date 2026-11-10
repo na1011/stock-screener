@@ -215,6 +215,65 @@ public class KrXbrlStore {
                 """, stockId, (short) bsnsYear, rceptNo, recordDate, kept.toString());
     }
 
+    // ---- 정기보고서 주식수 재료(kr_share_material · 국내 관문 켬 · 계획 K3) ----
+
+    /** 그 보고서의 주식수 표 하나 — 줄({@code rows}가 원장 필드 그대로) · 판(rcept_no) · 받은 판이 없으면 {@code rows} 빈 목록. */
+    public record ShareMaterial(int bsnsYear, String reprtCode, String endpoint, String rceptNo, List<JsonNode> rows) {
+    }
+
+    /**
+     * 다시 묻지 않을 (사업연도, 보고서 코드, 표) — 받은 것과, 받은 뒤로 그 보고서 판이 목록에 안 오른 「없음」(명부와 같은 규칙 ·
+     * {@link #registerYears}). 키는 {@code 연도/보고서/표}.
+     */
+    public java.util.Set<String> materialKeys(long stockId) {
+        return new java.util.HashSet<>(jdbc.queryForList("""
+                SELECT m.bsns_year || '/' || m.reprt_code || '/' || m.endpoint FROM kr_share_material m
+                 WHERE m.stock_id = ?
+                   AND NOT (m.status = 'NO_DATA' AND EXISTS (SELECT 1 FROM kr_report_xbrl x WHERE x.stock_id = m.stock_id
+                            AND x.bsns_year = m.bsns_year AND x.reprt_code = m.reprt_code AND x.rcept_date >= m.fetched_at::date))
+                """, String.class, stockId));
+    }
+
+    public void recordMaterial(long stockId, int bsnsYear, String reprtCode, String endpoint, List<JsonNode> rows) {
+        if (rows.isEmpty()) {
+            jdbc.update("""
+                    INSERT INTO kr_share_material (stock_id, bsns_year, reprt_code, endpoint, status) VALUES (?, ?, ?, ?, 'NO_DATA')
+                    ON CONFLICT (stock_id, bsns_year, reprt_code, endpoint) DO UPDATE SET status = 'NO_DATA', rcept_no = NULL, rows = NULL,
+                        fetched_at = now()
+                    """, stockId, (short) bsnsYear, reprtCode, endpoint);
+            return;
+        }
+        ArrayNode kept = MAPPER.createArrayNode();
+        String rceptNo = null;
+        for (JsonNode row : rows) {
+            ObjectNode o = kept.addObject();
+            row.properties().forEach(e -> {
+                if (!java.util.Set.of("corp_code", "corp_name", "corp_cls").contains(e.getKey())) {
+                    o.put(e.getKey(), e.getValue().asString(""));
+                }
+            });
+            rceptNo = row.path("rcept_no").asString(rceptNo);
+        }
+        jdbc.update("""
+                INSERT INTO kr_share_material (stock_id, bsns_year, reprt_code, endpoint, status, rcept_no, rows)
+                VALUES (?, ?, ?, ?, 'OK', ?, ?::jsonb)
+                ON CONFLICT (stock_id, bsns_year, reprt_code, endpoint) DO UPDATE SET status = 'OK', rcept_no = EXCLUDED.rcept_no,
+                    rows = EXCLUDED.rows, fetched_at = now()
+                """, stockId, (short) bsnsYear, reprtCode, endpoint, rceptNo, kept.toString());
+    }
+
+    /** 한 종목의 받은 주식수 재료 전부(OK만). */
+    public List<ShareMaterial> shareMaterial(long stockId) {
+        return jdbc.query("""
+                SELECT bsns_year, reprt_code, endpoint, rcept_no, rows::text FROM kr_share_material
+                 WHERE stock_id = ? AND status = 'OK' ORDER BY 1, 2, 3
+                """, (rs, i) -> {
+            List<JsonNode> rows = new ArrayList<>();
+            MAPPER.readTree(rs.getString(5)).forEach(rows::add);
+            return new ShareMaterial(rs.getInt(1), rs.getString(2), rs.getString(3), rs.getString(4), rows);
+        }, stockId);
+    }
+
     /** 미해결 수 — 관문 전제(재료 받기 미해결 0)가 읽는다. FAILED 전부 + 지금 판독기와 판이 다른 OK · UNREADABLE. */
     public long unresolved() {
         Long n = jdbc.queryForObject("""

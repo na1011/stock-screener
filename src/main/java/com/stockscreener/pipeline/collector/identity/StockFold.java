@@ -106,7 +106,9 @@ public class StockFold {
             new Rule("earnings_release", List.of("market", "filing_no"), List.of(), OnConflict.DROP_SOURCE),
             new Rule("earnings_release_sweep", List.of(), List.of(), OnConflict.DROP_SOURCE),
             // 실적 발표 공시 본문 해석(관문 마이그레이션 V70_14 · ADR-0206) — 같은 접수번호는 같은 본문이다(캐시에서 다시 읽는다).
-            new Rule("kr_provisional_release", List.of("rcept_no"), List.of(), OnConflict.DROP_SOURCE));
+            new Rule("kr_provisional_release", List.of("rcept_no"), List.of(), OnConflict.DROP_SOURCE),
+            // 정기보고서 주식수 재료(관문 마이그레이션 V70_17 · 계획 K3) — 같은 회사의 같은 보고서 · 같은 표는 같은 원장 사실이다(다시 받을 수 있다).
+            new Rule("kr_share_material", List.of("bsns_year", "reprt_code", "endpoint"), List.of(), OnConflict.DROP_SOURCE));
 
     /** 따로 다루는 표 + S와 함께 지워도 되는 표(S의 기호 시대 — 접힌 S에는 없다 · 있어도 T가 새로 쓴다). */
     static final Set<String> SPECIAL = Set.of("universe_membership", "financial_statement", "stock_symbol_era");

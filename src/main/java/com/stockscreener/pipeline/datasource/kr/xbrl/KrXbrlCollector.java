@@ -77,13 +77,20 @@ public class KrXbrlCollector implements DartEarlierInstances {
         return client.getIfAvailable() != null && corpCodes.getIfAvailable() != null;
     }
 
-    /** 한 종목의 결과 — 받은 판 · 캐시에서 다시 읽은 판 · 원본 없음 · 받은 명부 · 이번에 실패한 판 · 이름표만 다시 받은 판. */
-    public record Collected(int fetched, int reread, int noFile, int registers, int failed, int unbound, int labels) {
+    /** 한 종목의 결과 — 받은 판 · 캐시에서 다시 읽은 판 · 원본 없음 · 받은 명부 · 이번에 실패한 판 · 이름표만 다시 받은 판 · 받은 주식수 표. */
+    public record Collected(int fetched, int reread, int noFile, int registers, int failed, int unbound, int labels, int materials) {
 
         public Collected(int fetched, int reread, int noFile, int registers, int failed, int unbound) {
-            this(fetched, reread, noFile, registers, failed, unbound, 0);
+            this(fetched, reread, noFile, registers, failed, unbound, 0, 0);
+        }
+
+        public Collected(int fetched, int reread, int noFile, int registers, int failed, int unbound, int labels) {
+            this(fetched, reread, noFile, registers, failed, unbound, labels, 0);
         }
     }
+
+    /** 정기보고서마다 받는 주식수 표(계획 K3 · 국내 관문 켬) — 사업보고서 명부는 {@code kr_share_register}가 든다. */
+    static final List<String> MATERIAL_ENDPOINTS = List.of("stockTotqySttus", "irdsSttus", "tesstkAcqsDspsSttus");
 
     /**
      * @param fetchBudget 이번 실행에 남은 「새로 받기」 수(캐시 판독은 안 센다) — 0이 되면 남은 판은 다음 실행이 잇는다.
@@ -206,11 +213,55 @@ public class KrXbrlCollector implements DartEarlierInstances {
             store.recordRegister(target.stockId(), year, dart.shareTotals(corpCode, year));
             registers++;
         }
+        int materials = krGate ? collectMaterial(dart, corpCode, target.stockId(), rows, fetchBudget) : 0;
         if (failed > 0) {
             throw new DataSourceException(DataSourceException.Kind.TRANSIENT, "dart",
                     "판 %d개의 재료를 못 받았다(첫 실패: %s) — 표에 남겼고 다음 실행이 다시 받는다".formatted(failed, firstFailure));
         }
-        return new Collected(fetched, reread, noFile, registers, failed, unbound, labels);
+        return new Collected(fetched, reread, noFile, registers, failed, unbound, labels, materials);
+    }
+
+    /**
+     * 국내 관문 켬(계획 K3-b · K3-d) — 행이 있는 (사업연도, 보고서) 중 아직 안 받은 주식수 표를 받는다(표마다 1콜 · 새로 받기 상한 안). 재무 창
+     * (2015~) 밖과 사업보고서 주식총수 표(명부가 든다)는 안 받는다.
+     */
+    private int collectMaterial(DartXbrlClient dart, String corpCode, long stockId, List<RowVintage> rows, AtomicInteger fetchBudget)
+            throws DataSourceException {
+        Set<String> have = store.materialKeys(stockId);
+        Set<String> wanted = new java.util.LinkedHashSet<>();
+        for (RowVintage row : rows) {
+            String code = reportCode(row.fiscalPeriod());
+            if (code == null || row.fiscalYear() < LIST_FROM.getYear()) {
+                continue;
+            }
+            for (String endpoint : MATERIAL_ENDPOINTS) {
+                if (!("stockTotqySttus".equals(endpoint) && "11011".equals(code))) {
+                    wanted.add(row.fiscalYear() + "/" + code + "/" + endpoint);
+                }
+            }
+        }
+        wanted.removeAll(have);
+        int got = 0;
+        for (String key : wanted) {
+            if (fetchBudget.get() <= 0) {
+                break;
+            }
+            String[] k = key.split("/");
+            fetchBudget.decrementAndGet();
+            store.recordMaterial(stockId, Integer.parseInt(k[0]), k[1], k[2], dart.reportTable(k[2], corpCode, Integer.parseInt(k[0]), k[1]));
+            got++;
+        }
+        return got;
+    }
+
+    private static String reportCode(String fiscalPeriod) {
+        return switch (fiscalPeriod) {
+            case "Q1" -> "11013";
+            case "Q2" -> "11012";
+            case "Q3" -> "11014";
+            case "FY" -> "11011";
+            default -> null;
+        };
     }
 
     /** 재무 행 판 하나의 짝 — 같은 (사업연도, 보고서 코드) · 같은 날 판 중 가장 늦은 접수번호. 없으면 {@code null}. */

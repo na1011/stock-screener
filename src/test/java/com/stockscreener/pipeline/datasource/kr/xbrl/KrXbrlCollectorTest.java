@@ -31,6 +31,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
@@ -131,6 +132,32 @@ class KrXbrlCollectorTest {
                 target.stockId())).isEqualTo("NO_DATA");
         verify(client, times(2)).shareTotals("00000001", 2025);
         verify(client, times(1)).shareTotals("00000001", 2024);
+    }
+
+    @Test
+    @DisplayName("국내 관문 켬: 행이 있는 보고서마다 주식수 표 셋을 받는다(사업보고서 주식총수는 명부가 든다) · 다시 안 받는다 · 꺼짐은 안 받는다")
+    void collectsShareMaterialOnlyWhenGated() throws Exception {
+        when(client.original(HALF)).thenReturn(Optional.of(new DartXbrlClient.Original(INSTANCE.getBytes(StandardCharsets.UTF_8), null)));
+        when(client.original(ANNUAL)).thenReturn(Optional.empty());
+        when(client.reportTable(anyString(), eq("00000001"), anyInt(), anyString())).thenReturn(List.of());
+        when(client.reportTable("irdsSttus", "00000001", 2025, "11012")).thenReturn(List.of(new ObjectMapper().readTree(
+                "{\"rcept_no\":\"20250814000001\",\"corp_code\":\"00000001\",\"isu_dcrs_de\":\"2025.05.02\",\"isu_dcrs_stle\":\"유상증자(제3자배정)\","
+                        + "\"isu_dcrs_stock_knd\":\"보통주\",\"isu_dcrs_qy\":\"1,000\"}")));
+
+        KrXbrlCollector.Collected off = collector.collect(target, TODAY, new AtomicInteger(10));
+        collector.krGate(true);
+        KrXbrlCollector.Collected on = collector.collect(target, TODAY, new AtomicInteger(10));
+        KrXbrlCollector.Collected again = collector.collect(target, TODAY, new AtomicInteger(10));
+
+        assertThat(off.materials()).isZero();
+        assertThat(on.materials()).as("반기 셋 + 사업보고서 둘").isEqualTo(5);
+        assertThat(again.materials()).isZero();
+        verify(client, times(0)).reportTable("stockTotqySttus", "00000001", 2025, "11011");
+        KrXbrlStore.ShareMaterial irds = store.shareMaterial(target.stockId()).getFirst();
+        assertThat(irds.endpoint()).isEqualTo("irdsSttus");
+        assertThat(irds.rceptNo()).isEqualTo("20250814000001");
+        assertThat(irds.rows().getFirst().path("isu_dcrs_qy").asString()).isEqualTo("1,000");
+        assertThat(irds.rows().getFirst().has("corp_code")).isFalse();
     }
 
     @Test
