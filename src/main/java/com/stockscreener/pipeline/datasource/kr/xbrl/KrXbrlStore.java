@@ -169,8 +169,19 @@ public class KrXbrlStore {
                 latestRceptNo);
     }
 
+    /**
+     * 다시 묻지 않을 명부 해 — 받은 명부와, 받은 뒤로 그 해 사업보고서가 목록에 안 오른 「없음」. 사업보고서 전에 물은 「없음」(1~3월에 앞 해를
+     * 물으면 원장이 {@code 013}을 준다)을 영구로 두면 그 해 행 전부가 앞 해 명부를 잃는다 — 그 해 사업보고서가 그 「없음」 뒤 날짜로 목록에 오르면
+     * 다시 묻는다(계획 K3 반증 · 2027-01-02 첫 정기 실행이 2026 명부를 그렇게 물을 차례였다).
+     */
     public List<Integer> registerYears(long stockId) {
-        return jdbc.queryForList("SELECT bsns_year FROM kr_share_register WHERE stock_id = ? ORDER BY 1", Integer.class, stockId);
+        return jdbc.queryForList("""
+                SELECT r.bsns_year FROM kr_share_register r
+                 WHERE r.stock_id = ?
+                   AND NOT (r.status = 'NO_DATA' AND EXISTS (SELECT 1 FROM kr_report_xbrl x WHERE x.stock_id = r.stock_id
+                            AND x.bsns_year = r.bsns_year AND x.reprt_code = '11011' AND x.rcept_date >= r.fetched_at::date))
+                 ORDER BY 1
+                """, Integer.class, stockId);
     }
 
     public void recordRegister(long stockId, int bsnsYear, List<JsonNode> rows) {

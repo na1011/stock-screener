@@ -111,6 +111,29 @@ class KrXbrlCollectorTest {
     }
 
     @Test
+    @DisplayName("사업보고서 전에 물어 「없음」이 된 명부 해는 그 해 사업보고서가 목록에 오르면 다시 묻는다 · 그 뒤의 「없음」은 다시 안 묻는다")
+    void asksAgainForARegisterAnsweredBeforeItsAnnualReport() throws Exception {
+        when(client.original(HALF)).thenReturn(Optional.of(new DartXbrlClient.Original(INSTANCE.getBytes(StandardCharsets.UTF_8), null)));
+        when(client.original(ANNUAL)).thenReturn(Optional.empty());
+        collector.collect(target, TODAY, new AtomicInteger(10));
+        // 2025 명부를 사업보고서(2026-03-10) 전에 물어 「없음」을 받은 꼴 — 2026-01-02에 받았다.
+        jdbc.update("UPDATE kr_share_register SET status = 'NO_DATA', rows = NULL, rcept_no = NULL, record_date = NULL,"
+                + " fetched_at = TIMESTAMPTZ '2026-01-02 14:00+09' WHERE stock_id = ? AND bsns_year = 2025", target.stockId());
+        // 대조군 — 2024 「없음」은 그 해 사업보고서가 목록에 없으니 다시 안 묻는다.
+        jdbc.update("UPDATE kr_share_register SET status = 'NO_DATA', rows = NULL, rcept_no = NULL, record_date = NULL"
+                + " WHERE stock_id = ? AND bsns_year = 2024", target.stockId());
+
+        collector.collect(target, TODAY, new AtomicInteger(10));
+
+        assertThat(jdbc.queryForObject("SELECT status FROM kr_share_register WHERE stock_id = ? AND bsns_year = 2025", String.class,
+                target.stockId())).isEqualTo("OK");
+        assertThat(jdbc.queryForObject("SELECT status FROM kr_share_register WHERE stock_id = ? AND bsns_year = 2024", String.class,
+                target.stockId())).isEqualTo("NO_DATA");
+        verify(client, times(2)).shareTotals("00000001", 2025);
+        verify(client, times(1)).shareTotals("00000001", 2024);
+    }
+
+    @Test
     @DisplayName("이미 받은 판은 다시 안 받는다 · 캐시에 원본이 있으면 외부 0콜로 다시 판독한다")
     void reusesStoredAndCachedMaterial() throws Exception {
         when(client.original(HALF)).thenReturn(Optional.of(new DartXbrlClient.Original(INSTANCE.getBytes(StandardCharsets.UTF_8), null)));
