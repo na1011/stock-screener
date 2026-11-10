@@ -596,7 +596,7 @@ public class BootstrapRunner implements ApplicationRunner {
             // stock-fold 전용(새 행 후보의 생성 시각 하한 · ISO 오프셋 시각) · sec-cik-bind 전용(손 후보 티커:CIK,…).
             "since", "ciks",
             // earnings-release 전용(시장별 과거 훑기 상한 · ADR-0195) · kr-xbrl-collect 전용(새로 받기 상한 · ADR-0192).
-            "sweep-limit", "max-fetches", "day-limit");
+            "sweep-limit", "max-fetches", "day-limit", "fetch-limit");
 
     /**
      * {@code --universe}가 뜻을 갖는 잡. 나머지에서는 조용히 무시되므로 거절한다.

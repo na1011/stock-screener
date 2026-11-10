@@ -104,7 +104,9 @@ public class StockFold {
             // 실적 발표(V69_6 · ADR-0195) — 같은 시장의 같은 접수번호는 같은 원장 사실이다. 훑기 표지는 종목당 하나 — T에 있으면 T 것을
             // 남기고, 없으면 S 것이 T로 간다(같은 증권이라 같은 이력이다 · 모자라면 다음 훑기가 아니라 일일 목록이 잇는다).
             new Rule("earnings_release", List.of("market", "filing_no"), List.of(), OnConflict.DROP_SOURCE),
-            new Rule("earnings_release_sweep", List.of(), List.of(), OnConflict.DROP_SOURCE));
+            new Rule("earnings_release_sweep", List.of(), List.of(), OnConflict.DROP_SOURCE),
+            // 실적 발표 공시 본문 해석(관문 마이그레이션 V70_14 · ADR-0206) — 같은 접수번호는 같은 본문이다(캐시에서 다시 읽는다).
+            new Rule("kr_provisional_release", List.of("rcept_no"), List.of(), OnConflict.DROP_SOURCE));
 
     /** 따로 다루는 표 + S와 함께 지워도 되는 표(S의 기호 시대 — 접힌 S에는 없다 · 있어도 T가 새로 쓴다). */
     static final Set<String> SPECIAL = Set.of("universe_membership", "financial_statement", "stock_symbol_era");
