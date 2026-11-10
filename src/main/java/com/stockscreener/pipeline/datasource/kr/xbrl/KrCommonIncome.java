@@ -192,7 +192,14 @@ public final class KrCommonIncome {
          * 그대로(2026-10-25). 지금은 E 판정이 실패하면 분모까지 비웠다(작은 DB FY 판정 실패 962행) · 신종자본 행은 보통주 몫 + 우선주 몫으로 지었다.
          * 흐름을 모르면 그 분모 그대로다.
          */
-        PAY
+        PAY,
+        /**
+         * 같은 판 보통주 귀속 손익(계획 K2 · C17) — 상충(E 또는 W 후보 여럿)이 C1로 안 풀리면, 같은 판 「보통주 귀속 손익」
+         * ({@code ProfitLossAttributableToOrdinaryEquityHoldersOfParentEntity})이 본문 지배 NI와 항등식으로 서는 한 벌을 고르고(주석이 같은 맥락에 앞 기간
+         * 값을 함께 실은 판 — 하이트진로 · 대덕전자), 그 값과 E × W가 닫히는 E가 한 값이면 보통주 몫 = 그 원장 값(갈래 {@code direct}). 같은 산수를 E · W가
+         * 하나인 지분상품 행 477에 태워 전부 E × W와 같다.
+         */
+        C17
     }
 
     /** {@link Rule#CMP}의 재료 — 그 행 판보다 뒤에 접수된 판 하나(접수번호 · 접수일 · 재료 · 재료가 없으면 {@code null}). */
@@ -430,6 +437,75 @@ public final class KrCommonIncome {
         return judged;
     }
 
+    /**
+     * {@link Rule#C17} — 같은 판 「보통주 귀속 손익」 d가 둘 이상이면 본문 지배 NI와 항등식(d + 참가지분상품 몫 = 지배 NI · 몫은 원장 줄(천 원 안)
+     * 또는 참가 EPS × 참가 W(반 주 폭))으로 서는 하나, 하나뿐이면 그것 — 그 d와 E × W가 W 안(원 미만 절사가 있다 · 하이트진로 546.52 → 546)에서
+     * 닫히는 E가 한 값이면 d. 아니면 {@code null}.
+     */
+    private static BigDecimal directCommon(Material m, Period period, BigDecimal income, Set<BigDecimal> e, Set<BigDecimal> w) {
+        Set<BigDecimal> direct = new LinkedHashSet<>();
+        List<BigDecimal> parts = new ArrayList<>();
+        List<BigDecimal> tolerances = new ArrayList<>();
+        Set<BigDecimal> partEps = new LinkedHashSet<>();
+        Set<BigDecimal> partWeighted = new LinkedHashSet<>();
+        for (Fact f : m.facts()) {
+            if (f.source() != Source.IFRS || !period.start().equals(f.start()) || !period.end().equals(f.end())) {
+                continue;
+            }
+            boolean standard = f.members().stream().noneMatch(mb -> mb.source() == Source.ENTITY);
+            if (DIRECT.equals(f.concept()) && standard && f.members().stream().allMatch(mb -> COMMON_MEMBERS.contains(mb.member()))) {
+                direct.add(normalized(f.value()));
+            } else if (PART_PROFIT.equals(f.concept()) && standard) {
+                parts.add(normalized(f.value()));
+                tolerances.add(THOUSAND);
+            } else if (PREF_EPS_IFRS.equals(f.concept())) {
+                partEps.add(normalized(f.value()));
+            } else if (PART_WEIGHTED.equals(f.concept())) {
+                partWeighted.add(normalized(f.value()));
+            }
+        }
+        if (direct.isEmpty()) {
+            return null;
+        }
+        if (direct.size() > 1) {
+            if (partWeighted.size() == 1) {
+                BigDecimal wp = partWeighted.iterator().next();
+                for (BigDecimal x : partEps) {
+                    parts.add(x.multiply(wp));
+                    tolerances.add(HALF.multiply(wp).add(THOUSAND));
+                }
+            }
+            Set<BigDecimal> standing = new LinkedHashSet<>();
+            for (BigDecimal d : direct) {
+                for (int i = 0; i < parts.size(); i++) {
+                    if (d.add(parts.get(i)).subtract(income).abs().compareTo(tolerances.get(i)) <= 0) {
+                        standing.add(d);
+                    }
+                }
+            }
+            direct = standing;
+            if (direct.size() != 1) {
+                return null;
+            }
+        }
+        BigDecimal d = direct.iterator().next();
+        Set<BigDecimal> closing = new LinkedHashSet<>();
+        for (BigDecimal x : e) {
+            for (BigDecimal y : w) {
+                if (d.subtract(x.multiply(y)).abs().compareTo(y.abs()) < 0) {
+                    closing.add(x);
+                }
+            }
+        }
+        return closing.size() == 1 ? d : null;
+    }
+
+    private static final BigDecimal THOUSAND = BigDecimal.valueOf(1000);
+    private static final String PART_PROFIT =
+            "ProfitLossAttributableToParticipatingEquityInstrumentsOtherThanOrdinarySharesUsedInCalculatingBasicEarningsLossPerInstrument";
+    private static final String PART_WEIGHTED =
+            "WeightedAverageNumberOfInstrumentsUsedInCalculatingBasicEarningsLossPerInstrumentParticipatingEquityInstrumentsOtherThanOrdinaryShares";
+
     /** {@link Rule#R1P}의 보통주 몫 — 닫히는 후보가 값으로 하나가 아니면 {@code null}. */
     private static BigDecimal allocated(Material m, NcContext nc, Period period, BigDecimal income, BigDecimal eps, BigDecimal shares,
                                         Register reference, boolean hybrid, Multiple multiple) {
@@ -521,6 +597,11 @@ public final class KrCommonIncome {
         if (e.size() > 1 || w.size() > 1) {
             BigDecimal[] pair = rules.has(Rule.C1) ? resolveConflict(income, e, w, instruments, m, period) : null;
             if (pair == null) {
+                BigDecimal direct = rules.has(Rule.C17) ? directCommon(m, period, income, e, w) : null;
+                if (direct != null) {
+                    Payout payout = payout(hybrid, income, direct, m, period, prior, same, multiple);
+                    return decided("direct", direct, 'T', anchor.statement(), null, payout.base(), payout.branch(), false);
+                }
                 return Judged.none("conflict", anchor.statement());
             }
             e = Set.of(pair[0]);

@@ -202,6 +202,30 @@ class KrCommonIncomeTest {
     }
 
     @Test
+    void c17PicksTheOrdinaryShareProfitTheParentIncomeIdentityStands() {
+        // 하이트진로 2025 Q1 꼴 — 우선주가 있고 주석이 같은 맥락에 두 벌을 실었다: (보통주 귀속 431.2억 · 참가지분 7.3억 · E 630) · (373.8억 · 6.3억 ·
+        // E 546 = 본문). 본문 지배 NI 380.1억 = 373.8억 + 6.3억 — 그 벌의 보통주 귀속이 E 546 × W와 W 안에서 닫힌다(원 미만 절사).
+        Member reported = new Member("CarryingAmountAccumulatedDepreciationAmortisationAndImpairmentAndGrossCarryingAmountAxis", "ReportedAmountMember",
+                Source.IFRS);
+        Fact[] facts = {owners(38_013_778_889L), eps(546), eps(630), weighted(68_401_345),
+                fact(Source.IFRS, "ProfitLossAttributableToOrdinaryEquityHoldersOfParentEntity", Q2, List.of(reported), 43_120_822_806L),
+                fact(Source.IFRS, "ProfitLossAttributableToOrdinaryEquityHoldersOfParentEntity", Q2, List.of(reported), 37_382_533_270L),
+                fact(Source.IFRS, "ProfitLossAttributableToParticipatingEquityInstrumentsOtherThanOrdinarySharesUsedInCalculatingBasicEarningsLossPerInstrument",
+                        Q2, List.of(reported), 728_550_254L),
+                fact(Source.IFRS, "ProfitLossAttributableToParticipatingEquityInstrumentsOtherThanOrdinarySharesUsedInCalculatingBasicEarningsLossPerInstrument",
+                        Q2, List.of(reported), 631_245_619L)};
+        Judged off = judge(rowNi(38_013_778_889L), WITH_PREFERRED, facts);
+        Judged on = judgeV4(rowNi(38_013_778_889L), WITH_PREFERRED, facts);
+        // 대조군 — 항등식이 두 벌 다 안 서면(본문 지배 NI가 다르면) 고르지 않는다.
+        Judged neither = judgeV4(rowNi(39_000_000_000L), WITH_PREFERRED, facts);
+
+        assertThat(off.branch()).as("꺼짐 — 지금 동작").isEqualTo("none:conflict");
+        assertThat(on.branch()).isEqualTo("direct");
+        assertThat(on.common()).isEqualByComparingTo("37382533270");
+        assertThat(neither.branch()).isNotEqualTo("direct");
+    }
+
+    @Test
     void c1PicksTheClosingPairWhenTheLedgerCarriesTwoEps() {
         // 지분상품 없음 · 기본 EPS 개념에 1,000원과 950원이 함께 실렸다 · W 1,000만 — 1,000 × W만 지배 NI 100억과 0.5W 안에서 닫힌다(국내 관문 켬 C1).
         Judged off = judge(rowNi(10_000_000_000L), COMMON_ONLY, owners(10_000_000_000L), eps(1000), eps(950), weighted(10_000_000));
