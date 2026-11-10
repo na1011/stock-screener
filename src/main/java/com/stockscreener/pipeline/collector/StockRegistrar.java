@@ -779,6 +779,7 @@ public class StockRegistrar {
                 JOIN stock s ON s.id = m.stock_id
                 JOIN universe u ON u.code = m.universe_code AND u.is_active
                 WHERE s.market_code IN ('KOSPI', 'KOSDAQ') AND s.is_active
+                  -- 시대 무관: 보존 창 편입 — 창 안 과거 날짜의 지표가 결산월 · 업종을 읽어 닫힌 편입도 대상이다(국내 행은 시대 칸이 없다)
                   AND (m.effective_to IS NULL OR m.effective_to >= (SELECT min(trade_date) FROM indicator_trade_date
                                                                      WHERE market_code IN ('KOSPI', 'KOSDAQ')))
                   AND (s.industry_code IS NULL OR s.accounting_month IS NULL)
