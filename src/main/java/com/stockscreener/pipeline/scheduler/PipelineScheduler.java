@@ -102,6 +102,14 @@ public class PipelineScheduler {
     void krFilingTimeJob(com.stockscreener.pipeline.batch.KrFilingTimeJob job) {
         this.krFilingTimeJob = job;
     }
+
+    /** 국내 실적 발표 공시 본문(잠정실적) — 생성자를 시험이 직접 부르므로 주입으로 단다(없으면 건너뛴다). */
+    private com.stockscreener.pipeline.batch.KrProvisionalJob krProvisionalJob;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void krProvisionalJob(com.stockscreener.pipeline.batch.KrProvisionalJob job) {
+        this.krProvisionalJob = job;
+    }
     private final FilingConsumptionJob filingConsumptionJob;
     private final FreshnessCatchUpJob freshnessCatchUpJob;
     private final com.stockscreener.pipeline.batch.KrXbrlCollectJob krXbrlCollectJob;
@@ -269,6 +277,19 @@ public class PipelineScheduler {
                                 com.stockscreener.pipeline.batch.KrFilingTimeJob.SCHEDULED_DAY_LIMIT);
                     } catch (BatchShutdownException e) {
                         log.info("일일 갱신 앞 게시 시각 받기가 종료로 중단됐다. today={} — 일일 갱신을 시작하지 않는다.", today);
+                        return;
+                    } catch (RuntimeException e) {
+                        held = keepFirst(held, e);
+                    }
+                }
+                // 국내 실적 발표 공시 본문(잠정실적) — 게시 시각 뒤(잠정 행이 보이는 날을 그 시각으로 짓는다) · 일일 갱신 앞(일일 갱신이 그
+                // 해석으로 잠정 행과 실적 발표 판정을 짓는다). 관문 전에는 캐시만 쌓는다.
+                if (krProvisionalJob != null) {
+                    try {
+                        krProvisionalJob.run(today, BatchExecutionRecorder.TriggeredBy.SCHEDULER,
+                                com.stockscreener.pipeline.batch.KrProvisionalJob.SCHEDULED_FETCH_LIMIT);
+                    } catch (BatchShutdownException e) {
+                        log.info("일일 갱신 앞 공시 본문 받기가 종료로 중단됐다. today={} — 일일 갱신을 시작하지 않는다.", today);
                         return;
                     } catch (RuntimeException e) {
                         held = keepFirst(held, e);

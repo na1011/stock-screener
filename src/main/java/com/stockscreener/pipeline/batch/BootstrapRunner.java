@@ -202,6 +202,14 @@ public class BootstrapRunner implements ApplicationRunner {
     void krFilingTimeJob(KrFilingTimeJob job) {
         this.krFilingTimeJob = job;
     }
+
+    /** 국내 실적 발표 공시 본문(잠정실적) — 생성자를 시험이 직접 부르므로 주입으로 단다. */
+    private KrProvisionalJob krProvisionalJob;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    void krProvisionalJob(KrProvisionalJob job) {
+        this.krProvisionalJob = job;
+    }
     private final BatchExecutionSweeper executionSweeper;
     private final ConfigurableApplicationContext context;
 
@@ -440,6 +448,10 @@ public class BootstrapRunner implements ApplicationRunner {
             // 국내 공시 게시 시각(ADR-0204) — DART 웹 「오늘의 공시」를 캐시에 받고, 국내 관문 켬이면 관문 표에 올린다. 재무 값은 안 바꾼다.
             case "kr-filing-time" -> krFilingTimeJob.run(asOf, BatchExecutionRecorder.TriggeredBy.MANUAL,
                     integer(args, "day-limit", Integer.MAX_VALUE));
+            // 국내 실적 발표 공시 본문(잠정실적 I002 · 손익구조 I001) — DART 웹 뷰어 원문을 캐시에 받고, 국내 잠정 관문 켬이면 해석해 관문 표에
+            // 올린다. 관문 전에는 캐시만 쌓는다(값을 안 바꾼다). --fetch-limit 기본은 상한 없음(관문 앞 밀린 과거 비우기).
+            case "kr-provisional" -> krProvisionalJob.run(asOf, BatchExecutionRecorder.TriggeredBy.MANUAL,
+                    integer(args, "fetch-limit", Integer.MAX_VALUE));
             case "kr-xbrl-collect" -> krXbrlCollectJob.run(asOf, BatchExecutionRecorder.TriggeredBy.MANUAL, csv(args, "tickers"),
                     optionalInteger(args, "max-fetches"));
             // 외부 호출이 0이다. 유도 규칙을 고친 뒤 이것만 다시 돌린다.
