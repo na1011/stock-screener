@@ -116,6 +116,23 @@ class KrCommonIncomeTest {
     }
 
     @Test
+    void hyIgnoresHybridEvidenceLeftOnlyInThePriorColumnAfterRepayment() {
+        // 신종자본을 앞 해에 갚아 그 판의 앞 열에만 상환 줄이 남았다(포스코인터내셔널 2025 FY 꼴) — 당기 열에 증거가 없으면 지분상품 있음이 아니다(국내 관문 켬 HY).
+        Fact repaid = fact(Source.DART, "RepaymentOfHybridBond", new Period(LocalDate.of(2025, 1, 1), LocalDate.of(2025, 12, 31)), List.of(),
+                140_000_000_000L);
+        Judged off = judge(rowNi(10_000_000_000L), COMMON_ONLY, owners(10_000_000_000L), eps(1000), weighted(10_000_000), repaid);
+        Judged on = judgeV4(rowNi(10_000_000_000L), COMMON_ONLY, owners(10_000_000_000L), eps(1000), weighted(10_000_000), repaid);
+        // 대조군 — 당기 열에 신종자본 이자가 있으면 그대로 지분상품 있음이다.
+        Judged current = judgeV4(rowNi(10_000_000_000L), COMMON_ONLY, owners(10_000_000_000L), eps(1000), weighted(10_000_000), repaid,
+                fact(Source.DART, "InterestExpenseForHybridBond", Q2, List.of(), 1_000_000_000L));
+
+        assertThat(off.branch()).as("꺼짐 — 지금 동작").isEqualTo("exw");
+        assertThat(on.branch()).isEqualTo("kr-ni");
+        assertThat(on.payoutBranch()).isEqualTo("ni");
+        assertThat(current.branch()).isEqualTo("exw");
+    }
+
+    @Test
     void ncTakesTheConsolidatedIncomeWhenEquityShowsNoNoncontrollingInterest() {
         // 행 지배 NI가 빈 연결 행 — 연결 순이익 100억 · 기초(03-31) · 기말(06-30) 자본총계 = 지배 자본 · 비지배 손익 줄 없음(국내 관문 켬 NC-b).
         RowIncome row = new RowIncome(null, BigDecimal.valueOf(10_000_000_000L));

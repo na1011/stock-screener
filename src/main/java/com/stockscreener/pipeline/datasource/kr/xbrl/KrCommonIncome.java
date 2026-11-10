@@ -104,7 +104,12 @@ public final class KrCommonIncome {
          * 롯데지주 2026 Q1), 여럿이면 지배 NI와 부호가 같은 것만 남긴다(두산 2025 FY ±4,230 · 같은 것이 없으면 그대로). 0은 안 거른다.
          * 계속영업 E · 누계 E에는 안 건다 — 맞댈 지배 NI가 같은 기저가 아니다.
          */
-        SIGN
+        SIGN,
+        /**
+         * 갚은 신종자본 — 신종자본 증거가 그 판의 당기 열(사실 끝이 사업연도 시작 뒤 · 또는 기간 끝 시점)에 하나도 없고 앞 열에 상환({@code Repayment})
+         * 개념이 있으면 신종자본 증거로 안 센다(전년 비교열에만 남은 상환 줄이 지분상품 있음을 만들어 멀쩡한 행이 E × W로 갔다 · 계획 HY-b).
+         */
+        HY
     }
 
     /**
@@ -223,6 +228,9 @@ public final class KrCommonIncome {
         }
         Material m = new Material(facts, anchor.bases());
         boolean hybrid = m.hybrid();
+        if (hybrid && rules.has(Rule.HY) && m.hybridRepaidBefore(fiscalStart(facts, period), period.end())) {
+            hybrid = false;
+        }
         boolean instruments = hybrid || m.preferenceConcepts() || (prior != null && prior.multiClass())
                 || (same != null && same.multiClass());
         BigDecimal income = anchor.income();
@@ -656,6 +664,17 @@ public final class KrCommonIncome {
         return out;
     }
 
+    /** 그 판의 사업연도 시작 — 기간 끝이 같은 기간 사실 중 가장 이른 시작(누계 열 · 거르지 않은 전체 사실). 없으면 기간 시작. */
+    private static LocalDate fiscalStart(List<Fact> facts, Period period) {
+        LocalDate start = null;
+        for (Fact f : facts) {
+            if (f.start() != null && period.end().equals(f.end()) && (start == null || f.start().isBefore(start))) {
+                start = f.start();
+            }
+        }
+        return start != null ? start : period.start();
+    }
+
     /** {@link Rule#SIGN}으로 거른 총 E 후보. */
     private static Set<BigDecimal> signed(Set<BigDecimal> e, BigDecimal income) {
         Set<BigDecimal> kept = new LinkedHashSet<>();
@@ -772,12 +791,31 @@ public final class KrCommonIncome {
         /** 신종자본증권 증거 — DART 표준 개념 중 이름에 {@code Hybrid}가 든 것의 0 아닌 값(비지배 구성원 맥락 밖 · 기간 무관). */
         boolean hybrid() {
             for (Fact f : facts) {
-                if (f.source() == Source.DART && f.concept().contains("Hybrid") && f.value().signum() != 0
-                        && f.members().stream().noneMatch(mb -> "NonControllingInterestsMember".equals(mb.member()))) {
+                if (hybridEvidence(f)) {
                     return true;
                 }
             }
             return false;
+        }
+
+        /** {@link Rule#HY} — 신종자본 증거가 당기 열에 없고 앞 열에 상환 개념이 있는가. */
+        boolean hybridRepaidBefore(LocalDate fiscalStart, LocalDate end) {
+            boolean repayment = false;
+            for (Fact f : facts) {
+                if (!hybridEvidence(f)) {
+                    continue;
+                }
+                if (f.end().isAfter(fiscalStart) || f.instant() && f.end().equals(end)) {
+                    return false;
+                }
+                repayment |= f.concept().contains("Repayment");
+            }
+            return repayment;
+        }
+
+        private static boolean hybridEvidence(Fact f) {
+            return f.source() == Source.DART && f.concept().contains("Hybrid") && f.value().signum() != 0
+                    && f.members().stream().noneMatch(mb -> "NonControllingInterestsMember".equals(mb.member()));
         }
 
         /** 표준 우선 개념의 0 아닌 값 — 보통주 밖 주식의 증거(기간 무관). */
