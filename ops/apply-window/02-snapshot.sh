@@ -21,11 +21,12 @@ export_q "select stock_id, count(*) from indicator_value where indicator_code='A
 export_q "select trade_date, indicator_code, count(*) from indicator_value where indicator_code like '%\_PCTL' and indicator_code not like '%\_SECTOR\_PCTL' group by 1,2" $OUT/pctl-counts.tsv
 export_q "select trade_date, indicator_code, count(*) from indicator_value where indicator_code not like '%\_PCTL' and indicator_code not like '%\_SECTOR\_%' group by 1,2" $OUT/base-counts.tsv
 q $DB "select md5(string_agg((f.*)::text, '|' order by f.id)) from financial_statement f join stock s on s.id=f.stock_id where s.market_code in ('KOSPI','KOSDAQ')" > $OUT/kr-fs-hash.txt
+q $DB "select md5(string_agg((f.*)::text, '|' order by f.id)) from financial_statement f join stock s on s.id=f.stock_id where s.market_code = 'US'" > $OUT/us-fs-hash.txt
 PGOPTIONS='-c statement_timeout=120s -c default_transaction_read_only=on' command psql -d $DB -v ON_ERROR_STOP=1 -At -F $'\t' -f $SCRIPTS/a2.sql > $OUT/a2.txt || die "a2 실패"
 [ "$(grep -c . $OUT/a2.txt)" -eq 2 ] || die "a2 결과가 2줄이 아니다"
 # 펜스 — 세션 훅의 붙잡는 갈래로 전제 전부를 그 DB에서 돈다(러너를 새로 만들지 않는다 · 참·발견·무판정을 전제마다 적는다).
 (cd "$REPO" && PREMISE_CAPTURE=$OUT/fences.tsv PREMISE_DB=$DB PREMISE_STATEMENT_TIMEOUT=120 bash .claude/hooks/check-premises.sh </dev/null > $OUT/fences.log 2>&1) || true
 [ -s $OUT/fences.tsv ] || die "펜스 캡처가 비었다 — $OUT/fences.log"
 cut -f1,3- $OUT/fences.tsv | sort > $OUT/fences-cmp.tsv   # 초 열을 뺀 대조용
-for f in groups.tsv fs.tsv stock-market.tsv membership.tsv adjclose-counts.tsv pctl-counts.tsv base-counts.tsv kr-fs-hash.txt fences-cmp.tsv; do [ -s $OUT/$f ] || die "${f}가 비었다"; done
+for f in groups.tsv fs.tsv stock-market.tsv membership.tsv adjclose-counts.tsv pctl-counts.tsv base-counts.tsv kr-fs-hash.txt us-fs-hash.txt fences-cmp.tsv; do [ -s $OUT/$f ] || die "${f}가 비었다"; done
 echo "OK $OUT · 펜스 $(grep -c . $OUT/fences.tsv)개(무판정 $(cut -f3 $OUT/fences.tsv | grep -c '^\(\[DB 무관\] \)\?<' || true))"
