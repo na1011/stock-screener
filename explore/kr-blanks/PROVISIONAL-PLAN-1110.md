@@ -26,7 +26,7 @@
 - `FinancialMath.financialsAt`(→ `byPublication` · `bySegment`) — 여기서 새 기간 행을 더한다.
 - `ValuationHistory.java:102-104` — **따로** `withheldAt` → `withoutFinancials`를 부른다. 같은 함수로 바꿔야 5년 중앙값 표본이 갈리지 않는다.
 - `FinancialBasisReader.java:172-173` — 화면 기준 줄 · 결과 행 「새 실적」 · 워치리스트 보류(`WatchlistAlertRunner.evaluateScreen`)가 이 상태를 읽는다. 상태에 「잠정」을 더하고, 워치리스트 보류는 「그 조건의 지표가 null」로 이미 판정 불가가 되므로 그대로 선다(시험으로 확인).
-- `GovernanceMath.java:221` — 연도를 명시한 FY 짝짓기는 막기 예외 · 새 기간 행과 무관(FY 행만 읽는다 · 잠정 FY 행은 그 해 FY 라벨이라 배당성향 분모가 잠정 지배 순이익이 된다 — **반증 대상**).
+- `GovernanceMath.java:221` · 배당성향 · 임원보수 비율 — `visibleAt`을 직접 쓰는 막기 예외라 새 기간 행이 닿지 않는다(점검 #42 · #43). 잠정 FY 행이 배당성향 분모가 되지 않는다.
 
 ## 점검(44개 계산기 · 2026-11-10 · 읽기)에서 손볼 자리
 - `PbrMedian5yCalculator`의 창 전체 기저 판정이 봉 사본이 아닌 바깥 컨텍스트에서 돈다 — 새 기간 행(지배 자본 null)이 5년 기저를 뒤집는다. 계획 K11(같은 뿌리)과 함께 고친다: 봉 사본마다 판정.
