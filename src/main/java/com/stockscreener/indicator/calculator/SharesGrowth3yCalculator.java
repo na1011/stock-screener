@@ -95,6 +95,12 @@ public class SharesGrowth3yCalculator implements IndicatorCalculator {
         return CODE;
     }
 
+    /** 재무에서 주식수만 읽는다(입구 {@code FinancialMath.sharesBySegment}). */
+    @Override
+    public boolean readsSharesOnly() {
+        return true;
+    }
+
     @Override
     public DataRequirement dataRequirement() {
         // MUST NOT: 재무를 선언하지 않는다 — 사유는 MarketCapCalculator와 같다(ADR-0097).

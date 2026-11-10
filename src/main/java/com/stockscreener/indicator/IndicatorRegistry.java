@@ -173,6 +173,23 @@ public class IndicatorRegistry {
                 .orElse(0);
     }
 
+    /**
+     * 그 지표가 재무제표의 손익 · 재무상태 · 현금흐름을 읽는가 — 새 실적 발표로 막히고 잠정실적으로 다시 서는 지표다(ADR-0195 · 종목 상세의
+     * 「대기」 · 「잠정」 표지). 재무를 선언하고 주식수만 읽는 계산기가 아니거나({@link IndicatorCalculator#readsSharesOnly}), 그런 지표에
+     * 기대면 참이다. 등록되지 않은 코드는 거짓이다.
+     */
+    public boolean readsFinancialStatements(String code) {
+        IndicatorCalculator calculator = byCode.get(code);
+        if (calculator == null) {
+            return false;
+        }
+        DataRequirement requirement = calculator.dataRequirement();
+        if (requirement.financialYearsNeeded() > 0 && !calculator.readsSharesOnly()) {
+            return true;
+        }
+        return requirement.dependsOn().stream().anyMatch(this::readsFinancialStatements);
+    }
+
     /** 모든 지표를 계산하기 위해 읽어야 하는 최대 재무 연수. */
     public int maxFinancialYears() {
         return byCode.values().stream()

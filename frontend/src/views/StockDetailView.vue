@@ -154,6 +154,8 @@ const conditionRows = computed(() => {
         // 때문에 빠뜨리기 쉬운데, 빠뜨리면 같은 화면 위아래에 사유 있는 `—`와 없는 `—`가
         // 함께 뜬다. ADR-0058이 허용한 중복은 같은 내용의 중복이다.
         unavailableReason: indicator.unavailableReason,
+        basisTag: indicator.basisTag,
+        basisNote: indicator.basisNote,
       }
     }
     // 값이 없다. 이름·단위는 카탈로그에서 오고, 카탈로그에도 없으면(폐기된 지표를 조건에
@@ -170,6 +172,8 @@ const conditionRows = computed(() => {
       // 응답에 아예 없는 지표다. 서버가 사유를 말할 수 있었다면 위 가지로 왔을 것이므로
       // 여기서는 지어내지 않는다.
       unavailableReason: null,
+      basisTag: null,
+      basisNote: null,
     }
   })
 })
@@ -287,6 +291,8 @@ onMounted(() => {
                 :parts="row.parts"
                 :reading="row.reading"
                 :unavailable-reason="row.unavailableReason"
+                :basis-tag="row.basisTag"
+                :basis-note="row.basisNote"
               />
             </ul>
           </section>
@@ -305,6 +311,8 @@ onMounted(() => {
                 :parts="row.parts"
                 :reading="row.reading"
                 :unavailable-reason="row.indicator.unavailableReason"
+                :basis-tag="row.indicator.basisTag"
+                :basis-note="row.indicator.basisNote"
               />
             </ul>
           </section>

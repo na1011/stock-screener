@@ -104,9 +104,14 @@
     ],
     "FinancialBasisStatus": [
       "PENDING",
+      "PROVISIONAL",
       "SPIN_OFF",
       "NONE",
       "UNTRACKED"
+    ],
+    "IndicatorBasisTag": [
+      "WAITING",
+      "PROVISIONAL"
     ],
     "FinancialBasisUntracked": [
       "FOREIGN_ISSUER",

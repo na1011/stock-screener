@@ -144,7 +144,7 @@ public record ScreeningResponse(
      * @param close    기준일 원주가 종가. 사용자가 실제로 지불하는 가격이다.
      * @param outcomes 조건별 판정. frontend.md가 요구하는 "왜 이 종목이 선정되었는지"다.
      * @param financialBasis 지표가 쓴 재무 기준과 그보다 새로운 실적 발표 여부(ADR-0195). 재무가 하나도 안 보이면 null이다.
-     *                 화면은 PENDING일 때만 결과 행에 표시를 단다 — 판정은 서버가 했다
+     *                 화면은 PENDING · PROVISIONAL일 때만 결과 행에 표시를 단다 — 판정은 서버가 했다
      */
     public record Row(
             long stockId,

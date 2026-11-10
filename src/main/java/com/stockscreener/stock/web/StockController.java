@@ -50,6 +50,7 @@ public class StockController {
     private final StockFinancialsAssembler financialsAssembler;
     private final List<UnavailabilityRule> unavailabilityRules;
     private final FinancialBasisReader financialBasisReader;
+    private final com.stockscreener.indicator.IndicatorRegistry indicatorRegistry;
 
     public StockController(StockReader stockReader, IndicatorCatalog indicatorCatalog,
                            ScreeningRepository screeningRepository, IndicatorDataReader priceReader,
@@ -59,8 +60,10 @@ public class StockController {
                            List<UnavailabilityRule> unavailabilityRules,
                            FinancialColumnAbsenceReader absenceReader,
                            GrossProfitPremiseReader premiseReader,
-                           FinancialBasisReader financialBasisReader) {
+                           FinancialBasisReader financialBasisReader,
+                           com.stockscreener.indicator.IndicatorRegistry indicatorRegistry) {
         this.financialBasisReader = financialBasisReader;
+        this.indicatorRegistry = indicatorRegistry;
         this.absenceReader = absenceReader;
         this.premiseReader = premiseReader;
         this.stockReader = stockReader;
@@ -158,10 +161,20 @@ public class StockController {
                 atLatest ? absenceReader.partialOnlyColumnsOf(stockId) : java.util.Set.of(),
                 premiseReader.brokenAt(stockId, resolved));
 
+        // 지표가 쓴 재무 기준과 새 실적 발표(ADR-0195) — 결과 표와 같은 리더 · 같은 기준일이다. 카드 표지가 같은 판정을 쓴다.
+        FinancialBasisReader.Basis basis = financialBasisReader.read(List.of(stockId), resolved).get(stockId);
         List<StockDetailResponse.IndicatorValue> indicators = new ArrayList<>();
         for (IndicatorDescriptor descriptor : catalog) {
             BigDecimal value = values.get(descriptor.code());
             String reason = value == null ? reasonFor(descriptor.code(), ruleContext) : null;
+            StockDetailResponse.BasisTag tag = basisTagOf(descriptor, value, reason, basis);
+            String note = null;
+            if (tag == StockDetailResponse.BasisTag.WAITING) {
+                note = waitingNote(basis);
+                reason = note;
+            } else if (tag == StockDetailResponse.BasisTag.PROVISIONAL) {
+                note = basis.notice();
+            }
             if (value == null && reason == null) {
                 continue;
             }
@@ -172,7 +185,7 @@ public class StockController {
                     // 거르지 않고 표시만 한다. 거르면 「내 조건」 구획이 감춘 지표의 값을
                     // 못 받는다 — 서버는 사용자의 초안 조건을 모른다(화면에만 있는 상태다).
                     descriptor.detailDefault(),
-                    reason));
+                    reason, tag, note));
         }
 
         // 미보정 기업 행위를 두 번 쓴다 — 아래 응답의 안내 문구와, 전일 대비를 낼 수 있는지의
@@ -197,8 +210,35 @@ public class StockController {
                 // 상대값뿐 아니라 표본 수 행까지 쓰이지 않아 화면에 흔적이 0이다.
                 StockDetailResponse.SectorContext.of(
                         stockReader.sectorPeersOf(stockId).orElse(null)),
-                // 지표가 쓴 재무 기준과 새 실적 발표(ADR-0195) — 결과 표와 같은 리더 · 같은 기준일이다.
-                financialBasisReader.read(List.of(stockId), resolved).get(stockId));
+                basis);
+    }
+
+    /**
+     * 카드 표지 — 재무제표를 읽는 지표({@code IndicatorRegistry.readsFinancialStatements} · 백분위 · 업종 비교는 원본 지표로 가린다)에서만.
+     * 발표 대기(PENDING)면 비었다는 것이 막힘의 결과다. 잠정 반영(PROVISIONAL)이면 값이 있으면 잠정 값이고, 비었으면 잠정이 그 재료를 안
+     * 줘서다. 사유 규칙이 먼저 말한 빈 칸(적자 PER 등)은 그 사유가 원인이라 표지를 달지 않는다.
+     */
+    private StockDetailResponse.BasisTag basisTagOf(IndicatorDescriptor descriptor, BigDecimal value, String reason,
+                                                    FinancialBasisReader.Basis basis) {
+        if (basis == null || (basis.status() != FinancialBasisReader.Status.PENDING
+                && basis.status() != FinancialBasisReader.Status.PROVISIONAL)) {
+            return null;
+        }
+        String code = indicatorRegistry.isRegistered(descriptor.code()) || descriptor.sourceIndicatorCode() == null
+                ? descriptor.code() : descriptor.sourceIndicatorCode();
+        if (!indicatorRegistry.readsFinancialStatements(code)) {
+            return null;
+        }
+        if (value == null) {
+            return reason == null ? StockDetailResponse.BasisTag.WAITING : null;
+        }
+        return basis.status() == FinancialBasisReader.Status.PROVISIONAL ? StockDetailResponse.BasisTag.PROVISIONAL : null;
+    }
+
+    /** 「대기」 표지의 설명 — 막힘이면 재무 기준 문구 그대로, 잠정 반영이면 그 지표의 재료를 잠정이 안 준다는 것. */
+    private static String waitingNote(FinancialBasisReader.Basis basis) {
+        return basis.status() == FinancialBasisReader.Status.PENDING ? basis.notice()
+                : "잠정실적은 손익만 주고 이 지표의 재료(주당 이익 · 재무상태 · 현금흐름 · 연간 실적)는 주지 않아, 정식 보고서가 나오면 계산합니다.";
     }
 
     /**

@@ -25,6 +25,8 @@ function indicator(value: number | null, unavailableReason: string | null): Stoc
     interpretation: '낮을수록 이익 대비 주가가 싸다.',
     detailDefault: true,
     unavailableReason,
+    basisTag: null,
+    basisNote: null,
   }
 }
 

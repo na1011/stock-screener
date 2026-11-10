@@ -23,6 +23,8 @@ function value(code: string, detailDefault: boolean): StockIndicatorValue {
     interpretation: '',
     detailDefault,
     unavailableReason: null,
+    basisTag: null,
+    basisNote: null,
   }
 }
 

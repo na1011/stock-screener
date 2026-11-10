@@ -60,6 +60,12 @@ public class MarketCapCalculator implements IndicatorCalculator {
         return CODE;
     }
 
+    /** 재무에서 주식수만 읽는다(입구 {@code FinancialMath.sharesBySegment}). */
+    @Override
+    public boolean readsSharesOnly() {
+        return true;
+    }
+
     @Override
     public DataRequirement dataRequirement() {
         // MUST NOT: 재무를 선언하지 않는다. 이 지표는 재무 없이도(국내) 값을 내므로

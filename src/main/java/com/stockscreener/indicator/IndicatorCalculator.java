@@ -40,4 +40,13 @@ public interface IndicatorCalculator {
      * 계산 가능한 날짜에 대해서만 결과를 낸다 — 워밍업 구간은 그냥 빠진다.
      */
     List<IndicatorPoint> calculate(IndicatorContext context);
+
+    /**
+     * 재무에서 <b>주식수만</b> 읽는가 — 새 실적 발표로 막히지 않는 지표다({@code FinancialMath.sharesBySegment} · ADR-0195). 종목 상세의
+     * 「대기」 · 「잠정」 표지가 이것으로 재무 지표를 가른다({@link IndicatorRegistry#readsFinancialStatements}). 그 입구를 쓰는 계산기만
+     * 참을 낸다 — 손익 · 자본 · 자산을 한 칸이라도 읽으면 거짓이다.
+     */
+    default boolean readsSharesOnly() {
+        return false;
+    }
 }

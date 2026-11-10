@@ -519,7 +519,17 @@ export interface StockIndicatorValue {
    * 갈린 쪽은 화면에서 드러나지 않는다.
    */
   unavailableReason: string | null
+  /**
+   * 재무 지표가 새 실적 발표로 어떤 상태인가(ADR-0195) — `WAITING`(정식 보고서를 기다려 비었다) · `PROVISIONAL`(잠정실적으로
+   * 계산했다) · null. 판정은 서버가 했다(재무 기준 표시와 같은 판정).
+   */
+  basisTag: IndicatorBasisTag | null
+  /** 그 표지의 설명 — 마우스를 올리면 보인다. 서버 문구를 그대로 쓴다. */
+  basisNote: string | null
 }
+
+export const INDICATOR_BASIS_TAGS = ['WAITING', 'PROVISIONAL'] as const
+export type IndicatorBasisTag = (typeof INDICATOR_BASIS_TAGS)[number]
 
 /**
  * 수정계수를 확정하지 못한 기업 행위(ADR-0055).
@@ -551,7 +561,7 @@ export interface StockDetailResponse {
   financialBasis: FinancialBasis | null
 }
 
-export const FINANCIAL_BASIS_STATUSES = ['PENDING', 'SPIN_OFF', 'NONE', 'UNTRACKED'] as const
+export const FINANCIAL_BASIS_STATUSES = ['PENDING', 'PROVISIONAL', 'SPIN_OFF', 'NONE', 'UNTRACKED'] as const
 export type FinancialBasisStatus = (typeof FINANCIAL_BASIS_STATUSES)[number]
 export const FINANCIAL_BASIS_UNTRACKED = [
   'FOREIGN_ISSUER',
@@ -577,9 +587,9 @@ export interface FinancialBasis {
   status: FinancialBasisStatus
   /** `UNTRACKED`일 때만 */
   untracked: FinancialBasisUntracked | null
-  /** `PENDING`일 때 가장 최근 발표의 접수일 */
+  /** `PENDING` · `PROVISIONAL`일 때 가장 최근 발표의 접수일 */
   releaseFiledOn: IsoDate | null
-  /** `PENDING` · `UNTRACKED`의 설명. `NONE`이면 null */
+  /** `PENDING` · `PROVISIONAL` · `UNTRACKED`의 설명. `NONE`이면 null */
   notice: string | null
 }
 

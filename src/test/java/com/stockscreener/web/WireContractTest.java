@@ -129,6 +129,8 @@ class WireContractTest {
         // 결과 행 · 상세가 상태로 표시를 가른다(ADR-0195). 프론트에 없는 상태가 오면 「새 실적」 표시가 조용히 안 뜬다.
         assertThat(names(FinancialBasisReader.Status.class)).isEqualTo(expected("enums", "FinancialBasisStatus"));
         assertThat(names(FinancialBasisReader.Untracked.class)).isEqualTo(expected("enums", "FinancialBasisUntracked"));
+        // 지표 카드가 표지로 「대기」 · 「잠정」을 그린다. 프론트에 없는 표지가 오면 그 카드에서 던진다.
+        assertThat(names(com.stockscreener.stock.web.StockDetailResponse.BasisTag.class)).isEqualTo(expected("enums", "IndicatorBasisTag"));
     }
 
     @Test

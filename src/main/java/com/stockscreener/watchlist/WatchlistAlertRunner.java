@@ -185,7 +185,9 @@ public class WatchlistAlertRunner {
             financialBasisReader.read(byMarket.getValue(), asOf).forEach((stockId, basis) -> {
                 // 분사 뒤 재무 대기(SPIN_OFF)는 보류하지 않는다 — 대기가 며칠이 아니라 약 1년이라 보류하면 그동안 다른 조건이 바뀌어도
                 // 상태가 얼고 알림이 0이다(F1 반증). 판정불가로 미충족이 되고, 다시 서는 날 한 번 알린다(문구에 사유가 붙는다).
-                if (basis.status() == FinancialBasisReader.Status.PENDING) {
+                // 잠정실적 반영(PROVISIONAL)도 보류한다 — 주당 · 재무상태 지표가 정식까지 비어 그 조건이 판정불가로 떨어지면, 정식 보고서를 기다리는
+                // 며칠 사이 상태가 미충족으로 바뀌었다가 되돌아오며 알림이 튄다.
+                if (basis.status() == FinancialBasisReader.Status.PENDING || basis.status() == FinancialBasisReader.Status.PROVISIONAL) {
                     releasePending.add(stockId);
                 }
             });
@@ -311,6 +313,7 @@ public class WatchlistAlertRunner {
                     .append('\n');
             FinancialBasisReader.Basis basis = bases.get(entry.item().stockId());
             if (basis != null && (basis.status() == FinancialBasisReader.Status.PENDING
+                    || basis.status() == FinancialBasisReader.Status.PROVISIONAL
                     || basis.status() == FinancialBasisReader.Status.SPIN_OFF)) {
                 sb.append("  ").append(basis.notice()).append('\n');
             }

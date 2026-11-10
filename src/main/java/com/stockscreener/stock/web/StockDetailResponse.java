@@ -241,11 +241,29 @@ public record StockDetailResponse(
      * @param unavailableReason 값이 없는 이유. 값이 있거나 이유를 모르면 null이다.
      *                          <b>문구는 서버가 소유한다</b> — 프론트가 자기 문장을 들면
      *                          두 곳이 갈리고, 갈린 쪽은 화면에서 드러나지 않는다
+     * @param basisTag          재무 지표가 새 실적 발표로 어떤 상태인가(ADR-0195 · 재무 기준 표시와 같은 판정) — 정식 보고서를 기다려
+     *                          비었으면 {@link BasisTag#WAITING}, 잠정실적으로 계산했으면 {@link BasisTag#PROVISIONAL}, 그 밖은 null
+     * @param basisNote         그 표지의 설명(마우스를 올리면 보인다). 문구는 서버가 소유한다
      */
     public record IndicatorValue(
             String code, String name, BigDecimal value, String unit, int decimalScale,
             IndicatorCategory category, Boolean higherIsBetter,
             String description, String interpretation, boolean detailDefault,
-            String unavailableReason) {
+            String unavailableReason, BasisTag basisTag, String basisNote) {
+
+        public IndicatorValue(String code, String name, BigDecimal value, String unit, int decimalScale,
+                              IndicatorCategory category, Boolean higherIsBetter, String description, String interpretation,
+                              boolean detailDefault, String unavailableReason) {
+            this(code, name, value, unit, decimalScale, category, higherIsBetter, description, interpretation, detailDefault,
+                    unavailableReason, null, null);
+        }
+    }
+
+    /** 지표 카드의 재무 기준 표지 — 화면이 「대기」 · 「잠정」으로 그린다. */
+    public enum BasisTag {
+        /** 새 실적 발표가 있어 정식 보고서를 기다리는 동안 비어 있다. */
+        WAITING,
+        /** 정식 보고서 전 잠정실적으로 계산했다. */
+        PROVISIONAL
     }
 }

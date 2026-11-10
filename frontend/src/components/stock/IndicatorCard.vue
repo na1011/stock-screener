@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import type { PercentileGuide } from '@/api/types'
+import type { IndicatorBasisTag, PercentileGuide } from '@/api/types'
 import IndicatorLabel from '@/components/IndicatorLabel.vue'
 import BandMeter from '@/components/ui/BandMeter.vue'
 import type { BandReading } from '@/lib/band'
+import { indicatorBasisTagLabel } from '@/lib/financialBasis'
 
 /**
  * 종목 상세의 지표 카드 하나.
@@ -29,6 +30,12 @@ defineProps<{
    * 같은 일반 해설을 그리면 사용자는 그 지표가 계산된 것으로 읽는다.
    */
   unavailableReason?: string | null
+  /**
+   * 재무 지표의 새 실적 발표 표지(ADR-0195) — 「대기」(정식 보고서를 기다려 비었다) · 「잠정」(잠정실적으로 계산했다). 설명은
+   * `basisNote`이고 마우스를 올리면 보인다. 서버가 판정했다.
+   */
+  basisTag?: IndicatorBasisTag | null
+  basisNote?: string | null
 }>()
 </script>
 
@@ -41,6 +48,17 @@ defineProps<{
       :description="description"
       :interpretation="interpretation"
     />
+    <span
+      v-if="basisTag"
+      v-tooltip.top="basisNote ?? undefined"
+      class="indicator__basis-tag"
+      :class="`indicator__basis-tag--${basisTag.toLowerCase()}`"
+      :aria-label="basisNote ?? indicatorBasisTagLabel(basisTag)"
+      tabindex="0"
+    >
+      <i class="pi pi-clock" aria-hidden="true" />
+      {{ indicatorBasisTagLabel(basisTag) }}
+    </span>
     <span
       class="indicator__value tabular"
       :class="reading ? `indicator__value--${reading.tone.toLowerCase()}` : null"
@@ -60,6 +78,25 @@ defineProps<{
 </template>
 
 <style scoped>
+/*
+ * 결과 행의 「새 실적」 표시와 같은 호박색 글자다(NewReleaseBadge) — 판정 `Tag` 모양을 쓰면 「데이터 없음」과 한 종류로 읽힌다(ADR-0021).
+ * 이름 줄 아래 한 칸을 통째로 쓴다 — 값 칸 옆에 붙이면 좁은 카드에서 값이 밀린다.
+ */
+.indicator__basis-tag {
+  grid-column: 1 / -1;
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: var(--app-text-2xs);
+  color: var(--p-amber-300);
+  cursor: help;
+}
+
+.indicator__basis-tag .pi {
+  font-size: var(--app-text-2xs);
+}
+
 /*
  * 사유는 해석문과 다른 색이다 — 같으면 "이 지표는 원래 이런 뜻이다"로 읽힌다.
  * 경고색을 쓰지 않는 것도 의도다: 결손은 사용자가 고칠 수 있는 것이 아니고,

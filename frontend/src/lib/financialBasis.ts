@@ -1,10 +1,11 @@
-import type { FinancialBasis, FinancialBasisStatus } from '@/api/types'
+import type { FinancialBasis, FinancialBasisStatus, IndicatorBasisTag } from '@/api/types'
 
 /**
  * 재무 기준 · 새 실적 발표 상태를 화면 표현으로 옮기는 **유일한** 지점(ADR-0195). 결과 표 · 모바일 카드 · 종목 상세가 같은 표현을 쓴다.
  *
  * IMPORTANT — `UNTRACKED`를 `NONE`처럼 그리지 않는다. 「모른다」를 「새 발표 없음」으로 읽히면 이 표시가 막으려던 착시(옛 분기 PER을
- * 지금 값으로 읽는 것)가 그대로 남는다. 결과 행에는 `PENDING`만 단다 — 행마다 「모름」을 달면 외국 발행사 같은 상시 상태가 표를 덮는다.
+ * 지금 값으로 읽는 것)가 그대로 남는다. 결과 행에는 `PENDING` · `PROVISIONAL`만 단다 — 행마다 「모름」을 달면 외국 발행사 같은 상시
+ * 상태가 표를 덮는다.
  * 상세는 셋 다 그리고 문구는 서버 것을 쓴다.
  */
 export interface FinancialBasisStyle {
@@ -17,6 +18,9 @@ export interface FinancialBasisStyle {
 export function financialBasisStyle(status: FinancialBasisStatus): FinancialBasisStyle {
   switch (status) {
     case 'PENDING':
+      return { flagsRow: true, tone: 'warn' }
+    case 'PROVISIONAL':
+      // 잠정실적으로 손익 지표만 계산했다 — 주당 · 재무상태 지표는 정식까지 비어 있다.
       return { flagsRow: true, tone: 'warn' }
     case 'SPIN_OFF':
       // 분사 뒤 재무 대기 — 상세에서 경고로 그린다. 결과 행에는 안 단다(재무 조건이면 그 행은 애초에 판정불가로 빠진다).
@@ -33,12 +37,31 @@ export function financialBasisStyle(status: FinancialBasisStatus): FinancialBasi
 
 /** 결과 행 배지 문구 — 표와 카드가 같은 것을 그린다. */
 export const NEW_RELEASE_BADGE = '새 실적'
+export const PROVISIONAL_BADGE = '잠정'
 
-/** 상세 헤더의 기준 줄 — 「재무 기준 2026 Q2」, 잔액 기가 다르면 「· 자산 2026 Q1」을 붙인다. */
+/** 결과 행 배지 문구 — 잠정실적으로 계산한 행은 「잠정」, 지표를 막은 행은 「새 실적」. */
+export function rowBadgeText(status: FinancialBasisStatus): string {
+  return status === 'PROVISIONAL' ? PROVISIONAL_BADGE : NEW_RELEASE_BADGE
+}
+
+/** 상세 헤더의 기준 줄 — 「재무 기준 2026 Q2」, 잔액 기가 다르면 「· 자산 2026 Q1」을, 잠정실적이면 「잠정」을 붙인다. */
 export function basisLine(basis: FinancialBasis): string {
-  return basis.balanceLabel === null
-    ? `재무 기준 ${basis.flowLabel}`
-    : `재무 기준 ${basis.flowLabel} · 자산 ${basis.balanceLabel}`
+  const flow = basis.status === 'PROVISIONAL' ? `${basis.flowLabel} ${PROVISIONAL_BADGE}` : basis.flowLabel
+  return basis.balanceLabel === null ? `재무 기준 ${flow}` : `재무 기준 ${flow} · 자산 ${basis.balanceLabel}`
+}
+
+/**
+ * 지표 카드 표지 문구. 모르는 표지는 던진다 — 「대기」를 「잠정」으로 그리면 빈 값을 계산된 값처럼, 그 반대면 잠정 값을 확정치처럼 읽는다.
+ */
+export function indicatorBasisTagLabel(tag: IndicatorBasisTag): string {
+  switch (tag) {
+    case 'WAITING':
+      return '대기'
+    case 'PROVISIONAL':
+      return PROVISIONAL_BADGE
+    default:
+      return assertNever(tag)
+  }
 }
 
 function assertNever(value: never): never {

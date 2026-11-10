@@ -69,6 +69,12 @@ public class FinancialBasisReader {
         /** 기준 기보다 새로운 실적 발표가 있다 — 지표에 아직 반영 안 됐다. */
         PENDING,
         /**
+         * 기준 기보다 새로운 실적 발표가 있고, 그 분기의 잠정실적으로 손익 행을 지어 손익 지표를 계산했다(국내 잠정 관문 켬 ·
+         * {@code ReportingBasis.provisionalQuarter}). 주당 지표 · 재무상태 · 현금흐름 · 연간 지표는 정식 보고서까지 비어 있다.
+         * 기준 기 라벨은 잠정 분기다.
+         */
+        PROVISIONAL,
+        /**
          * 분사 뒤인데 분사 뒤 회사의 TTM이 아직 안 섰다 — 재무 지표는 분사 뒤에 시작한 기간의 재무로만 계산하므로 TTM · 여러 해
          * 지표가 비어 있다(관문 켬 · ADR-0168 F1). 기준 기 라벨은 원장의 최신 기다.
          */
@@ -130,6 +136,9 @@ public class FinancialBasisReader {
         });
         Map<Long, List<LocalDate>> spinOffs = indicatorDataReader.readSpinOffDates(stockIds);
         Map<String, LocalDate> cursors = listingCursors();
+        // 국내 잠정 관문 켬만 싣는다(꺼짐은 빈 맵) — 지표 계산과 같은 재료다.
+        Map<Long, List<com.stockscreener.indicator.ProvisionalRelease>> provisional =
+                indicatorDataReader.readProvisionalReleases(stockIds, asOf);
         Map<Long, IndicatorContext> contexts = new HashMap<>();
         Map<Long, ReportingBasis.Basis> bases = new HashMap<>();
         for (Long stockId : stockIds) {
@@ -139,7 +148,8 @@ public class FinancialBasisReader {
             }
             IndicatorContext context = new IndicatorContext(stockId, List.of(), figures.annual(), figures.quarterly(), Map.of())
                     .withEarningsReleaseDates(releaseDates.getOrDefault(stockId, List.of()))
-                    .withSpinOffDates(spinOffs.getOrDefault(stockId, List.of()));
+                    .withSpinOffDates(spinOffs.getOrDefault(stockId, List.of()))
+                    .withProvisionalReleases(provisional.getOrDefault(stockId, List.of()));
             ReportingBasis.of(context).ifPresent(basis -> {
                 bases.put(stockId, basis);
                 contexts.put(stockId, context);
@@ -172,6 +182,14 @@ public class FinancialBasisReader {
         // 지표 계산과 같은 판정이다(ReportingBasis.pendingRelease) — 대기면 그 날의 재무 지표는 계산되지 않았다.
         LocalDate pending = ReportingBasis.pendingRelease(context, asOf).orElse(null);
         if (pending != null) {
+            // 지표 계산과 같은 함수다(FinancialMath.financialsAt) — 그 봉의 사본(보이는 판 · 분사 사본)에 묻는다.
+            FinancialFigures provisional = ReportingBasis.provisionalQuarter(context.visibleAt(asOf).withoutPreSpinOffBasis(asOf), asOf)
+                    .orElse(null);
+            if (provisional != null) {
+                return new Basis(label(provisional, true), null, Status.PROVISIONAL, null, pending,
+                        "%s 잠정실적으로 %s 손익 지표(매출 · 이익률 · 성장률 · PSR 등)를 계산했습니다 — 주당 지표(EPS · PER · PEG)와 재무상태 · 현금흐름 · 연간 지표는 정식 보고서가 나오면 계산합니다."
+                                .formatted(DAY.format(provisional.publishedAt()), label(provisional, true)));
+            }
             return new Basis(flowLabel, balanceLabel, Status.PENDING, null, pending,
                     "%s 새 실적 발표가 있어 이 날의 재무 지표를 계산하지 않았습니다 — 재무 기준이 %s라 정식 공시가 반영되면 다시 계산합니다."
                             .formatted(DAY.format(pending), flowLabel));
@@ -229,7 +247,8 @@ public class FinancialBasisReader {
                     SELECT r.stock_id, r.market, r.effective_on, t.opened_at AS opened_at FROM earnings_release r
                       LEFT JOIN kr_filing_time t ON r.market = 'KR' AND t.rcept_no = r.filing_no
                     WHERE r.stock_id = ANY(?) AND r.effective_on <= ? AND """
-                    + EarningsReleaseStore.IS_EARNINGS_RELEASE + """
+                    + EarningsReleaseStore.IS_EARNINGS_RELEASE + EarningsReleaseStore.periodReleaseOnly(indicatorDataReader.provisionalGate())
+                    + """
                       AND (CAST(? AS timestamptz) IS NULL OR coalesce(r.resolved_at, r.first_seen_at) <= CAST(? AS timestamptz))
                     """);
             ps.setArray(1, con.createArrayOf("bigint", stockIds.toArray()));
