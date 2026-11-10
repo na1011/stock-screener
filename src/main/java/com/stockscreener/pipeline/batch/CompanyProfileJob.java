@@ -50,6 +50,14 @@ public class CompanyProfileJob {
         this.batchExecutions = batchExecutions;
     }
 
+    /** 국내 관문({@code stockscreener.gate.kr-provisional}) — 켜면 보존 창의 과거 국내 편입 중 개황이 빈 종목도 받는다(K6). 시험은 생성자만 부른다. */
+    private boolean krGate;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    void krGate(@org.springframework.beans.factory.annotation.Value("${stockscreener.gate.kr-provisional}") boolean on) {
+        this.krGate = on;
+    }
+
     /**
      * 정기 실행(리밸런싱 꼬리)은 티커·유니버스를 안 준다 — 대상은 업종이 빈 종목 전부다. 기준일과 꼬리 트리거는 기록
      * 계층이 본다.
@@ -168,7 +176,13 @@ public class CompanyProfileJob {
             }
             return matched;
         }
-        return stockRegistrar.activeUniverseMemberIdsWithoutIndustry();
+        List<Long> targets = stockRegistrar.activeUniverseMemberIdsWithoutIndustry();
+        if (!krGate) {
+            return targets;
+        }
+        java.util.LinkedHashSet<Long> withRetained = new java.util.LinkedHashSet<>(targets);
+        withRetained.addAll(stockRegistrar.krRetainedMemberIdsWithoutProfile());
+        return new java.util.ArrayList<>(withRetained);
     }
 
     /**

@@ -85,6 +85,36 @@ class RefillWindowPopulationTest {
                 .as("대조군 — 오늘 후보 술어는 닫힌 행을 안 푼다").isInstanceOf(IllegalArgumentException.class);
     }
 
+    /**
+     * 국내 관문 켬(K6): 보존 창과 겹치는 과거 국내 편입 중 개황(업종 · 결산월)이 빈 종목을 받는다 — 현재 편입만 보던 술어로는 편출된 056080 ·
+     * 399720이 영영 결산월을 못 받았다. 대조군: 보존 창 앞에 편출된 종목 · 개황이 찬 종목은 안 받는다.
+     */
+    @Test
+    void retainedDomesticMembersWithoutProfileAreTargets() {
+        jdbc.update("INSERT INTO indicator_trade_date (market_code, trade_date) VALUES ('KOSDAQ', ?) ON CONFLICT DO NOTHING", WINDOW_START);
+        String universe = jdbc.queryForObject("SELECT code FROM universe WHERE is_active ORDER BY code LIMIT 1", String.class);
+        long inWindow = krStock("K6IN", null);
+        long beforeWindow = krStock("K6OUT", null);
+        long profiled = krStock("K6FULL", 12);
+        member(inWindow, universe, LocalDate.of(2025, 1, 1), LocalDate.of(2026, 3, 1));
+        member(beforeWindow, universe, LocalDate.of(2024, 1, 1), LocalDate.of(2025, 6, 30));
+        member(profiled, universe, LocalDate.of(2025, 1, 1), LocalDate.of(2026, 3, 1));
+
+        assertThat(registrar.krRetainedMemberIdsWithoutProfile()).contains(inWindow).doesNotContain(beforeWindow, profiled);
+    }
+
+    private long krStock(String ticker, Integer accountingMonth) {
+        return jdbc.queryForObject("""
+                INSERT INTO stock (market_code, ticker, name, is_active, accounting_month, industry_code)
+                VALUES ('KOSDAQ', ?, ?, true, ?, CASE WHEN CAST(? AS int) IS NULL THEN NULL ELSE '26290' END) RETURNING id
+                """, Long.class, ticker, ticker, accountingMonth, accountingMonth);
+    }
+
+    private void member(long stockId, String universe, LocalDate from, LocalDate to) {
+        jdbc.update("INSERT INTO universe_membership (universe_code, stock_id, effective_from, effective_to) VALUES (?, ?, ?, ?)",
+                universe, stockId, from, to);
+    }
+
     private void row(String ticker, LocalDate eraTo) {
         jdbc.update("INSERT INTO stock (market_code, ticker, name, era_to, is_active) VALUES ('US', ?, ?, ?, true)", ticker, ticker, eraTo);
     }

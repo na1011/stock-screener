@@ -767,6 +767,25 @@ public class StockRegistrar {
      * 관문 재적재 모집단의 창 시작 — 미국 보존 창의 첫날({@code indicator_trade_date} 미국 최소 = 복원 격자의 첫날). 보존 창이 없으면(지표를
      * 한 번도 안 낸 DB) 과거 격자도 없으므로 미국 동부 오늘이다 — 그때 모집단은 오늘 시대 안 행과 같다.
      */
+    /**
+     * 국내 — 활성 유니버스 편입이 지표 보존 창과 겹치는데 개황(업종 · 결산월)이 빈 종목(국내 관문 켬 · 탐색 {@code BLANKS-PLAN-1106.md} K6). 현재
+     * 편입만 보는 {@link #activeUniverseMemberIdsWithoutIndustry}로는 편출된 과거 편입이 영영 안 채워진다 — 그 종목의 보존 창 지표가 결산월을 몰라
+     * 분기 보고서 키를 못 짓고(1Q · 3Q XBRL 미수집 · 056080 · 399720 각 251칸) 업종 상대값도 빈다. 원장 기업개황({@code company.json})이 둘 다
+     * 준다({@code acc_mt=12} · 2026-11-10 실측).
+     */
+    public List<Long> krRetainedMemberIdsWithoutProfile() {
+        return jdbcTemplate.queryForList("""
+                SELECT DISTINCT m.stock_id FROM universe_membership m
+                JOIN stock s ON s.id = m.stock_id
+                JOIN universe u ON u.code = m.universe_code AND u.is_active
+                WHERE s.market_code IN ('KOSPI', 'KOSDAQ') AND s.is_active
+                  AND (m.effective_to IS NULL OR m.effective_to >= (SELECT min(trade_date) FROM indicator_trade_date
+                                                                     WHERE market_code IN ('KOSPI', 'KOSDAQ')))
+                  AND (s.industry_code IS NULL OR s.accounting_month IS NULL)
+                ORDER BY m.stock_id
+                """, Long.class);
+    }
+
     public LocalDate usRefillWindowStart() {
         return jdbcTemplate.queryForObject("""
                 SELECT coalesce((SELECT min(trade_date) FROM indicator_trade_date WHERE market_code = 'US'), %s)
