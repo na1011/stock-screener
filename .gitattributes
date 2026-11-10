@@ -1,3 +1,5 @@
 /gradlew text eol=lf
 *.bat text eol=crlf
 *.jar binary
+# DART 뷰어 원문 시험 재료 — 받은 바이트 그대로(CRLF · EUC-KR)여야 운영 클라이언트 원문과 바이트 비교가 선다(DartViewerClientLiveTest).
+src/test/resources/dart-prov/*.html binary
