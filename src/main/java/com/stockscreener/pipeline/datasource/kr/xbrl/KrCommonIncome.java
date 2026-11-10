@@ -114,7 +114,12 @@ public final class KrCommonIncome {
          * 구형우선주 섞음({@code w-includes-pref}) 판정의 보통주 밖 비중을 유통 기준으로 — 발행 기준으로 3%를 넘어도 우선주 대부분이 자기주식이면
          * (유통 기준 3% 이하) W가 발행 합계와 비슷해도 섞은 것이 아니다(계획 P1).
          */
-        P1
+        P1,
+        /**
+         * 축 붙은 W — 표준 구성원 W가 없을 때 {@code ClassesOfOrdinarySharesAxis} 구성원 하나뿐인 W(보통주 한 종류를 축으로 적은 판)와
+         * {@code ContinuingAndDiscontinuedOperationsAxis} 두 구성원 값이 같은 W(계속 · 중단 열에 같은 W를 적은 판)를 후보로 쓴다(계획 RB).
+         */
+        RB
     }
 
     /**
@@ -244,6 +249,9 @@ public final class KrCommonIncome {
             e = signed(e, income);
         }
         Set<BigDecimal> w = m.values(WEIGHTED, period, COMMON_MEMBERS);
+        if (w.isEmpty() && rules.has(Rule.RB)) {
+            w = m.axisWeights(period);
+        }
         if (e.size() > 1 || w.size() > 1) {
             BigDecimal[] pair = rules.has(Rule.C1) ? resolveConflict(income, e, w, instruments, m, period) : null;
             if (pair == null) {
@@ -349,6 +357,9 @@ public final class KrCommonIncome {
         Material m = new Material(facts, anchor.bases());
         Set<BigDecimal> e = m.values(EPS, cumulative, COMMON_MEMBERS);
         Set<BigDecimal> w = m.values(WEIGHTED, cumulative, COMMON_MEMBERS);
+        if (w.isEmpty() && rules.has(Rule.RB)) {
+            w = m.axisWeights(cumulative);
+        }
         if (e.size() != 1 || w.size() != 1) {
             return null;
         }
@@ -803,6 +814,39 @@ public final class KrCommonIncome {
                 }
             }
             return false;
+        }
+
+        /** {@link Rule#RB}의 W 후보. */
+        Set<BigDecimal> axisWeights(Period period) {
+            Map<String, Set<BigDecimal>> classes = new LinkedHashMap<>();
+            Map<String, Set<BigDecimal>> operations = new LinkedHashMap<>();
+            for (Fact f : facts) {
+                if (f.source() != Source.IFRS || !WEIGHTED.equals(f.concept()) || !period.start().equals(f.start())
+                        || !period.end().equals(f.end()) || f.members().size() != 1) {
+                    continue;
+                }
+                Member member = f.members().get(0);
+                Map<String, Set<BigDecimal>> axis = switch (member.axis()) {
+                    case "ClassesOfOrdinarySharesAxis" -> classes;
+                    case "ContinuingAndDiscontinuedOperationsAxis" -> operations;
+                    default -> null;
+                };
+                if (axis != null) {
+                    axis.computeIfAbsent(member.member(), k -> new LinkedHashSet<>()).add(normalized(f.value()));
+                }
+            }
+            Set<BigDecimal> out = new LinkedHashSet<>();
+            if (classes.size() == 1 && classes.values().iterator().next().size() == 1) {
+                out.addAll(classes.values().iterator().next());
+            }
+            if (operations.size() == 2 && operations.values().stream().allMatch(v -> v.size() == 1)) {
+                Set<BigDecimal> union = new LinkedHashSet<>();
+                operations.values().forEach(union::addAll);
+                if (union.size() == 1) {
+                    out.addAll(union);
+                }
+            }
+            return out;
         }
 
         /** {@link Rule#HY} — 신종자본 증거가 당기 열에 없고 앞 열에 상환 개념이 있는가. */

@@ -150,6 +150,24 @@ class KrCommonIncomeTest {
     }
 
     @Test
+    void rbTakesTheWeightedSharesReportedOnASingleOrdinaryClassMember() {
+        // 표준 구성원 W가 없고 ClassesOfOrdinarySharesAxis 회사 구성원 하나에만 W 1,000만을 적은 판(성우하이텍 2024 Q2 꼴 · 국내 관문 켬 RB).
+        Member entityClass = new Member("ClassesOfOrdinarySharesAxis", "OrdinarySharesMemberOfEarningsPerShareTableOfMember", Source.ENTITY);
+        Fact axisWeighted = fact(Source.IFRS, "WeightedAverageShares", Q2, List.of(entityClass), 10_000_000);
+        Judged off = judge(rowNi(10_000_000_000L), WITH_PREFERRED, owners(10_000_000_000L), eps(990), axisWeighted);
+        Judged on = judgeV4(rowNi(10_000_000_000L), WITH_PREFERRED, owners(10_000_000_000L), eps(990), axisWeighted);
+        // 대조군 — 그 축에 구성원이 둘이면(종류별 W) 어느 것이 보통주인지 모른다.
+        Fact other = fact(Source.IFRS, "WeightedAverageShares", Q2,
+                List.of(new Member("ClassesOfOrdinarySharesAxis", "SecondClassMember", Source.ENTITY)), 1_000_000);
+        Judged twoMembers = judgeV4(rowNi(10_000_000_000L), WITH_PREFERRED, owners(10_000_000_000L), eps(990), axisWeighted, other);
+
+        assertThat(off.branch()).as("꺼짐 — 지금 동작").isEqualTo("none:no-w");
+        assertThat(on.branch()).isEqualTo("exw");
+        assertThat(on.common()).isEqualByComparingTo("9900000000");
+        assertThat(twoMembers.branch()).isEqualTo("none:no-w");
+    }
+
+    @Test
     void ncTakesTheConsolidatedIncomeWhenEquityShowsNoNoncontrollingInterest() {
         // 행 지배 NI가 빈 연결 행 — 연결 순이익 100억 · 기초(03-31) · 기말(06-30) 자본총계 = 지배 자본 · 비지배 손익 줄 없음(국내 관문 켬 NC-b).
         RowIncome row = new RowIncome(null, BigDecimal.valueOf(10_000_000_000L));
