@@ -481,6 +481,33 @@ class KrCommonIncomeTest {
     // ---- 행 해석: Q4 · 누계 · 판 짝 ----
 
     @Test
+    void cmpLeavesARowThatTheFilingsOwnCumulativeDecides() {
+        // 신종자본이 있는 반기 판 — 3개월 W가 없지만 반기 누계 E 270 × W 1,000만 − 1분기 9억 = 18억이 그 판 재료로 선다. 뒤 판이 2분기 W를 실어도
+        // 비교열 W(CMP)는 그 판으로 값이 안 설 때만이다 — 누계 값을 지키고 가시일도 안 밀린다.
+        Period q1 = quarter(2025, 1);
+        Period q2 = quarter(2025, 2);
+        Period h1 = new Period(q1.start(), q2.end());
+        Row first = new Row(1, 2025, "Q1", q1.start(), q1.end(), LocalDate.of(2025, 5, 15), BigDecimal.valueOf(1_000_000_000L), null,
+                exwFacts(q1, 1_000_000_000L, 90));
+        Row half = new Row(2, 2025, "Q2", q2.start(), q2.end(), LocalDate.of(2025, 8, 14), BigDecimal.valueOf(2_000_000_000L), null,
+                List.of(fact(Source.IFRS, "ProfitLossAttributableToOwnersOfParent", q2, List.of(), 2_000_000_000L),
+                        fact(Source.IFRS, "BasicEarningsLossPerShare", q2, List.of(ORDINARY), 180),
+                        fact(Source.IFRS, "BasicEarningsLossPerShare", h1, List.of(ORDINARY), 270),
+                        fact(Source.IFRS, "WeightedAverageShares", h1, List.of(ORDINARY), 10_000_000),
+                        fact(Source.DART, "HybridBonds", new Period(null, q2.end()), List.of(), 1_000_000_000L)));
+        KrCommonIncome.LaterFiling later = new KrCommonIncome.LaterFiling("20251114000001", LocalDate.of(2025, 11, 14),
+                List.of(fact(Source.IFRS, "BasicEarningsLossPerShare", q2, List.of(ORDINARY), 180),
+                        fact(Source.IFRS, "WeightedAverageShares", q2, List.of(ORDINARY), 10_100_000)));
+
+        Resolved q2Resolved = byId(KrCommonIncomeRows.resolve(List.of(first, half), Map.of(2024, COMMON_ONLY), NO_ACTIONS,
+                KrCommonEquity.Issuer.of(List.of()), KrCommonIncome.Rules.V4, row -> row.id() == 2 ? List.of(later) : List.of())).get(2L);
+
+        assertThat(q2Resolved.branch()).isEqualTo("cum");
+        assertThat(q2Resolved.common()).isEqualByComparingTo("1800000000");
+        assertThat(q2Resolved.visibleFrom()).isNull();
+    }
+
+    @Test
     void pitUsesTheSameYearRegisterOnlyWithoutAPriorOneAndShowsItFromTheAnnualReport() {
         // 1분기 행 · W 없음 · 지분상품 없음 — 증인은 명부(E 1,000 × 1,000만 = 지배 NI 100억). 앞 해 명부가 없고 그 해 명부만 있다(국내 관문 켬 PIT).
         Period q1 = quarter(2025, 1);

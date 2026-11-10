@@ -150,7 +150,10 @@ public final class KrCommonIncomeRows {
                 // 비교열 W는 그 판 재료로 값이 안 설 때만 — 값이 서던 행을 뒤 판 공개 전 날들까지 바꾸지 않는다.
                 j = KrCommonIncome.judge(row.period(), row.income(), row.facts(), prior, same, multiple,
                         rules.without(KrCommonIncome.Rule.CMP), nc);
-                if (j.common() == null) {
+                // 누계 갈래(반기 · 3분기 누계 − 앞 분기)로 서는 값도 그 판 재료다 — 그것까지 안 설 때만 뒤 판을 본다.
+                boolean own = j.common() != null || j.wantsCumulative() && ("Q2".equals(row.fiscalPeriod()) || "Q3".equals(row.fiscalPeriod()))
+                        && cumulative(row, j, ordered, out, rules.without(KrCommonIncome.Rule.CMP), nc).common() != null;
+                if (!own) {
                     j = KrCommonIncome.judge(row.period(), row.income(), row.facts(), prior, same, multiple, rules, nc, later.after(row));
                 }
             } else {
