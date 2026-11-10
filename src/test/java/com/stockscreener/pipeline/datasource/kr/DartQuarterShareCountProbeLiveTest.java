@@ -144,4 +144,43 @@ class DartQuarterShareCountProbeLiveTest {
         System.out.printf("[sample] 회사 %d · 1Q·3Q 둘 다 숫자 %d · 둘 다 아님 %d %s%n", companies, bothNumeric, noneNumeric, dashOnly);
         assertThat(companies).isPositive();
     }
+
+    /**
+     * K3 효과 표본 — {@code PROBE_ROWS}(탭 구분 · 2열 티커 · 3열 corp_code · 4열 사업연도 · 5열 보고서 코드)의 보고서마다 주식총수 · 증자(감자) ·
+     * 자기주식 표 원문을 {@code PROBE_OUT}에 둔다(한 줄 3콜). 원장이 W를 준 행(대조군)에서 이 재료로 지은 W 구간이 그 W를 품는지를 0콜로 잰다.
+     */
+    @Test
+    @DisplayName("[live][probe] 표본 보고서의 주식총수 · 증자(감자) · 자기주식 원문")
+    @EnabledIfEnvironmentVariable(named = "PROBE_ROWS", matches = ".+")
+    void sampleRows() throws Exception {
+        Path out = Path.of(System.getenv("PROBE_OUT"));
+        Files.createDirectories(out);
+        RestClient client = DartProbeSupport.client();
+        int answered = 0;
+        int asked = 0;
+        for (String line : Files.readAllLines(Path.of(System.getenv("PROBE_ROWS")))) {
+            String[] c = line.split("\t");
+            if (c.length < 5) {
+                continue;
+            }
+            String corp = c[2];
+            int year = Integer.parseInt(c[3]);
+            String report = c[4];
+            for (String endpoint : ENDPOINTS) {
+                Path file = out.resolve(corp + "-" + year + "-" + report + "-" + endpoint + ".json");
+                if (Files.exists(file)) {
+                    continue;
+                }
+                JsonNode body = DartProbeSupport.get(client, uri -> uri.path("/" + endpoint + ".json")
+                        .queryParam("crtfc_key", DartProbeSupport.apiKey()).queryParam("corp_code", corp)
+                        .queryParam("bsns_year", year).queryParam("reprt_code", report).build());
+                Files.writeString(file, String.valueOf(body));
+                asked++;
+                answered += body != null && body.path("list").isArray() && !body.path("list").isEmpty() ? 1 : 0;
+                Thread.sleep(300);
+            }
+        }
+        System.out.printf("[rows] 콜 %d · 행 있음 %d%n", asked, answered);
+        assertThat(asked == 0 || answered > 0).as("모두 빈 응답이면 요청이 틀린 것이다").isTrue();
+    }
 }
