@@ -56,7 +56,7 @@ class KrProvisionalStoreTest {
         assertThat(((BigDecimal) q3.get("revenue")).scale()).isEqualTo(2);
         assertThat(q3.get("unit_won")).isEqualTo(1_000_000_000_000L);
         assertThat(jdbc.queryForObject("SELECT release_period FROM kr_provisional_release WHERE rcept_no = '20261102800493'",
-                String.class)).isEqualTo("OTHER");
+                String.class)).isEqualTo("MONTH");
         assertThat(jdbc.queryForObject("SELECT status FROM kr_provisional_release WHERE rcept_no = '20261103000001'", String.class))
                 .isEqualTo("no-anchor");
         assertThat(store.loadAll()).as("다시 올려도 같다").containsExactly(3, 1);

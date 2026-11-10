@@ -40,14 +40,14 @@ public class EarningsReleaseStore {
             "(r.market = 'KR' OR (r.items IS NOT NULL AND ',' || replace(r.items, ' ', '') || ',' LIKE '%,2.02,%'))";
 
     /**
-     * 국내 잠정 관문 켬의 덧붙임 조건(별칭 {@code r}) — 본문을 읽어 기간이 분기 · 연도가 아님을 확인한 국내 줄(월간 실적 · 같은 제목으로 온다 ·
-     * 2026-07~11 I002 477건 중 34 · 8종목)은 실적 발표가 아니다. 본문을 아직 못 읽은 줄은 발표로 남는다(막는 쪽). 꺼짐은 빈 조건이다 — 운영
+     * 국내 잠정 관문 켬의 덧붙임 조건(별칭 {@code r}) — 본문을 읽어 기간이 한 달 안임을 확인한 국내 줄(월간 실적 · 같은 제목으로 온다 ·
+     * 2026-07~11 I002 477건 중 34 · 8종목)은 실적 발표가 아니다. 본문을 아직 못 읽은 줄 · 기간이 어긋난 줄은 발표로 남는다(막는 쪽). 꺼짐은 빈 조건이다 — 운영
      * DB에 관문 표가 없다. 지표 리더와 화면 판정이 {@link #IS_EARNINGS_RELEASE}와 함께 이것을 쓴다.
      */
     public static String periodReleaseOnly(boolean provisionalGate) {
         return provisionalGate ? """
                  AND NOT EXISTS (SELECT 1 FROM kr_provisional_release pr
-                                  WHERE pr.rcept_no = r.filing_no AND pr.stock_id = r.stock_id AND pr.release_period = 'OTHER')
+                                  WHERE pr.rcept_no = r.filing_no AND pr.stock_id = r.stock_id AND pr.release_period = 'MONTH')
                 """ : " ";
     }
 

@@ -43,8 +43,12 @@ public final class DartProvisionalDocument {
 
     public enum Form { I001, I002 }
 
-    /** 본문 기간의 꼴 — 실적 발표로 셈하는 것은 분기 · 연도뿐이다(월간 실적은 같은 제목으로 온다 · 477건 중 34). */
-    public enum ReleasePeriod { QUARTER, YEAR, OTHER }
+    /**
+     * 본문 기간의 꼴. 실적 발표에서 빼는 것은 {@code MONTH}(한 달 안 · 월간 실적은 같은 제목으로 온다 · 477건 중 34)뿐이다. {@code OTHER}는
+     * 회사가 기간을 잘못 적은 것이라(098460 2026-07-28: 「2026-03-01 ~ 06-30」 · 머리 표지는 26.2Q · 캐시 609건 중 1) 발표로 남겨 막고 잠정
+     * 행에는 안 쓴다 — 틀린 기간으로 발표를 빼면 막기가 풀려 옛 분기 값이 나간다.
+     */
+    public enum ReleasePeriod { QUARTER, YEAR, MONTH, OTHER }
 
     /** 손익 다섯 줄 — 문서 단위 그대로. 없으면 {@code null}. */
     public record Lines(BigDecimal revenue, BigDecimal operatingIncome, BigDecimal profitBeforeTax, BigDecimal netIncome,
@@ -316,10 +320,15 @@ public final class DartProvisionalDocument {
         return found;
     }
 
-    /** 본문 기간의 꼴 — 분기 말에 끝나는 석 달이면 분기, 열두 달이면 연도, 나머지(월간 · 반기 누계 단독 …)는 실적 발표가 아니다. */
+    /** 본문 기간의 꼴 — 분기 말에 끝나는 석 달이면 분기, 열두 달이면 연도, 한 달 안이면 월간, 나머지는 어긋난 기간이다. */
     public static ReleasePeriod periodOf(LocalDate start, LocalDate end) {
-        if (start == null || end == null || !end.equals(end.withDayOfMonth(end.lengthOfMonth())) || end.getMonthValue() % 3 != 0
-                || start.getDayOfMonth() != 1) {
+        if (start == null || end == null) {
+            return ReleasePeriod.OTHER;
+        }
+        if (start.getYear() == end.getYear() && start.getMonth() == end.getMonth()) {
+            return ReleasePeriod.MONTH;
+        }
+        if (!end.equals(end.withDayOfMonth(end.lengthOfMonth())) || end.getMonthValue() % 3 != 0 || start.getDayOfMonth() != 1) {
             return ReleasePeriod.OTHER;
         }
         long months = java.time.temporal.ChronoUnit.MONTHS.between(start, end.plusDays(1));

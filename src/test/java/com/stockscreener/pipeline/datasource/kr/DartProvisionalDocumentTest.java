@@ -93,7 +93,20 @@ class DartProvisionalDocumentTest {
 
         assertThat(p.periodStart()).isEqualTo(LocalDate.of(2026, 10, 1));
         assertThat(p.periodEnd()).isEqualTo(LocalDate.of(2026, 10, 31));
-        assertThat(p.releasePeriod()).isEqualTo(DartProvisionalDocument.ReleasePeriod.OTHER);
+        assertThat(p.releasePeriod()).isEqualTo(DartProvisionalDocument.ReleasePeriod.MONTH);
+    }
+
+    @Test
+    @DisplayName("기간 꼴 — 한 달 안만 월간이고, 잘못 적힌 기간(2026-03-01 ~ 06-30 · 098460)은 월간이 아니다(발표로 남는다)")
+    void periodKinds() {
+        assertThat(DartProvisionalDocument.periodOf(LocalDate.of(2026, 3, 1), LocalDate.of(2026, 6, 30)))
+                .isEqualTo(DartProvisionalDocument.ReleasePeriod.OTHER);
+        assertThat(DartProvisionalDocument.periodOf(LocalDate.of(2026, 10, 1), LocalDate.of(2026, 10, 31)))
+                .isEqualTo(DartProvisionalDocument.ReleasePeriod.MONTH);
+        assertThat(DartProvisionalDocument.periodOf(LocalDate.of(2026, 4, 1), LocalDate.of(2026, 6, 30)))
+                .isEqualTo(DartProvisionalDocument.ReleasePeriod.QUARTER);
+        assertThat(DartProvisionalDocument.periodOf(LocalDate.of(2025, 1, 1), LocalDate.of(2025, 12, 31)))
+                .isEqualTo(DartProvisionalDocument.ReleasePeriod.YEAR);
     }
 
     @Test

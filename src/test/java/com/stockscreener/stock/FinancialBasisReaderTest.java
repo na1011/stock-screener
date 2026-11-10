@@ -212,6 +212,55 @@ class FinancialBasisReaderTest {
         assertThat(reader.read(List.of(id), LocalDate.of(2031, 10, 29))).doesNotContainKey(id);
     }
 
+    @Autowired
+    private com.stockscreener.pipeline.collector.CorporateActionLedger ledger;
+
+    @Autowired
+    private com.stockscreener.pipeline.datasource.us.shareclass.ShareClassStore shareClasses;
+
+    @Test
+    @DisplayName("국내 잠정 관문 켬: 다음 분기 잠정실적이 자체 검사를 지나면 PROVISIONAL — 기준 라벨은 잠정 분기 · 꺼짐 판독기는 같은 종목이 PENDING(대조군)")
+    void provisionalWhenTheQuarterResultStands() {
+        long id = insertStock("KOSPI", "PROV", 12);
+        LocalDate[][] quarters = {{LocalDate.of(2030, 7, 1), LocalDate.of(2030, 9, 30)}, {LocalDate.of(2030, 10, 1), LocalDate.of(2030, 12, 31)},
+                {LocalDate.of(2031, 1, 1), LocalDate.of(2031, 3, 31)}, {LocalDate.of(2031, 4, 1), LocalDate.of(2031, 6, 30)}};
+        String[] periods = {"Q3", "Q4", "Q1", "Q2"};
+        for (int i = 0; i < 4; i++) {
+            LocalDate end = quarters[i][1];
+            long fs = jdbc.queryForObject("""
+                    INSERT INTO financial_statement (stock_id, fiscal_year, fiscal_period, period_start, period_end, published_at,
+                        revision_no, is_latest, currency_code, revenue, operating_income, net_income, report_code)
+                    VALUES (?, ?, ?, ?, ?, ?, 0, true, 'KRW', 100000000000, 10000000000, 8000000000, '11013') RETURNING id
+                    """, Long.class, id, end.getYear(), periods[i], quarters[i][0], end, end.plusDays(44));
+            jdbc.update("""
+                    INSERT INTO financial_common_income (financial_statement_id, report_code, basis, branch, engine_version, statement_basis)
+                    VALUES (?, '11013', 'T', 'kr-ni', 1, 'C')
+                    """, fs);
+        }
+        LocalDate filed = LocalDate.of(2031, 10, 8);
+        release(id, "KR", "20311008800001", "I002", "연결재무제표기준영업(잠정)실적(공정공시)", null, filed);
+        sweep(id, LocalDate.of(2031, 10, 9));
+        // 당해 1,200억 · 누계 = 1 · 2분기 정식(각 1,000억) + 당해 = 3,200억(억원).
+        jdbc.update("""
+                INSERT INTO kr_provisional_release (rcept_no, stock_id, form, report_name, filed_on, status, consolidated, period_start,
+                    period_end, cumulative_start, cumulative_end, release_period, unit_won, revenue, operating_income, cum_revenue,
+                    cum_operating_income, parser_version)
+                VALUES ('20311008800001', ?, 'I002', '연결재무제표기준영업(잠정)실적(공정공시)', ?, 'OK', true, DATE '2031-07-01',
+                    DATE '2031-09-30', DATE '2031-01-01', DATE '2031-09-30', 'QUARTER', 100000000, 1200, 150, 3200, 350, 1)
+                """, id, filed);
+        FinancialBasisReader on = new FinancialBasisReader(jdbc,
+                new com.stockscreener.indicator.IndicatorDataReader(jdbc, ledger, shareClasses, true));
+
+        Basis provisional = on.read(List.of(id), LocalDate.of(2031, 10, 9)).get(id);
+        Basis off = reader.read(List.of(id), LocalDate.of(2031, 10, 9)).get(id);
+
+        assertThat(provisional.status()).isEqualTo(Status.PROVISIONAL);
+        assertThat(provisional.flowLabel()).isEqualTo("2031 Q3");
+        assertThat(provisional.notice()).contains("잠정실적").contains("2031 Q3").contains("정식 보고서");
+        assertThat(off.status()).isEqualTo(Status.PENDING);
+        assertThat(off.flowLabel()).isEqualTo("2031 Q2");
+    }
+
     // ── 픽스처 ────────────────────────────────────────────────────────────────────────────────────────────────────
 
     /** 2030 Q3 ~ 2031 Q2 연속 네 분기 · 공시일은 기말 + 40일. */
