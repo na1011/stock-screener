@@ -74,6 +74,19 @@ class DartProvisionalDocumentTest {
     }
 
     @Test
+    @DisplayName("옛 서식(2025-07 삼성전자 2분기) — 「실적기간」 표 없이 당기 칸 머리의 분기 표지('25.2Q)로 기간을 읽고 누계는 연초부터")
+    void oldFormReadsTheQuarterLabel() throws Exception {
+        DartProvisionalDocument.Parsed p = parse("20250708800003", "연결재무제표기준영업(잠정)실적(공정공시)");
+
+        assertThat(p.periodStart()).isEqualTo(LocalDate.of(2025, 4, 1));
+        assertThat(p.periodEnd()).isEqualTo(LocalDate.of(2025, 6, 30));
+        assertThat(p.cumulativeStart()).isEqualTo(LocalDate.of(2025, 1, 1));
+        assertThat(p.current().revenue()).isEqualByComparingTo("74.00");
+        assertThat(p.cumulative().revenue()).isEqualByComparingTo("153.14");
+        assertThat(p.current().operatingIncome()).isEqualByComparingTo("4.60");
+    }
+
+    @Test
     @DisplayName("기아 월간 실적 — 같은 제목이지만 본문 기간이 한 달이라 실적 발표가 아니다")
     void monthlyIsNotARelease() throws Exception {
         DartProvisionalDocument.Parsed p = parse("20261102800493", "영업(잠정)실적(공정공시)");

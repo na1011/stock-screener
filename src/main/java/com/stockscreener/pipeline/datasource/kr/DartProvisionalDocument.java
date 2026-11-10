@@ -25,6 +25,10 @@ import java.util.regex.Pattern;
  *       단위는 표 머리 「단위 : 조원, %」다. 연결 · 별도는 제목이 가른다({@code 연결재무제표기준…}) — 본문 앞 300자는 서식 CSS라 못 가른다.</li>
  *   <li>I001 — 「재무제표의 종류」(연결 · 별도), 결산기간 시작 · 종료일, 손익 네 줄(「- 매출액」 …)의 당해사업연도 값. 단위는
  *       「변동내용(단위:천원)」이다. 지배 순이익 줄은 없다(추가공시에 드물게 있다 — 안 읽는다).</li>
+ *   <li><b>옛 I002 서식</b>(2025-09 무렵까지)에는 「실적기간」 표가 없고 당기 칸 머리에 회사가 쓴 분기 표지만 있다 — {@code ('25.2Q)} ·
+ *       {@code (2025.2Q)} · {@code (25.2분기)} · {@code ('25년2분기)} · {@code (2025년 2분기)}(2026-11-10 표본 18건). 연도와 분기 숫자로 읽고 누계는
+ *       그 해 1월 1일부터로 본다 — 그 가정이 틀린 공시는 계산 쪽 자체 검사(당해 = 누계 − 정식 앞 분기 합)가 못 읽음으로 거른다. 표지가
+ *       {@code (-)}이면(옛 월간 실적) 원장이 기간을 안 준 것이라 못 읽음이다(발표로 남아 막는다).</li>
  *   <li>정정 공시는 정정전 · 정정후 표 뒤에 <b>고친 서식 전체</b>를 다시 싣는다 — 서식의 마지막 닻부터 읽는다. 정정 표의 칸은 닻 앞이라
  *       안 읽힌다(정정 표의 열을 값으로 읽은 오독이 046890에 있었다 · 그것은 계산 쪽 자체 검사가 따로 거른다).</li>
  * </ul>
@@ -93,6 +97,8 @@ public final class DartProvisionalDocument {
             "백만원", 1_000_000L, "천원", 1_000L, "원", 1L);
     private static final Pattern UNIT = Pattern.compile("단위\\s*[:：]\\s*(조원|십억원|억원|백만원|천원|원)");
     private static final Pattern DATE = Pattern.compile("\\d{4}-\\d{2}-\\d{2}");
+    /** 옛 서식의 분기 표지(공백을 지운 칸) — 연도 2 · 4자리 + 분기 숫자. */
+    private static final Pattern QUARTER_LABEL = Pattern.compile("'?(\\d{4}|\\d{2})[.년]?([1-4])(?:Q|분기)");
     private static final Pattern CELL_OPEN = Pattern.compile("(?is)<t[dh]\\b[^>]*>");
     private static final Pattern CELL_CLOSE = Pattern.compile("(?i)</t[dh]>");
     private static final Pattern TAG = Pattern.compile("(?s)<[^>]*>");
@@ -131,11 +137,22 @@ public final class DartProvisionalDocument {
 
     private static Parsed i002(List<String> cells, String reportName) throws Unreadable {
         int anchor = lastIndex(cells, "실적기간");
-        if (anchor < 0) {
-            throw new Unreadable("no-anchor", null, null);
+        LocalDate[] current;
+        LocalDate[] cumulative;
+        if (anchor >= 0) {
+            current = periodAfter(cells, anchor, "당기실적");
+            cumulative = periodAfter(cells, anchor, "당기누계실적");
+        } else {
+            anchor = lastMatching(cells, "^\\d\\.(연결)?실적내용$");
+            if (anchor < 0) {
+                throw new Unreadable("no-anchor", null, null);
+            }
+            current = quarterLabelAfter(cells, anchor);
+            if (current == null) {
+                throw new Unreadable("no-period-label", null, null);
+            }
+            cumulative = new LocalDate[]{current[1].withDayOfYear(1), current[1]};
         }
-        LocalDate[] current = periodAfter(cells, anchor, "당기실적");
-        LocalDate[] cumulative = periodAfter(cells, anchor, "당기누계실적");
         if (current == null) {
             throw new Unreadable("no-period", null, null);
         }
@@ -258,6 +275,35 @@ public final class DartProvisionalDocument {
             }
         }
         return null;
+    }
+
+    /** 옛 서식 — 닻 뒤 첫 분기 표지(당기 칸 머리 · 당기 · 전기 · 전년동기 순서로 온다)의 분기 {시작, 끝}. */
+    private static LocalDate[] quarterLabelAfter(List<String> cells, int anchor) {
+        for (int i = anchor + 1; i < Math.min(cells.size(), anchor + 20); i++) {
+            String c = compact(cells.get(i));
+            if (c.startsWith("매출액")) {
+                return null;
+            }
+            Matcher m = QUARTER_LABEL.matcher(c);
+            if (m.find()) {
+                int year = Integer.parseInt(m.group(1));
+                year = year < 100 ? 2000 + year : year;
+                int quarter = Integer.parseInt(m.group(2));
+                LocalDate start = LocalDate.of(year, quarter * 3 - 2, 1);
+                return new LocalDate[]{start, start.plusMonths(3).minusDays(1)};
+            }
+        }
+        return null;
+    }
+
+    private static int lastMatching(List<String> cells, String regex) {
+        int found = -1;
+        for (int i = 0; i < cells.size(); i++) {
+            if (compact(cells.get(i)).matches(regex)) {
+                found = i;
+            }
+        }
+        return found;
     }
 
     private static int lastIndex(List<String> cells, String label) {
