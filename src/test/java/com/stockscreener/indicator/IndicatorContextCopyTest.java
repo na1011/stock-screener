@@ -37,7 +37,8 @@ class IndicatorContextCopyTest {
             "withGovernanceFacts", "governanceFacts",
             "withEarningsReleaseDates", "earningsReleaseDates",
             "withSpinOffDates", "spinOffDates",
-            "withProvisionalReleases", "provisionalReleases");
+            "withProvisionalReleases", "provisionalReleases",
+            "withKrGate", "krGate");
 
     @Test
     @DisplayName("withDependencies가 나머지 필드를 전부 나른다")
@@ -78,6 +79,13 @@ class IndicatorContextCopyTest {
     void withProvisionalReleasesCarriesEveryOtherField() throws Exception {
         IndicatorContext base = fullyPopulated();
         assertCarriesEverythingExcept(base, base.withProvisionalReleases(List.of()), "withProvisionalReleases");
+    }
+
+    @Test
+    @DisplayName("withKrGate가 나머지 필드를 전부 나른다")
+    void withKrGateCarriesEveryOtherField() throws Exception {
+        IndicatorContext base = fullyPopulated();
+        assertCarriesEverythingExcept(base, base.withKrGate(false), "withKrGate");
     }
 
     @Test
@@ -191,7 +199,8 @@ class IndicatorContextCopyTest {
                         LocalDate.of(2026, 7, 8), LocalDate.of(2026, 7, 8), true, LocalDate.of(2026, 4, 1),
                         LocalDate.of(2026, 6, 30), LocalDate.of(2026, 1, 1), LocalDate.of(2026, 6, 30), 1_000_000L,
                         new com.stockscreener.indicator.ProvisionalRelease.Lines(BigDecimal.ONE, null, null, null, null),
-                        new com.stockscreener.indicator.ProvisionalRelease.Lines(BigDecimal.TEN, null, null, null, null))));
+                        new com.stockscreener.indicator.ProvisionalRelease.Lines(BigDecimal.TEN, null, null, null, null))))
+                .withKrGate(true);
     }
 
     private static FinancialFigures annual() {

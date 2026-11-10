@@ -480,7 +480,9 @@ public class IndicatorRunner {
                 // 분사 효력일(ADR-0168 F1). 빠뜨려도 컴파일되고, 빠지면 분사 뒤 가격을 분사 앞 회사의 이익으로 나눈 배수가 나간다.
                 .withSpinOffDates(reader.readSpinOffDates(stockId))
                 // 국내 실적 발표 공시 본문(국내 잠정 관문 켬만 · 꺼짐은 빈 목록). 빠뜨려도 컴파일되고, 빠지면 막힌 봉이 잠정 행 없이 비어 있다.
-                .withProvisionalReleases(reader.readProvisionalReleases(stockId, asOf)),
+                .withProvisionalReleases(reader.readProvisionalReleases(stockId, asOf))
+                // 국내 관문 표지 — 국내 종목이고 설정이 켜졌을 때만. 계산 규칙을 바꾸는 국내 처방(K11)이 이것으로 갈린다.
+                .withKrGate(reader.provisionalGate() && ("KOSPI".equals(attributes.marketCode()) || "KOSDAQ".equals(attributes.marketCode()))),
                 attributes.financialCurrencyMismatched() || nonDecember);
     }
 

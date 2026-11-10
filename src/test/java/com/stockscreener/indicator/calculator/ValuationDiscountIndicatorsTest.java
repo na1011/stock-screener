@@ -142,6 +142,27 @@ class ValuationDiscountIndicatorsTest {
         }
 
         @Test
+        @DisplayName("국내 관문 켬(K11): 기저는 봉이 짚은 잔액 행으로 정한다 — 창 밖 옛 행에 지배 자본이 비어도 지배 자본 기저(꺼짐은 총자본 · 대조군)")
+        void pbrBasisFollowsTheRowsTheBarsTouched() {
+            List<PriceBar> bars = new ArrayList<>(BARS);
+            for (int i = 0; i < BARS; i++) {
+                bars.add(bar(START.plusDays(i), BigDecimal.valueOf(20)));
+            }
+            List<FinancialFigures> rows = new ArrayList<>();
+            LocalDate end = START.minusMonths(6);
+            for (int i = 0; i < 8; i++) {
+                FinancialFiguresFixture q = FinancialFiguresFixture.quarter(end.minusMonths(3L * i))
+                        .totalEquity(BigDecimal.valueOf(4000)).sharesOutstanding(BigDecimal.valueOf(100));
+                // 가장 최근 분기만 지배 자본을 싣는다 — 옛 행(창 밖 2015~2017 국내 꼴)은 비어 있다. 봉은 전부 최신 분기를 짚는다.
+                rows.add((i == 0 ? q.totalEquityControlling(BigDecimal.valueOf(2000)) : q).build());
+            }
+            IndicatorContext context = new IndicatorContext(1L, bars, List.of(), rows, null);
+
+            assertThat(new PbrMedian5yCalculator().calculate(context).get(0).value()).as("꺼짐 — 전 이력 판정이 총자본으로").isEqualByComparingTo("0.5");
+            assertThat(new PbrMedian5yCalculator().calculate(context.withKrGate(true)).get(0).value()).isEqualByComparingTo("1");
+        }
+
+        @Test
         @DisplayName("PSR은 유량이라 4분기를 더한다")
         void psrSumsFourQuarters() {
             // 분기 매출 250 × 4 = 1000, 주식수 100 → 주당매출 10. 주가 20 → PSR 2

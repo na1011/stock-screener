@@ -64,8 +64,8 @@ public class PbrMedian5yCalculator implements IndicatorCalculator {
     public List<IndicatorPoint> calculate(IndicatorContext context) {
         // MUST: 집계값이므로 기저를 **창 전체에서 한 번** 정한다. 행마다 고르면 한 중앙값
         // 안에서 지배주주와 연결이 섞이고(실측 74종목 · LNG 7,690.91%) 그 값은 그럴듯하다.
-        boolean controlling =
-                FinancialMath.controllingEquityThroughout(FinancialMath.seriesOf(context).rows());
+        boolean controlling = context.krGate() ? controllingOnTouchedRows(context)
+                : FinancialMath.controllingEquityThroughout(FinancialMath.seriesOf(context).rows());
         return ValuationHistory.median(context, (ctx, bar, series, published) -> {
             // 저량이다. 그 시점 잔액 하나를 쓴다 — 더하면 네 배가 된다.
             // MUST: 분자가 시가총액이므로 분모는 지배주주 자본이다(ADR-0159).
@@ -83,5 +83,22 @@ public class PbrMedian5yCalculator implements IndicatorCalculator {
             }
             return FinancialMath.perShareOn(ctx, bar, equity, series);
         });
+    }
+
+    /**
+     * 국내 관문 켬(계획 K11) — 기저를 <b>그 중앙값의 봉들이 실제로 짚은 잔액 행</b>({@code balanceAt(published)})에서 정한다. 컨텍스트 전 이력의 행으로
+     * 정하면 창 밖 2015~2017 국내 행(지배 자본 칸 100% 비어 있음 · FSR이 2018부터)이 창 전체를 총자본 기저로 떨어뜨렸다 — 비지배가 있는 192종목의
+     * 중앙값이 그 기저로 틀렸고 49종목은 빈칸이었다. 같은 봉 루프({@link ValuationHistory#median})를 한 번 더 돌아 짚은 행만 모은다.
+     */
+    private static boolean controllingOnTouchedRows(IndicatorContext context) {
+        java.util.Set<FinancialFigures> touched = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+        ValuationHistory.median(context, (ctx, bar, series, published) -> {
+            FinancialFigures figures = series.balanceAt(published);
+            if (figures != null) {
+                touched.add(figures);
+            }
+            return null;
+        });
+        return FinancialMath.controllingEquityThroughout(new java.util.ArrayList<>(touched));
     }
 }
