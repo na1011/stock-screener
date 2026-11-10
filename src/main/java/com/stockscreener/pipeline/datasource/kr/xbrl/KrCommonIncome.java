@@ -44,6 +44,8 @@ public final class KrCommonIncome {
 
     private static final String EPS = "BasicEarningsLossPerShare";
     private static final String EPS_CONTINUING = "BasicEarningsLossPerShareFromContinuingOperations";
+    /** 보통주 희석 EPS — 재료 표에는 관문 켬의 판독기 판에만 있다({@link DartXbrlFactReader#KR_GATE_MATERIAL}). */
+    private static final String EPS_DILUTED = "DilutedEarningsLossPerShare";
     private static final String WEIGHTED = "WeightedAverageShares";
     private static final String DIRECT = "ProfitLossAttributableToOrdinaryEquityHoldersOfParentEntity";
     private static final String OWNERS = "ProfitLossAttributableToOwnersOfParent";
@@ -84,7 +86,14 @@ public final class KrCommonIncome {
          * 0이다(기간 가중평균을 앞 해 말 명부 한 점으로 대신해 증자 · 자사주 해에 멀쩡한 행이 떨어졌다 · 계획 C 「none:witness」). 명부 구간 폭이 증인
          * 여유(5%)를 넘으면 안 받는다(C+⑷ — 한화오션 2023 FY 대규모 증자 · 17.5% 배분을 받았다).
          */
-        U
+        U,
+        /**
+         * 상충 해소 — E나 W 후보가 여럿이면 |지배 NI − E × W| ≤ 0.5W로 닫히는 짝을 모아, 그 짝들의 E가 한 값(1원 미만 차이는 같은 값)일 때 잔차가
+         * 가장 작은 짝으로 판정을 잇는다(계획 C 「none:conflict」). 지분상품 있는 행은 진짜 짝이 원래 안 닫혀(지분상품 몫만큼 E × W가 작다) 닫히는 짝이
+         * 미끼일 수 있다 — 그 행은 W가 하나이고 버리는 E가 모두 고른 E보다 작으며 같은 기간 희석 EPS로도 실렸을 때만 받는다(C+⑵ · 파마리서치
+         * 2025 FY · 2026 Q1이 그 꼴이고, HMM · 피엔티 · HD현대 꼴은 상충으로 남는다).
+         */
+        C1
     }
 
     /**
@@ -209,7 +218,12 @@ public final class KrCommonIncome {
         Set<BigDecimal> e = m.values(EPS, period, COMMON_MEMBERS);
         Set<BigDecimal> w = m.values(WEIGHTED, period, COMMON_MEMBERS);
         if (e.size() > 1 || w.size() > 1) {
-            return Judged.none("conflict", anchor.statement());
+            BigDecimal[] pair = rules.has(Rule.C1) ? resolveConflict(income, e, w, instruments, m, period) : null;
+            if (pair == null) {
+                return Judged.none("conflict", anchor.statement());
+            }
+            e = Set.of(pair[0]);
+            w = Set.of(pair[1]);
         }
         Register reference = prior != null ? prior : same;
         if (e.size() == 1 && w.size() == 1) {
@@ -615,6 +629,53 @@ public final class KrCommonIncome {
             }
         }
         return out;
+    }
+
+    /** {@link Rule#C1}의 짝 {E, W} — 못 고르면 {@code null}. */
+    private static BigDecimal[] resolveConflict(BigDecimal income, Set<BigDecimal> e, Set<BigDecimal> w, boolean instruments,
+                                                Material m, Period period) {
+        BigDecimal[] best = null;
+        BigDecimal bestResidual = null;
+        BigDecimal low = null;
+        BigDecimal high = null;
+        for (BigDecimal x : e) {
+            for (BigDecimal y : w) {
+                BigDecimal residual = income.subtract(x.multiply(y)).abs();
+                if (residual.compareTo(HALF.multiply(y)) > 0) {
+                    continue;
+                }
+                low = low == null || x.compareTo(low) < 0 ? x : low;
+                high = high == null || x.compareTo(high) > 0 ? x : high;
+                // 잔차가 같으면 작은 E · 작은 W(기준 구현의 튜플 최소와 같은 순서)
+                int order = bestResidual == null ? -1 : residual.compareTo(bestResidual);
+                if (order == 0) {
+                    order = x.compareTo(best[0]);
+                    order = order != 0 ? order : y.compareTo(best[1]);
+                }
+                if (order < 0) {
+                    best = new BigDecimal[]{x, y};
+                    bestResidual = residual;
+                }
+            }
+        }
+        if (best == null || high.subtract(low).compareTo(BigDecimal.ONE) >= 0) {
+            return null;
+        }
+        if (instruments) {
+            if (w.size() > 1) {
+                return null;
+            }
+            Set<BigDecimal> diluted = m.values(EPS_DILUTED, period, COMMON_MEMBERS);
+            for (BigDecimal dropped : e) {
+                if (dropped.subtract(best[0]).abs().compareTo(BigDecimal.ONE) < 0) {
+                    continue;
+                }
+                if (dropped.compareTo(best[0]) >= 0 || diluted.stream().noneMatch(d -> d.compareTo(dropped) == 0)) {
+                    return null;
+                }
+            }
+        }
+        return best;
     }
 
     private static boolean same(BigDecimal a, BigDecimal b) {

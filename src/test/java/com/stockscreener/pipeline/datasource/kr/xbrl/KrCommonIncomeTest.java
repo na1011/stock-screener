@@ -52,6 +52,39 @@ class KrCommonIncomeTest {
     }
 
     @Test
+    void c1PicksTheClosingPairWhenTheLedgerCarriesTwoEps() {
+        // 지분상품 없음 · 기본 EPS 개념에 1,000원과 950원이 함께 실렸다 · W 1,000만 — 1,000 × W만 지배 NI 100억과 0.5W 안에서 닫힌다(국내 관문 켬 C1).
+        Judged off = judge(rowNi(10_000_000_000L), COMMON_ONLY, owners(10_000_000_000L), eps(1000), eps(950), weighted(10_000_000));
+        Judged on = judgeV4(rowNi(10_000_000_000L), COMMON_ONLY, owners(10_000_000_000L), eps(1000), eps(950), weighted(10_000_000));
+        // 대조군 — 닫히는 짝의 E가 둘로 갈리면(W 둘이 각각 다른 E와 닫힌다) 고르지 않는다.
+        Judged split = judgeV4(rowNi(10_000_000_000L), COMMON_ONLY, owners(10_000_000_000L), eps(1000), eps(500), weighted(10_000_000),
+                weighted(20_000_000));
+
+        assertThat(off.branch()).as("꺼짐 — 지금 동작").isEqualTo("none:conflict");
+        assertThat(on.branch()).isEqualTo("kr-ni");
+        assertThat(on.common()).isEqualByComparingTo("10000000000");
+        assertThat(split.branch()).isEqualTo("none:conflict");
+    }
+
+    @Test
+    void c1OnInstrumentRowsNeedsTheDroppedEpsToBeTheDilutedOne() {
+        // 우선주가 있어 지분상품 있음 · E 1,000 · 950 · W 하나 — 버리는 950이 같은 기간 희석 EPS로도 실렸다(파마리서치 2025 FY 꼴 · C+⑵).
+        Fact diluted = fact(Source.IFRS, "DilutedEarningsLossPerShare", Q2, List.of(ORDINARY), 950);
+        Judged on = judgeV4(rowNi(10_000_000_000L), WITH_PREFERRED, owners(10_000_000_000L), eps(1000), eps(950), weighted(10_000_000),
+                diluted);
+        // 대조군 둘 — 버리는 E가 희석 EPS로 안 실렸다 · W 후보가 둘이다(지분상품 행은 진짜 짝이 원래 안 닫혀 닫히는 짝이 미끼일 수 있다).
+        Judged notDiluted = judgeV4(rowNi(10_000_000_000L), WITH_PREFERRED, owners(10_000_000_000L), eps(1000), eps(950),
+                weighted(10_000_000));
+        Judged twoWeighted = judgeV4(rowNi(10_000_000_000L), WITH_PREFERRED, owners(10_000_000_000L), eps(1000), weighted(10_000_000),
+                weighted(10_400_000));
+
+        assertThat(on.branch()).isEqualTo("exw");
+        assertThat(on.common()).isEqualByComparingTo("10000000000");
+        assertThat(notDiluted.branch()).isEqualTo("none:conflict");
+        assertThat(twoWeighted.branch()).isEqualTo("none:conflict");
+    }
+
+    @Test
     void ncTakesTheConsolidatedIncomeWhenEquityShowsNoNoncontrollingInterest() {
         // 행 지배 NI가 빈 연결 행 — 연결 순이익 100억 · 기초(03-31) · 기말(06-30) 자본총계 = 지배 자본 · 비지배 손익 줄 없음(국내 관문 켬 NC-b).
         RowIncome row = new RowIncome(null, BigDecimal.valueOf(10_000_000_000L));
