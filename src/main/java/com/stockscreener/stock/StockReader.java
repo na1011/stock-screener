@@ -43,6 +43,17 @@ public class StockReader {
     private final CorporateActionLedger corporateActions;
     private final StockAliasIndex aliasIndex;
 
+    /**
+     * 국내 관문({@code stockscreener.gate.kr-provisional}) — 켜면 보통주 귀속 순이익을 그 가시일(시험 마이그레이션 V70_16)이 지난 행만 그린다
+     * (분기 행이 아직 없는 그 해 사업보고서 명부를 쓴 값은 안 보인다). 꺼짐 질의는 그 칸을 참조하지 않는다. 시험은 생성자만 부른다.
+     */
+    private boolean krGate;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    void krGate(@org.springframework.beans.factory.annotation.Value("${stockscreener.gate.kr-provisional}") boolean on) {
+        this.krGate = on;
+    }
+
     public StockReader(JdbcTemplate jdbcTemplate, CorporateActionLedger corporateActions,
                        StockAliasIndex aliasIndex) {
         this.jdbcTemplate = jdbcTemplate;
@@ -178,7 +189,8 @@ public class StockReader {
         String commonMatch = us
                 ? "ci.report_code = financial_statement.report_code"
                 : "ci.published_snapshot = financial_statement.published_at AND ci.income_snapshot IS NOT DISTINCT FROM "
-                        + "coalesce(financial_statement.net_income_controlling, financial_statement.net_income) AND ci.branch <> 'kr-ni'";
+                        + "coalesce(financial_statement.net_income_controlling, financial_statement.net_income) AND ci.branch <> 'kr-ni'"
+                        + (krGate ? " AND (ci.common_visible_from IS NULL OR ci.common_visible_from <= CURRENT_DATE)" : "");
         String extra = (withDiscontinued ? ", discontinued_income, discontinued_rule" : "")
                 + (withCommon ? ", (SELECT ci.common FROM financial_common_income ci WHERE ci.financial_statement_id = "
                         + "financial_statement.id AND " + commonMatch + " AND ci.basis = 'T') AS common_income"

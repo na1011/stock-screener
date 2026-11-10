@@ -137,7 +137,21 @@ public final class KrCommonIncome {
          * 행 지배 NI가 연결 순이익과 같은 행(매퍼가 연결 순이익을 지배 칸에 둔 꼴)의 대체 앵커 — 표준 지배 귀속 o와 표준 비지배 귀속 n이 하나씩이고
          * o + n이 행 지배 NI와 같으면 앵커는 o다(계획 AN3).
          */
-        AN3
+        AN3,
+        /**
+         * 시점 재료(PIT-a) — Q1~Q3 행은 그 해 명부(그 해 사업보고서에 실린다 · 분기 공시 때는 아직 없다)를 안 쓴다. 앞 해 명부가 없을 때만 그 해
+         * 명부를 쓰고, 그 행의 보통주 몫은 그 해 사업보고서 공시일부터 보인다(없으면 안 보인다). 적용은 행 해석({@link KrCommonIncomeRows})이 한다.
+         */
+        PIT,
+        /**
+         * 비교열 W — 그 판에 W가 없고 E가 하나면, 뒤에 접수된 판 중 같은 기간 W가 하나인 첫 판의 W를 쓴다(그 판의 같은 기간 E 집합이 이 판과 같을
+         * 때만 · W 단위 점검에 걸리면 안 받는다). 그 판 재료로 값이 안 설 때만 쓰고(행 해석이 고른다), 그 행의 보통주 몫은 뒤 판 접수일부터 보인다.
+         */
+        CMP
+    }
+
+    /** {@link Rule#CMP}의 재료 — 그 행 판보다 뒤에 접수된 판 하나(접수번호 · 접수일 · 재료 · 재료가 없으면 {@code null}). */
+    public record LaterFiling(String rceptNo, LocalDate receipt, List<Fact> facts) {
     }
 
     /**
@@ -155,6 +169,14 @@ public final class KrCommonIncome {
 
         public boolean has(Rule rule) {
             return on.contains(rule);
+        }
+
+        /** 그 규칙을 뺀 묶음. */
+        public Rules without(Rule rule) {
+            java.util.Set<Rule> rest = java.util.EnumSet.noneOf(Rule.class);
+            rest.addAll(on);
+            rest.remove(rule);
+            return new Rules(rest);
         }
     }
 
@@ -214,7 +236,23 @@ public final class KrCommonIncome {
 
     /** 판정 결과. 값이 없으면 {@code common}이 {@code null}이고 {@code branch}가 {@code none:*}다. */
     public record Judged(String branch, BigDecimal common, char basis, char statement, BigDecimal tolerance,
-                         BigDecimal payoutBase, String payoutBranch, boolean wantsCumulative) {
+                         BigDecimal payoutBase, String payoutBranch, boolean wantsCumulative, LocalDate comparativeReceipt) {
+
+        public Judged(String branch, BigDecimal common, char basis, char statement, BigDecimal tolerance, BigDecimal payoutBase,
+                      String payoutBranch, boolean wantsCumulative) {
+            this(branch, common, basis, statement, tolerance, payoutBase, payoutBranch, wantsCumulative, null);
+        }
+
+        /** 비교열 W({@link Rule#CMP})를 쓴 판정 — 뒤 판 접수일을 단다. */
+        Judged withComparative(LocalDate receipt) {
+            return receipt == null ? this
+                    : new Judged(branch, common, basis, statement, tolerance, payoutBase, payoutBranch, wantsCumulative, receipt);
+        }
+
+        /** 배당성향 분모가 보통주 몫에 기대는가 — 지배 NI 그대로({@code ni})면 보통주 몫의 가시일을 안 탄다. */
+        public boolean payoutFollowsCommon() {
+            return payoutBase != null && !"ni".equals(payoutBranch);
+        }
 
         public boolean decided() {
             return common != null;
@@ -244,6 +282,12 @@ public final class KrCommonIncome {
     /** @param nc NC-a 재료(Q2 · Q3 · {@link Rule#NC}) — 없으면 {@code null} */
     public static Judged judge(Period period, RowIncome row, List<Fact> facts, Register prior, Register same,
                                Multiple multiple, Rules rules, NcContext nc) {
+        return judge(period, row, facts, prior, same, multiple, rules, nc, List.of());
+    }
+
+    /** @param later 그 행 판보다 뒤에 접수된 판들(접수번호 순 · {@link Rule#CMP}) */
+    public static Judged judge(Period period, RowIncome row, List<Fact> facts, Register prior, Register same,
+                               Multiple multiple, Rules rules, NcContext nc, List<LaterFiling> later) {
         Anchor anchor = anchor(period, row, facts, rules, nc);
         if (anchor == null) {
             // 행 지배 NI가 비었는데 연결 순이익이 행 NI와 같다 — 연결로 지은 행인데 지배 몫이 없다(매퍼 · 원장 몫 · reload-gate 국내
@@ -270,6 +314,47 @@ public final class KrCommonIncome {
         if (w.isEmpty() && rules.has(Rule.RB)) {
             w = m.axisWeights(period);
         }
+        Register reference = prior != null ? prior : same;
+        LocalDate comparative = null;
+        if (rules.has(Rule.CMP) && w.isEmpty() && e.size() == 1) {
+            LaterFiling found = comparativeWeight(later, anchor.statement(), e, period);
+            BigDecimal cw = found == null ? null : single(new ArrayList<>(
+                    new Material(found.facts(), comparativeBases(found.facts(), anchor.statement())).values(WEIGHTED, period, COMMON_MEMBERS)));
+            if (cw != null && !"w-unit".equals(weightedCheck(cw, reference, period, multiple, rules))) {
+                w = Set.of(cw);
+                comparative = found.receipt();
+            }
+        }
+        return judgeWith(period, anchor, m, hybrid, instruments, income, e, w, reference, prior, same, multiple, rules)
+                .withComparative(comparative);
+    }
+
+    /** {@link Rule#CMP} — 뒤 판 중 같은 기간 W가 하나인 첫 판. 그 판의 같은 기간 E 집합이 {@code e}와 다르면 거기서 멈춘다({@code null}). */
+    private static LaterFiling comparativeWeight(List<LaterFiling> later, char statement, Set<BigDecimal> e, Period period) {
+        for (LaterFiling filing : later) {
+            if (filing.facts() == null) {
+                continue;
+            }
+            Material lm = new Material(filing.facts(), comparativeBases(filing.facts(), statement));
+            Set<BigDecimal> fw = lm.values(WEIGHTED, period, COMMON_MEMBERS);
+            if (fw.size() == 1) {
+                return lm.values(EPS, period, COMMON_MEMBERS).equals(e) ? filing : null;
+            }
+        }
+        return null;
+    }
+
+    /** 뒤 판에서 읽을 기저 — 연결 행이면 연결(축 없음 포함) · 아니면 별도(그 판에 연결 사실이 없으면 축 없음도). */
+    private static Set<Basis> comparativeBases(List<Fact> facts, char statement) {
+        if (statement == 'C') {
+            return Set.of(Basis.CONSOLIDATED, Basis.NONE);
+        }
+        return facts.stream().anyMatch(f -> f.basis() == Basis.CONSOLIDATED) ? Set.of(Basis.SEPARATE) : Set.of(Basis.SEPARATE, Basis.NONE);
+    }
+
+    private static Judged judgeWith(Period period, Anchor anchor, Material m, boolean hybrid, boolean instruments, BigDecimal income,
+                                    Set<BigDecimal> e, Set<BigDecimal> w, Register reference, Register prior, Register same,
+                                    Multiple multiple, Rules rules) {
         if (e.size() > 1 || w.size() > 1) {
             BigDecimal[] pair = rules.has(Rule.C1) ? resolveConflict(income, e, w, instruments, m, period) : null;
             if (pair == null) {
@@ -278,7 +363,6 @@ public final class KrCommonIncome {
             e = Set.of(pair[0]);
             w = Set.of(pair[1]);
         }
-        Register reference = prior != null ? prior : same;
         if (e.size() == 1 && w.size() == 1 && !(rules.has(Rule.U1) && !instruments && w.iterator().next().signum() <= 0)) {
             BigDecimal eps = e.iterator().next();
             BigDecimal weighted = w.iterator().next();
@@ -352,7 +436,7 @@ public final class KrCommonIncome {
             if (shares != null) {
                 BigDecimal bound = HALF.multiply(shares).add(WITNESS_SLACK.multiply(eps.abs()).multiply(shares));
                 if (income.subtract(eps.multiply(shares)).abs().compareTo(bound) > 0) {
-                    if (rules.has(Rule.U) && intervalWitness(income, eps, period, prior, same, multiple)) {
+                    if (rules.has(Rule.U) && intervalWitness(income, eps, period, prior, same, multiple, rules.has(Rule.PIT))) {
                         return decided("kr-ni", income, 'T', anchor.statement(), null, income, "ni", false);
                     }
                     return Judged.none("witness", anchor.statement());
@@ -389,8 +473,9 @@ public final class KrCommonIncome {
     }
 
     /** U — NI ÷ (E ± 0.5) 구간이 명부 구간(앞 해 · FY 행은 그 해까지 · 기간 끝으로 옮긴 보통주 유통) ±1% 안인가. 명부 구간 폭이 5%를 넘으면 아니다. */
+    /** @param pointInTime {@link Rule#PIT} — 행 해석이 그 해 명부를 이미 시점으로 걸렀으므로 분기 행에도 남은 명부를 다 쓴다 */
     private static boolean intervalWitness(BigDecimal income, BigDecimal eps, Period period, Register prior, Register same,
-                                           Multiple multiple) {
+                                           Multiple multiple, boolean pointInTime) {
         if (eps.signum() == 0 || income.signum() == 0 || (income.signum() > 0) != (eps.signum() > 0)) {
             return false;
         }
@@ -405,7 +490,7 @@ public final class KrCommonIncome {
         BigDecimal ivHigh = a.max(b);
         boolean annual = period.start().plusYears(1).equals(period.end().plusDays(1));
         List<BigDecimal> registers = new ArrayList<>();
-        for (Register g : annual ? java.util.Arrays.asList(prior, same) : java.util.Collections.singletonList(prior)) {
+        for (Register g : annual || pointInTime ? java.util.Arrays.asList(prior, same) : java.util.Collections.singletonList(prior)) {
             BigDecimal adjusted = g == null ? null : adjusted(g, period, multiple);
             if (adjusted != null && adjusted.signum() != 0) {
                 registers.add(adjusted);

@@ -87,6 +87,7 @@ public class KrCommonIncomeDeriver {
         Map<String, List<DartXbrlFactReader.Fact>> facts = store.okFacts(stockId);
         List<Row> rows = new ArrayList<>();
         Map<Long, String> reportCodes = new HashMap<>();
+        Map<Long, String> boundRcept = new HashMap<>();
         jdbc.query("""
                 SELECT id, fiscal_year, fiscal_period, period_start, period_end, published_at, net_income_controlling, net_income,
                        report_code
@@ -100,6 +101,9 @@ public class KrCommonIncomeDeriver {
             if (!"Q4".equals(period)) {
                 Filing bound = KrXbrlCollector.bound(new RowVintage(year, period, published), filings, krGate);
                 f = bound == null ? null : facts.get(bound.rceptNo());
+                if (bound != null) {
+                    boundRcept.put(id, bound.rceptNo());
+                }
             }
             rows.add(new Row(id, year, period, rs.getObject("period_start", LocalDate.class),
                     rs.getObject("period_end", LocalDate.class), published, rs.getBigDecimal("net_income_controlling"),
@@ -110,8 +114,21 @@ public class KrCommonIncomeDeriver {
         for (Filing filing : filings) {
             issuerFilings.add(new java.util.AbstractMap.SimpleEntry<>(filing.bsnsYear(), facts.get(filing.rceptNo())));
         }
+        // 비교열 W(CMP)의 재료 — 행 판보다 뒤에 접수된 판들(접수번호 순 · 재료가 없는 판은 사실 null).
+        List<Filing> byReceipt = new ArrayList<>(filings);
+        byReceipt.sort(java.util.Comparator.comparing(Filing::rceptNo));
+        KrCommonIncomeRows.Later later = row -> {
+            String own = boundRcept.get(row.id());
+            List<KrCommonIncome.LaterFiling> out = new ArrayList<>();
+            for (Filing filing : byReceipt) {
+                if (own != null && filing.rceptNo().compareTo(own) > 0) {
+                    out.add(new KrCommonIncome.LaterFiling(filing.rceptNo(), filing.rceptDate(), facts.get(filing.rceptNo())));
+                }
+            }
+            return out;
+        };
         List<Resolved> resolved = KrCommonIncomeRows.resolve(rows, registers(stockId), multiple(stockId),
-                KrCommonEquity.Issuer.of(issuerFilings), rules());
+                KrCommonEquity.Issuer.of(issuerFilings), rules(), later);
         jdbc.update("""
                 DELETE FROM financial_common_income
                  WHERE financial_statement_id IN (SELECT id FROM financial_statement WHERE stock_id = ?)
@@ -123,11 +140,24 @@ public class KrCommonIncomeDeriver {
                 decided++;
             }
             KrCommonEquity.Equity e = r.equity();
-            batch.add(new Object[]{r.row().id(), reportCodes.get(r.row().id()), r.common(), String.valueOf(r.basis()), r.branch(),
+            Object[] values = {r.row().id(), reportCodes.get(r.row().id()), r.common(), String.valueOf(r.basis()), r.branch(),
                     krGate ? KrCommonIncome.ENGINE_VERSION_V4 : KrCommonIncome.ENGINE_VERSION, String.valueOf(r.statement()), r.payoutBase(), r.incomeSnapshot(),
-                    r.row().published(), e.hybrid(), e.hybrid(), e.branch(), e.fraction()});
+                    r.row().published(), e.hybrid(), e.hybrid(), e.branch(), e.fraction()};
+            if (krGate) {
+                values = java.util.Arrays.copyOf(values, values.length + 2);
+                values[values.length - 2] = r.visibleFrom();
+                values[values.length - 1] = r.payoutVisibleFrom();
+            }
+            batch.add(values);
         }
-        jdbc.batchUpdate("""
+        // 가시일 두 칸은 국내 관문 마이그레이션(시험 V70_16 · 관문 직전에 운영으로)의 칸이라 켬에서만 쓴다.
+        jdbc.batchUpdate(krGate ? """
+                INSERT INTO financial_common_income (financial_statement_id, report_code, common, basis, branch, engine_version,
+                                                     statement_basis, payout_base, income_snapshot, published_snapshot,
+                                                     non_common, ncav_non_common, equity_branch, common_fraction,
+                                                     common_visible_from, payout_visible_from)
+                VALUES (?, coalesce(?, ''), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """ : """
                 INSERT INTO financial_common_income (financial_statement_id, report_code, common, basis, branch, engine_version,
                                                      statement_basis, payout_base, income_snapshot, published_snapshot,
                                                      non_common, ncav_non_common, equity_branch, common_fraction)

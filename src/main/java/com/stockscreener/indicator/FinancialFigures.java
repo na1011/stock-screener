@@ -208,7 +208,11 @@ public record FinancialFigures(
 
     /** 기저 대체일을 보이는 날로 옮긴 사본(국내 관문 켬 · ADR-0204 · {@link FlowSupersession#shifted}). */
     public FinancialFigures withFlowsShifted(java.util.function.UnaryOperator<LocalDate> visible) {
-        if (flowsSupersededOn.isEmpty()) {
+        // 보통주 몫의 가시일(국내 관문 켬)도 접수일로 저장돼 있다 — 같은 규칙으로 보이는 날로 옮긴다.
+        CommonIncomeRead shiftedCommon = common == null || common.incomeVisibleFrom() == null && common.payoutVisibleFrom() == null ? common
+                : common.withVisibleFrom(common.incomeVisibleFrom() == null ? null : visible.apply(common.incomeVisibleFrom()),
+                common.payoutVisibleFrom() == null ? null : visible.apply(common.payoutVisibleFrom()));
+        if (flowsSupersededOn.isEmpty() && shiftedCommon == common) {
             return this;
         }
         java.util.Map<String, FlowSupersession> moved = new java.util.HashMap<>();
@@ -219,7 +223,33 @@ public record FinancialFigures(
                 cashAndEquivalents, capex, inventories, netIncomeControlling, interestAndDividendIncome, noninterestIncome,
                 interestExpense, noninterestExpense, benefitsLossesAndExpenses, grossProfit, operatingExpenses, costsAndExpenses,
                 incomeTaxExpense, profitBeforeTax, shareBasisMultiple, shareBasisStatus, shareClassState, weightedShares,
-                weightedSharesJudged, discontinuedIncome, discontinuedIncomeControlling, discontinuedRule, common, moved,
+                weightedSharesJudged, discontinuedIncome, discontinuedIncomeControlling, discontinuedRule, shiftedCommon, moved,
+                annualOfYear, visibleFrom);
+    }
+
+    /** 보통주 몫 · 배당성향 분모가 늦게 보이기 시작하는 날들(국내 관문 켬) — 재무 경계에 더한다. 없으면 빈 목록. */
+    public java.util.List<LocalDate> commonVisibleDates() {
+        if (common == null) {
+            return java.util.List.of();
+        }
+        // 그 해 사업보고서가 아직 없어 안 보이는 값(9999-12-31 · 옮기면 그다음 날)은 경계가 아니다.
+        return java.util.stream.Stream.of(common.incomeVisibleFrom(), common.payoutVisibleFrom())
+                .filter(d -> d != null && d.getYear() < 9999).toList();
+    }
+
+    /** 보통주 몫 · 배당성향 분모의 가시일(접수일 · 국내 관문 켬)을 단 사본 — 보이는 날로 옮기는 것은 {@link #withFlowsShifted}다. */
+    public FinancialFigures withCommonVisibleFrom(LocalDate income, LocalDate payout) {
+        return common == null || income == null && payout == null ? this : withCommon(common.withVisibleFrom(income, payout));
+    }
+
+    private FinancialFigures withCommon(CommonIncomeRead read) {
+        return new FinancialFigures(fiscalYear, fiscalPeriod, periodStart, periodEnd, publishedAt, currencyCode, revenue,
+                operatingIncome, netIncome, totalAssets, totalEquity, totalEquityControlling, totalLiabilities, currentAssets,
+                currentLiabilities, retainedEarnings, operatingCashFlow, sharesOutstanding, eps, bps, costOfSales,
+                cashAndEquivalents, capex, inventories, netIncomeControlling, interestAndDividendIncome, noninterestIncome,
+                interestExpense, noninterestExpense, benefitsLossesAndExpenses, grossProfit, operatingExpenses, costsAndExpenses,
+                incomeTaxExpense, profitBeforeTax, shareBasisMultiple, shareBasisStatus, shareClassState, weightedShares,
+                weightedSharesJudged, discontinuedIncome, discontinuedIncomeControlling, discontinuedRule, read, flowsSupersededOn,
                 annualOfYear, visibleFrom);
     }
 
@@ -299,8 +329,10 @@ public record FinancialFigures(
      * {@code day}의 봉이 보는 이 행 — 기저 대체일이 그날 이하인 손익 칸을 비운다({@link #flowsSupersededOn}). 대체가 없으면 그대로다.
      */
     public FinancialFigures asSeenOn(LocalDate day) {
+        // 보통주 몫이 아직 안 보이는 봉(국내 관문 켬 · 분기 행이 그 해 명부를 썼거나 뒤 판 비교열 W를 썼다) — 손익 몫만 모른다.
+        CommonIncomeRead seenCommon = common == null ? null : common.seenOn(day);
         if (flowsSupersededOn.isEmpty() || flowsSupersededOn.values().stream().noneMatch(f -> f.staleOn(day))) {
-            return this;
+            return seenCommon == common ? this : withCommon(seenCommon);
         }
         java.util.function.Function<String, BigDecimal> stored = column -> switch (column) {
             case "revenue" -> revenue;
@@ -338,7 +370,7 @@ public record FinancialFigures(
                 costsAndExpenses, value.apply("income_tax_expense"), value.apply("profit_before_tax"), shareBasisMultiple,
                 shareBasisStatus, shareClassState, weightedShares, weightedSharesJudged, value.apply("discontinued_income"),
                 value.apply("discontinued_income_controlling"), discontinuedRule,
-                income && common != null ? common.withoutIncome() : common, flowsSupersededOn, annualOfYear, visibleFrom);
+                income && seenCommon != null ? seenCommon.withoutIncome() : seenCommon, flowsSupersededOn, annualOfYear, visibleFrom);
     }
 
     /** 함께 낡는 손익 칸(DB 컬럼명) — {@link #asSeenOn}. */

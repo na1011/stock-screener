@@ -64,6 +64,17 @@ public class GovernanceFactDeriver {
     /** 미국 배당 총액의 주식수를 클래스 축 판정을 입힌 값(N_L)으로 읽는다({@link #withClassAxisShares}). */
     private final ShareClassStore shareClasses;
 
+    /**
+     * 국내 관문({@code stockscreener.gate.kr-provisional}) — 켜면 FY 행의 보통주 몫을 그 행 공시일에 보이던 것만 분자로 쓴다(뒤 판 비교열 W로 늦게
+     * 보이는 몫은 그 해 공시 때 몰랐다 · 시험 마이그레이션 V70_16). 꺼짐 질의는 그 칸을 참조하지 않는다. 시험은 생성자만 부른다.
+     */
+    private boolean krGate;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    void krGate(@org.springframework.beans.factory.annotation.Value("${stockscreener.gate.kr-provisional}") boolean on) {
+        this.krGate = on;
+    }
+
     public GovernanceFactDeriver(JdbcTemplate jdbcTemplate, CorporateActionLedger ledger,
                                  List<GovernanceFactMapper> mappers, ShareClassStore shareClasses) {
         this.jdbcTemplate = jdbcTemplate;
@@ -281,21 +292,21 @@ public class GovernanceFactDeriver {
         Map<Integer, BigDecimal> implied = new HashMap<>();
         Map<Integer, BigDecimal> basisMultiple = new HashMap<>();
         java.util.Set<Integer> decided = new java.util.HashSet<>();
-        jdbcTemplate.query("""
+        jdbcTemplate.query(("""
                 SELECT f.fiscal_year, f.published_at, f.report_code, f.shares_outstanding, f.share_basis_status,
                        f.share_basis_multiple,
                        -- 분자는 행의 보통주 몫(관문 켬 · 탐색 PERSHARE-NUM-PLAN-1024.md) — 원장 eps는 보통주 EPS라 지배 NI와 견주면
                        -- 우선주 · 참가증권 배분만큼 함의 주식수가 부풀어 정상 총액이 기각된다(HPE · VST 등 19종목 · 앵커가 앞 해로
                        -- 물러나 낡은 배당성향). 보통주 몫을 못 정한 행은 지배 NI 그대로(이 축 전과 같다).
                        CASE WHEN ci.branch = 'ni' THEN coalesce(f.net_income_controlling, f.net_income)
-                            WHEN ci.common IS NOT NULL AND ci.basis = 'T' THEN ci.common
+                            WHEN ci.common IS NOT NULL AND ci.basis = 'T'%s THEN ci.common
                             ELSE coalesce(f.net_income_controlling, f.net_income) END AS numerator,
                        f.eps
                   FROM financial_statement f
                   LEFT JOIN financial_common_income ci ON ci.financial_statement_id = f.id AND ci.report_code = f.report_code
                  WHERE f.stock_id = ? AND f.fiscal_period = 'FY'
                  ORDER BY f.fiscal_year, f.published_at
-                """, rs -> {
+                """).formatted(krGate ? " AND ci.common_visible_from IS NULL" : ""), rs -> {
             int year = rs.getInt("fiscal_year");
             BigDecimal numerator = rs.getBigDecimal("numerator");
             BigDecimal eps = rs.getBigDecimal("eps");

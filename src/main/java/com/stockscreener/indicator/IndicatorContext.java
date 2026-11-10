@@ -400,7 +400,10 @@ public final class IndicatorContext {
                                 spinOffDates.stream()),
                                 // 잠정실적이 보이기 시작하는 날도 경계다 — 막힌 구간 안에서 그날부터 잠정 분기 행이 선다(장 마감 뒤 발표는 막기
                                 // 시작과 보이기가 하루 갈린다).
-                                provisionalReleases.stream().map(ProvisionalRelease::visibleOn)))
+                                java.util.stream.Stream.concat(provisionalReleases.stream().map(ProvisionalRelease::visibleOn),
+                                        // 보통주 몫이 늦게 보이기 시작하는 날도 경계다(국내 관문 켬) — 그날부터 주당 지표 분자가 선다.
+                                        java.util.stream.Stream.concat(annualRevisions.stream(), quarterlyRevisions.stream())
+                                                .flatMap(f -> f.commonVisibleDates().stream()))))
                 .filter(java.util.Objects::nonNull)
                 .distinct()
                 .sorted()

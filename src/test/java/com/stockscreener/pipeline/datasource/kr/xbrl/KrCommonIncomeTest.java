@@ -481,6 +481,36 @@ class KrCommonIncomeTest {
     // ---- 행 해석: Q4 · 누계 · 판 짝 ----
 
     @Test
+    void pitUsesTheSameYearRegisterOnlyWithoutAPriorOneAndShowsItFromTheAnnualReport() {
+        // 1분기 행 · W 없음 · 지분상품 없음 — 증인은 명부(E 1,000 × 1,000만 = 지배 NI 100억). 앞 해 명부가 없고 그 해 명부만 있다(국내 관문 켬 PIT).
+        Period q1 = quarter(2025, 1);
+        Row first = new Row(1, 2025, "Q1", q1.start(), q1.end(), LocalDate.of(2025, 5, 15), BigDecimal.valueOf(10_000_000_000L), null,
+                List.of(fact(Source.IFRS, "ProfitLossAttributableToOwnersOfParent", q1, List.of(), 10_000_000_000L),
+                        fact(Source.IFRS, "BasicEarningsLossPerShare", q1, List.of(ORDINARY), 1000)));
+        Period fy = new Period(LocalDate.of(2025, 1, 1), LocalDate.of(2025, 12, 31));
+        Row annual = new Row(5, 2025, "FY", fy.start(), fy.end(), LocalDate.of(2026, 3, 10), BigDecimal.valueOf(40_000_000_000L), null,
+                null);
+
+        Resolved off = byId(KrCommonIncomeRows.resolve(List.of(first, annual), Map.of(2025, COMMON_ONLY), NO_ACTIONS)).get(1L);
+        Resolved on = byId(KrCommonIncomeRows.resolve(List.of(first, annual), Map.of(2025, COMMON_ONLY), NO_ACTIONS,
+                KrCommonEquity.Issuer.of(List.of()), KrCommonIncome.Rules.V4)).get(1L);
+        // 그 해 사업보고서가 아직 없으면 안 보인다 · 앞 해 명부가 있으면 그 해 명부를 안 쓴다(그 행 공시일부터).
+        Resolved notYet = byId(KrCommonIncomeRows.resolve(List.of(first), Map.of(2025, COMMON_ONLY), NO_ACTIONS,
+                KrCommonEquity.Issuer.of(List.of()), KrCommonIncome.Rules.V4)).get(1L);
+        Resolved prior = byId(KrCommonIncomeRows.resolve(List.of(first, annual), Map.of(2024, COMMON_ONLY, 2025, COMMON_ONLY), NO_ACTIONS,
+                KrCommonEquity.Issuer.of(List.of()), KrCommonIncome.Rules.V4)).get(1L);
+
+        assertThat(off.branch()).isEqualTo("kr-ni");
+        assertThat(off.visibleFrom()).as("꺼짐 — 지금 동작(가시일 없음)").isNull();
+        assertThat(on.branch()).isEqualTo("kr-ni");
+        assertThat(on.visibleFrom()).isEqualTo(LocalDate.of(2026, 3, 10));
+        assertThat(notYet.visibleFrom()).isEqualTo(KrCommonIncomeRows.NEVER);
+        assertThat(prior.branch()).isEqualTo("kr-ni");
+        assertThat(prior.visibleFrom()).isNull();
+    }
+
+
+    @Test
     void fourthQuarterIsTheAnnualShareLessTheThreeQuarterShares() {
         List<Row> rows = new ArrayList<>();
         long[] quarterNi = {1_000_000_000L, 2_000_000_000L, 3_000_000_000L};

@@ -58,6 +58,9 @@ class KrCommonIncomeDeriverTest {
     @Autowired
     private ShareClassStore shareClasses;
 
+    @Autowired
+    private org.springframework.transaction.PlatformTransactionManager transactionManager;
+
     private long stockId;
 
     @BeforeEach
@@ -122,6 +125,54 @@ class KrCommonIncomeDeriverTest {
                 .filter(f -> f.fiscalPeriod() == FinancialFigures.FiscalPeriod.Q3).findFirst().orElseThrow();
         assertThat(q3.readsCommonIncome()).isTrue();
         assertThat(q3.commonContinuingIncome()).isNull();
+    }
+
+    @Test
+    @DisplayName("관문 켬 — W 없는 판은 뒤 판 비교열 W로 정하되 그 판 접수일부터 보인다(CMP · C+⑴) · 지표 봉은 그 전날 손익 몫을 모른다")
+    void comparativeWeightBecomesVisibleOnTheLaterFiling() {
+        KrXbrlStore gateStore = new KrXbrlStore(jdbc);
+        gateStore.krGate(true);
+        jdbc.update("UPDATE kr_report_xbrl SET reader_version = ? WHERE stock_id = ?", DartXbrlFactReader.READER_VERSION_KR_GATE, stockId);
+        LocalDate q2Start = LocalDate.of(2025, 4, 1);
+        LocalDate q2End = LocalDate.of(2025, 6, 30);
+        LocalDate q3Start = LocalDate.of(2025, 7, 1);
+        LocalDate q3End = LocalDate.of(2025, 9, 30);
+        // 2025 반기 판에 3개월 W가 없다 · 3분기 판이 2025 Q2 비교열(같은 E 180 · W 1,000만)을 싣는다.
+        String half = jdbc.queryForObject("SELECT rcept_no FROM kr_report_xbrl WHERE stock_id = ? AND reprt_code = '11012'", String.class, stockId);
+        String third = jdbc.queryForObject("SELECT rcept_no FROM kr_report_xbrl WHERE stock_id = ? AND reprt_code = '11014'", String.class, stockId);
+        Fact hybrid = new Fact(Source.DART, "HybridBonds", null, q2End, Basis.CONSOLIDATED, List.of(), BigDecimal.valueOf(500_000_000L));
+        gateStore.recordOk(stockId, half, List.of(fact("ProfitLossAttributableToOwnersOfParent", q2Start, q2End, List.of(), QUARTER_NI[1]),
+                fact("BasicEarningsLossPerShare", q2Start, q2End, List.of(ORDINARY), QUARTER_EPS[1]), hybrid), 0);
+        gateStore.recordOk(stockId, third, List.of(fact("ProfitLossAttributableToOwnersOfParent", q3Start, q3End, List.of(), QUARTER_NI[2]),
+                fact("BasicEarningsLossPerShare", q3Start, q3End, List.of(ORDINARY), QUARTER_EPS[2]),
+                fact("WeightedAverageShares", q3Start, q3End, List.of(ORDINARY), 10_000_000),
+                fact("BasicEarningsLossPerShare", q2Start, q2End, List.of(ORDINARY), QUARTER_EPS[1]),
+                fact("WeightedAverageShares", q2Start, q2End, List.of(ORDINARY), 10_000_000),
+                new Fact(Source.DART, "HybridBonds", null, q3End, Basis.CONSOLIDATED, List.of(), BigDecimal.valueOf(500_000_000L))), 0);
+        KrCommonIncomeDeriver on = new KrCommonIncomeDeriver(jdbc, gateStore, transactionManager);
+        on.krGate(true);
+
+        on.derive();
+
+        LocalDate thirdPublished = LocalDate.of(2025, 11, 14);
+        Map<String, Object> q2 = jdbc.queryForMap("""
+                SELECT ci.branch, ci.common, ci.common_visible_from, ci.payout_visible_from
+                  FROM financial_common_income ci JOIN financial_statement f ON f.id = ci.financial_statement_id
+                 WHERE f.stock_id = ? AND f.fiscal_period = 'Q2'
+                """, stockId);
+        assertThat(q2.get("branch")).isEqualTo("exw");
+        assertThat((BigDecimal) q2.get("common")).isEqualByComparingTo("1800000000");
+        assertThat(q2.get("common_visible_from")).isEqualTo(java.sql.Date.valueOf(thirdPublished));
+        // 신종자본증권 행의 배당성향 분모는 보통주 몫에 기대므로 같은 날부터다.
+        assertThat(q2.get("payout_visible_from")).isEqualTo(java.sql.Date.valueOf(thirdPublished));
+
+        FinancialFigures read = new IndicatorDataReader(jdbc, ledger, shareClasses, true)
+                .readQuarterlyFigures(stockId, LocalDate.of(2026, 4, 1), 4, FinancialVisibility.LATEST).stream()
+                .filter(f -> f.fiscalPeriod() == FinancialFigures.FiscalPeriod.Q2).findFirst().orElseThrow();
+        assertThat(read.asSeenOn(thirdPublished.minusDays(1)).commonContinuingIncome()).as("뒤 판 공개 전 봉").isNull();
+        assertThat(read.asSeenOn(thirdPublished.minusDays(1)).readsCommonIncome()).as("지배 NI 갈래로 안 내려간다").isTrue();
+        assertThat(read.asSeenOn(LocalDate.of(2026, 1, 5)).commonContinuingIncome()).isEqualByComparingTo("1800000000");
+        assertThat(read.commonVisibleDates()).as("재무 경계에 더한다").isNotEmpty();
     }
 
     private Map<String, Map<String, Object>> stored() {

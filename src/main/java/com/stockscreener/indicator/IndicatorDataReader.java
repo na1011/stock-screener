@@ -286,6 +286,18 @@ public class IndicatorDataReader {
             domestic(SELECT_FINANCIALS_LATEST_TEMPLATE).formatted(FINANCIAL_COLUMNS + DISCONTINUED_COLUMNS + COMMON_COLUMNS_KR);
 
     /**
+     * 국내 관문 켬 — 보통주 몫 · 배당성향 분모의 가시일 두 칸(시험 마이그레이션 V70_16 · 관문 직전에 운영으로)을 더 싣는다. 꺼짐 질의는 그 칸을
+     * 참조하지 않는다(운영 DB에 아직 없다).
+     */
+    private static final String COMMON_VISIBLE_KR = """
+            , (SELECT ci.common_visible_from FROM financial_common_income ci WHERE %1$s) AS common_visible_from
+            , (SELECT ci.payout_visible_from FROM financial_common_income ci WHERE %1$s) AS payout_visible_from
+            """.formatted(COMMON_KR_MATCH);
+
+    private static final String SELECT_FINANCIALS_LATEST_COMMON_KR_GATE = domestic(SELECT_FINANCIALS_LATEST_TEMPLATE)
+            .formatted(FINANCIAL_COLUMNS + DISCONTINUED_COLUMNS + COMMON_COLUMNS_KR + COMMON_VISIBLE_KR);
+
+    /**
      * 그 시점까지 공시된 <b>판 이력 전부</b>를 읽는다({@link FinancialVisibility#KNOWN_ON}).
      *
      * <p><b>기(期)마다 하나로 접지 않는다</b>(ADR-0128). 접으면 {@code asOf} 하나에 대해서만
@@ -327,6 +339,9 @@ public class IndicatorDataReader {
 
     private static final String SELECT_FINANCIALS_KNOWN_ON_COMMON_KR =
             domestic(SELECT_FINANCIALS_KNOWN_ON_TEMPLATE).formatted(FINANCIAL_COLUMNS + DISCONTINUED_COLUMNS + COMMON_COLUMNS_KR);
+
+    private static final String SELECT_FINANCIALS_KNOWN_ON_COMMON_KR_GATE = domestic(SELECT_FINANCIALS_KNOWN_ON_TEMPLATE)
+            .formatted(FINANCIAL_COLUMNS + DISCONTINUED_COLUMNS + COMMON_COLUMNS_KR + COMMON_VISIBLE_KR);
 
     /**
      * 화면의 재무 기준 표시(ADR-0195)가 읽는 판 이력 — {@link #SELECT_FINANCIALS_KNOWN_ON_TEMPLATE}와 <b>같은 술어</b>(공시일 · 기말 ·
@@ -816,7 +831,7 @@ public class IndicatorDataReader {
             long stockId = rs.getLong("stock_id");
             String rowMarket = rs.getString("row_market");
             Opening opening = rowMarket == null ? Opening.NONE : UsMarket.CODE.equals(rowMarket) ? Opening.US : Opening.KR;
-            FinancialFigures figures = mapFigures(rs, null, false, false, true, opening, usCloses());
+            FinancialFigures figures = mapFigures(rs, null, false, false, true, opening, usCloses(), false);
             (figures.fiscalPeriod() == FinancialFigures.FiscalPeriod.FY ? annual : quarterly)
                     .computeIfAbsent(stockId, k -> new ArrayList<>()).add(figures);
             String code = rs.getString("report_code");
@@ -948,12 +963,12 @@ public class IndicatorDataReader {
         // 국내 기저 대체일(ADR-0200)은 뒤 보고서의 저장 공시일이다 — 그 보고서가 보이는 날로 옮긴다(ADR-0204).
         java.util.function.UnaryOperator<LocalDate> krVisible = krCommon ? krVisibleDays(stockId) : null;
         RowMapper<FinancialFigures> mapper = (rs, rowNum) -> {
-            FinancialFigures figures = mapFigures(rs, line, discontinued, krCommon, krCommon, opening, closes);
+            FinancialFigures figures = mapFigures(rs, line, discontinued, krCommon, krCommon, opening, closes, krCommon && provisionalGate);
             return krVisible == null ? figures : figures.withFlowsShifted(krVisible);
         };
         return switch (visibility) {
             case LATEST -> jdbcTemplate.query(
-                    (krCommon ? SELECT_FINANCIALS_LATEST_COMMON_KR
+                    (krCommon ? provisionalGate ? SELECT_FINANCIALS_LATEST_COMMON_KR_GATE : SELECT_FINANCIALS_LATEST_COMMON_KR
                             : line != null ? SELECT_FINANCIALS_LATEST_COMMON
                             : discontinued ? SELECT_FINANCIALS_LATEST_DISCONTINUED : SELECT_FINANCIALS_LATEST)
                             .formatted(periodOperator),
@@ -961,7 +976,7 @@ public class IndicatorDataReader {
                     stockId, asOf, limit);
             // MUST: limit을 넘기지 않는다 — 이 갈래는 판 이력을 통째로 준다(위 javadoc).
             case KNOWN_ON -> jdbcTemplate.query(
-                    (krCommon ? SELECT_FINANCIALS_KNOWN_ON_COMMON_KR
+                    (krCommon ? provisionalGate ? SELECT_FINANCIALS_KNOWN_ON_COMMON_KR_GATE : SELECT_FINANCIALS_KNOWN_ON_COMMON_KR
                             : line != null ? SELECT_FINANCIALS_KNOWN_ON_COMMON
                             : discontinued ? SELECT_FINANCIALS_KNOWN_ON_DISCONTINUED : SELECT_FINANCIALS_KNOWN_ON)
                             .formatted(periodOperator),
@@ -986,11 +1001,17 @@ public class IndicatorDataReader {
      * @param effectivePublished 질의가 {@code published_effective}(국내 접수일)를 실었는가
      * @param opening            그 행의 보이는 날을 지을 공개 시각 원자료 — {@link Opening#NONE}이면 보이는 날 = 공시일
      */
+    /** @param krVisibility 질의가 국내 보통주 몫의 가시일 두 칸을 실었는가(국내 관문 켬) */
     private static FinancialFigures mapFigures(ResultSet rs, ShareClassLine line, boolean discontinued, boolean krCommon,
-                                               boolean effectivePublished, Opening opening, ReportingBasis.SessionClose closes)
+                                               boolean effectivePublished, Opening opening, ReportingBasis.SessionClose closes,
+                                               boolean krVisibility)
             throws SQLException {
-        return mapStoredFigures(rs, line, discontinued, krCommon, effectivePublished)
-                .withVisibleFrom(visibleFrom(rs, opening, closes));
+        FinancialFigures stored = mapStoredFigures(rs, line, discontinued, krCommon, effectivePublished);
+        if (krVisibility && stored.common() != null) {
+            stored = stored.withCommonVisibleFrom(rs.getObject("common_visible_from", LocalDate.class),
+                    rs.getObject("payout_visible_from", LocalDate.class));
+        }
+        return stored.withVisibleFrom(visibleFrom(rs, opening, closes));
     }
 
     /**

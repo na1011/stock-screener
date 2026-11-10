@@ -44,12 +44,18 @@ public final class KrCommonIncomeRows {
         }
     }
 
-    /** 붙일 값 — {@link Judged}와 같은 뜻에 붙일 때의 행 스냅숏 · 보통주 자본 재료({@link KrCommonEquity} · ADR-0199)를 더한다. */
+    /**
+     * 붙일 값 — {@link Judged}와 같은 뜻에 붙일 때의 행 스냅숏 · 보통주 자본 재료({@link KrCommonEquity} · ADR-0199)를 더한다.
+     *
+     * @param visibleFrom       보통주 몫이 보이기 시작하는 날(국내 관문 켬 · {@link KrCommonIncome.Rule#PIT} · {@link KrCommonIncome.Rule#CMP}) —
+     *                          {@code null}이면 행 공시일. 자본 재료는 안 탄다(대차대조표 판정은 따로다)
+     * @param payoutVisibleFrom 배당성향 분모가 보이기 시작하는 날 — 분모가 지배 NI 그대로면 행 공시일({@code null})
+     */
     public record Resolved(Row row, String branch, BigDecimal common, char basis, char statement, BigDecimal payoutBase,
-                           KrCommonEquity.Equity equity) {
+                           KrCommonEquity.Equity equity, LocalDate visibleFrom, LocalDate payoutVisibleFrom) {
 
         Resolved(Row row, String branch, BigDecimal common, char basis, char statement, BigDecimal payoutBase) {
-            this(row, branch, common, basis, statement, payoutBase, null);
+            this(row, branch, common, basis, statement, payoutBase, null, null, null);
         }
 
         public BigDecimal incomeSnapshot() {
@@ -57,8 +63,33 @@ public final class KrCommonIncomeRows {
         }
 
         Resolved withEquity(KrCommonEquity.Equity equity) {
-            return new Resolved(row, branch, common, basis, statement, payoutBase, equity);
+            return new Resolved(row, branch, common, basis, statement, payoutBase, equity, visibleFrom, payoutVisibleFrom);
         }
+
+        /** 가시일을 단다 — 행 공시일보다 늦을 때만(같거나 이르면 {@code null} · 행 공시일이 이미 그날이다). */
+        Resolved visible(LocalDate common, LocalDate payout) {
+            return new Resolved(row, branch, this.common, basis, statement, payoutBase, equity, later(common), later(payout));
+        }
+
+        /** 보통주 몫이 보이는 첫날. */
+        public LocalDate commonVisible() {
+            return visibleFrom == null ? row.published() : visibleFrom;
+        }
+
+        private LocalDate later(LocalDate day) {
+            return day == null || !day.isAfter(row.published()) ? null : day;
+        }
+    }
+
+    /** 그 해 사업보고서가 아직 없는 분기 행이 그 해 명부를 쓴 값 — 안 보인다({@link KrCommonIncome.Rule#PIT} · 사업보고서가 오면 다시 유도한다). */
+    public static final LocalDate NEVER = LocalDate.of(9999, 12, 31);
+
+    /** {@link KrCommonIncome.Rule#CMP}의 재료 — 행마다 그 판보다 뒤에 접수된 판들(접수번호 순). 없으면 빈 목록. */
+    @FunctionalInterface
+    public interface Later {
+        List<KrCommonIncome.LaterFiling> after(Row row);
+
+        Later NONE = row -> List.of();
     }
 
     /** 발행사 재료를 행에 묶인 판들로만 짓는다(스윕 · 시험). */
@@ -82,6 +113,12 @@ public final class KrCommonIncomeRows {
     /** @param rules 엔진 4판 규칙(국내 관문 켬 · {@link KrCommonIncome.Rules#V4}) */
     public static List<Resolved> resolve(List<Row> rows, Map<Integer, Register> registers, Multiple multiple,
                                          KrCommonEquity.Issuer issuer, KrCommonIncome.Rules rules) {
+        return resolve(rows, registers, multiple, issuer, rules, Later.NONE);
+    }
+
+    /** @param later 행마다 뒤 판들({@link KrCommonIncome.Rule#CMP}) */
+    public static List<Resolved> resolve(List<Row> rows, Map<Integer, Register> registers, Multiple multiple,
+                                         KrCommonEquity.Issuer issuer, KrCommonIncome.Rules rules, Later later) {
         Map<Long, Resolved> out = new HashMap<>();
         List<Row> ordered = new ArrayList<>(rows);
         ordered.sort(Comparator.comparing(Row::fiscalYear).thenComparing(r -> order(r.fiscalPeriod()))
@@ -95,17 +132,47 @@ public final class KrCommonIncomeRows {
                 continue;
             }
             KrCommonIncome.NcContext nc = ncContext(row, ordered);
-            Judged j = KrCommonIncome.judge(row.period(), row.income(), row.facts(),
-                    registers.get(row.fiscalYear() - 1), registers.get(row.fiscalYear()), multiple, rules, nc);
-            if (j.wantsCumulative() && ("Q2".equals(row.fiscalPeriod()) || "Q3".equals(row.fiscalPeriod()))) {
-                out.put(row.id(), cumulative(row, j, ordered, out, rules, nc));
-                continue;
+            Register prior = registers.get(row.fiscalYear() - 1);
+            Register same = registers.get(row.fiscalYear());
+            LocalDate visible = row.published();
+            boolean quarter = !"FY".equals(row.fiscalPeriod());
+            if (rules.has(KrCommonIncome.Rule.PIT) && quarter) {
+                // 분기 공시 때 그 해 명부는 아직 없다 — 앞 해 명부가 없을 때만 그 해 명부를 쓰고, 그 해 사업보고서 공시일부터 보인다.
+                if (prior != null) {
+                    same = null;
+                } else if (same != null) {
+                    LocalDate annual = firstAnnual(ordered, row.fiscalYear());
+                    visible = annual == null ? NEVER : later(visible, annual);
+                }
             }
-            out.put(row.id(), new Resolved(row, j.branch(), j.common(), j.basis(), j.statement(), j.payoutBase()));
+            Judged j;
+            if (rules.has(KrCommonIncome.Rule.CMP)) {
+                // 비교열 W는 그 판 재료로 값이 안 설 때만 — 값이 서던 행을 뒤 판 공개 전 날들까지 바꾸지 않는다.
+                j = KrCommonIncome.judge(row.period(), row.income(), row.facts(), prior, same, multiple,
+                        rules.without(KrCommonIncome.Rule.CMP), nc);
+                if (j.common() == null) {
+                    j = KrCommonIncome.judge(row.period(), row.income(), row.facts(), prior, same, multiple, rules, nc, later.after(row));
+                }
+            } else {
+                j = KrCommonIncome.judge(row.period(), row.income(), row.facts(), prior, same, multiple, rules, nc);
+            }
+            if (j.comparativeReceipt() != null) {
+                visible = later(visible, j.comparativeReceipt());
+            }
+            Resolved resolved;
+            if (j.wantsCumulative() && ("Q2".equals(row.fiscalPeriod()) || "Q3".equals(row.fiscalPeriod()))) {
+                resolved = cumulative(row, j, ordered, out, rules, nc);
+                // 누계 몫 − 앞 분기 몫 — 앞 분기 몫이 늦게 보이면 이 값도 그날부터다.
+                visible = later(visible, partsVisible(ordered, row, "Q2".equals(row.fiscalPeriod()) ? List.of("Q1") : List.of("Q1", "Q2"), out));
+            } else {
+                resolved = new Resolved(row, j.branch(), j.common(), j.basis(), j.statement(), j.payoutBase());
+            }
+            out.put(row.id(), resolved.visible(visible, resolved.payoutBase() != null && j.payoutFollowsCommon() ? visible : null));
         }
         for (Row row : ordered) {
             if ("Q4".equals(row.fiscalPeriod())) {
-                out.put(row.id(), fourth(row, ordered, out, rules));
+                LocalDate visible = later(row.published(), partsVisible(ordered, row, List.of("FY", "Q1", "Q2", "Q3"), out));
+                out.put(row.id(), fourth(row, ordered, out, rules).visible(visible, null));
             }
         }
         // 보통주 자본은 손익과 따로 — 대차대조표 날짜의 판으로 정한다. Q4는 같은 기말의 FY 판(Q4 published 이하 마지막)이다.
@@ -220,6 +287,34 @@ public final class KrCommonIncomeRows {
             return new Resolved(q4, "none:q4", null, 'T', annual.statement(), null);
         }
         return new Resolved(q4, "q4-cum", annual.common().subtract(nine), 'T', annual.statement(), null);
+    }
+
+    /** 그 사업연도 사업보고서(FY 행)의 첫 공시일 — 그 해 명부가 공개된 날. 없으면 {@code null}. */
+    private static LocalDate firstAnnual(List<Row> ordered, int year) {
+        LocalDate first = null;
+        for (Row r : ordered) {
+            if (r.fiscalYear() == year && "FY".equals(r.fiscalPeriod()) && (first == null || r.published().isBefore(first))) {
+                first = r.published();
+            }
+        }
+        return first;
+    }
+
+    /** 재료 행들(그 행 공시일 이하 마지막 판)의 보통주 몫 가시일 중 가장 늦은 날 — 없으면 {@code null}. */
+    private static LocalDate partsVisible(List<Row> ordered, Row row, List<String> periods, Map<Long, Resolved> out) {
+        LocalDate latest = null;
+        for (String period : periods) {
+            Row part = vintage(ordered, row.fiscalYear(), period, row.published());
+            Resolved r = part == null ? null : out.get(part.id());
+            if (r != null) {
+                latest = later(latest, r.commonVisible());
+            }
+        }
+        return latest;
+    }
+
+    private static LocalDate later(LocalDate a, LocalDate b) {
+        return a == null ? b : b == null || !b.isAfter(a) ? a : b;
     }
 
     /** 그 사업연도 · 기간 행 중 {@code published} ≤ 기준인 마지막 판. */

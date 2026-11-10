@@ -18,10 +18,19 @@ import java.math.BigDecimal;
  * @param equityBranch   자본 판정 갈래 — {@link #equityRead}인데 null이면 유도가 그 판에 안 돈 행(못 정함)
  * @param equityRead     질의가 자본 열을 실었는가(미국 · 국내 관문 켬). 거짓이면 보통주 자본은 이 규칙으로 안 읽는다
  * @param commonFraction 보통주와 나란한 잔여 청구권 중 보통주 몫(국내 — 보통주 유통 ÷ 전 종류 유통 · ADR-0199). null이면 1(미국)
+ * @param incomeVisibleFrom 손익 몫이 보이기 시작하는 날(국내 관문 켬 · 분기 행이 그 해 명부를 썼거나 뒤 판 비교열 W를 썼다) — null이면 행과 같다.
+ *                          그 전 봉은 손익 몫을 모른다({@link #seenOn}). 자본 재료는 안 탄다
+ * @param payoutVisibleFrom 배당성향 분모가 보이기 시작하는 날 — 분모가 손익 몫에 기댈 때만 · null이면 행과 같다
  */
 public record CommonIncomeRead(BigDecimal value, String basis, String branch, BigDecimal payoutBase, boolean payoutDeclared,
                                BigDecimal nonCommon, BigDecimal ncavNonCommon, String equityBranch, boolean equityRead,
-                               BigDecimal commonFraction) {
+                               BigDecimal commonFraction, java.time.LocalDate incomeVisibleFrom, java.time.LocalDate payoutVisibleFrom) {
+
+    public CommonIncomeRead(BigDecimal value, String basis, String branch, BigDecimal payoutBase, boolean payoutDeclared,
+                            BigDecimal nonCommon, BigDecimal ncavNonCommon, String equityBranch, boolean equityRead,
+                            BigDecimal commonFraction) {
+        this(value, basis, branch, payoutBase, payoutDeclared, nonCommon, ncavNonCommon, equityBranch, equityRead, commonFraction, null, null);
+    }
 
     /** 국내 자본 갈래 — 별도 기저로 정함(별도재무제표만 내는 회사 · 총자본이 곧 지배 자본이다). */
     public static final String KR_SEPARATE = "kr-s";
@@ -57,7 +66,27 @@ public record CommonIncomeRead(BigDecimal value, String basis, String branch, Bi
      */
     public CommonIncomeRead withoutIncome() {
         return new CommonIncomeRead(null, basis, "none:superseded", null, payoutDeclared, nonCommon, ncavNonCommon, equityBranch,
-                equityRead, commonFraction);
+                equityRead, commonFraction, incomeVisibleFrom, payoutVisibleFrom);
+    }
+
+    /** 가시일을 단 사본(국내 관문 켬 · 접수일로 저장된 날을 그 접수가 보이는 날로 옮겨 단다). */
+    public CommonIncomeRead withVisibleFrom(java.time.LocalDate income, java.time.LocalDate payout) {
+        return new CommonIncomeRead(value, basis, branch, payoutBase, payoutDeclared, nonCommon, ncavNonCommon, equityBranch, equityRead,
+                commonFraction, income, payout);
+    }
+
+    /**
+     * 그 봉에서 본 사본 — 손익 몫이 아직 안 보이면 값을 비우고 갈래를 「못 정함」으로(지배 NI 갈래로 안 내려간다), 분모도 안 보이면 비운다.
+     * 자본 재료는 잔액이라 그대로다. 다 보이면 그대로.
+     */
+    public CommonIncomeRead seenOn(java.time.LocalDate day) {
+        boolean income = incomeVisibleFrom != null && day.isBefore(incomeVisibleFrom);
+        boolean payout = payoutVisibleFrom != null && day.isBefore(payoutVisibleFrom);
+        if (!income && !payout) {
+            return this;
+        }
+        return new CommonIncomeRead(income ? null : value, basis, income ? "none:not-yet" : branch, payout ? null : payoutBase, payoutDeclared,
+                nonCommon, ncavNonCommon, equityBranch, equityRead, commonFraction, incomeVisibleFrom, payoutVisibleFrom);
     }
 
     /** 보통주 몫 — 미국은 1(우선주는 {@link #nonCommon}이 장부가로 뺀다). */
