@@ -26,6 +26,8 @@ public final class KrCommonIncome {
 
     /** 판정 엔진 판. 저장 행({@code financial_common_income.engine_version})이 이 값과 다르면 다음 유도가 다시 붙인다. */
     public static final int ENGINE_VERSION = 3;
+    /** 엔진 4판(국내 관문 켬 · {@link Rules#V4}) — 관문 켬 유도가 이 판으로 적는다. */
+    public static final int ENGINE_VERSION_V4 = 4;
 
     /** 보통주 EPS · 가중평균 사실이 달 수 있는 표준 구성원(연결 축 밖). 회사 구성원은 이름이 같아도 받지 않는다. */
     static final Set<String> COMMON_MEMBERS = Set.of(
@@ -63,6 +65,27 @@ public final class KrCommonIncome {
 
     /** 판정할 기간. */
     public record Period(LocalDate start, LocalDate end) {
+    }
+
+    /**
+     * 엔진 4판의 규칙(국내 관문 켬 · 탐색 {@code KR-BLANKS-PLAN-1106.md} 「C1~C16」 · 0콜 기준 구현 {@code engine4.py}의 같은 이름 플래그). 꺼짐
+     * ({@link #NONE})은 3판 그대로다. 규칙마다 기준 구현과 같은 재료에서 갈래 · 값이 행마다 같은지를 대조하고 들인다.
+     */
+    public enum Rule {
+        /** 지분상품 있음 · W 없음 · E 하나 · |지배 NI − E × S| ≤ 0.5S면 배분 0(S = 기준 명부 보통주 유통 × 기업행위 배수). */
+        R1
+    }
+
+    /** 켠 규칙 묶음. */
+    public record Rules(java.util.Set<Rule> on) {
+
+        public static final Rules NONE = new Rules(java.util.EnumSet.noneOf(Rule.class));
+        /** 국내 관문 켬 — 들인 규칙 전부. */
+        public static final Rules V4 = new Rules(java.util.EnumSet.allOf(Rule.class));
+
+        public boolean has(Rule rule) {
+            return on.contains(rule);
+        }
     }
 
     /** 그 판 재무 행의 손익 둘 — 앵커와 {@code kr-ni} 값의 출처다. */
@@ -140,6 +163,11 @@ public final class KrCommonIncome {
      */
     public static Judged judge(Period period, RowIncome row, List<Fact> facts, Register prior, Register same,
                                Multiple multiple) {
+        return judge(period, row, facts, prior, same, multiple, Rules.NONE);
+    }
+
+    public static Judged judge(Period period, RowIncome row, List<Fact> facts, Register prior, Register same,
+                               Multiple multiple, Rules rules) {
         Anchor anchor = anchor(period, row, facts);
         if (anchor == null) {
             // 행 지배 NI가 비었는데 연결 순이익이 행 NI와 같다 — 연결로 지은 행인데 지배 몫이 없다(매퍼 · 원장 몫 · reload-gate 국내
@@ -193,6 +221,17 @@ public final class KrCommonIncome {
         if (instruments) {
             if (e.isEmpty()) {
                 return Judged.none("no-eps", anchor.statement());
+            }
+            if (rules.has(Rule.R1) && e.size() == 1) {
+                // 영 여유 증인 — 지분상품이 있어도 E × 기준 명부 보통주 유통이 지배 NI와 반 주 폭 안에서 닫히면 배분 0이다(계획 C 「none:no-w」
+                // 214행/38종목 · 대조군 거짓 통과 2/390 · 표본 밖 0/26). 지분상품이 실제로 몫을 가져가면 E × S가 지배 NI보다 그 몫만큼 작다.
+                BigDecimal shares = adjusted(reference, period, multiple);
+                BigDecimal eps = e.iterator().next();
+                if (shares != null && shares.signum() != 0
+                        && income.subtract(eps.multiply(shares)).abs().compareTo(HALF.multiply(shares)) <= 0) {
+                    Payout payout = payout(hybrid, income, income, m, period, prior, same, multiple);
+                    return decided("kr-ni", income, 'T', anchor.statement(), HALF.multiply(shares), payout.base(), payout.branch(), false);
+                }
             }
             // 3개월 W가 없다 — 누계가 서는지는 행 해석이 본다(누계 몫 − 직전 보고서의 누계 몫).
             return new Judged("none:no-w", null, 'T', anchor.statement(), null, null, "none:no-w", true);

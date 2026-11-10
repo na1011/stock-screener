@@ -64,7 +64,9 @@ class FsrReplayDerivationTest {
                 (rs, i) -> new SecurityRef(rs.getLong("id"), rs.getString("market_code"), rs.getString("ticker")));
         int written = 0;
         int skipped = 0;
-        for (SecurityRef s : stocks) {
+        // FSR_SKIP_REFILL=true — 이미 재생한 DB에서 유도만 다시 돈다(엔진 규칙을 들일 때마다 · 0콜).
+        boolean skipRefill = Boolean.parseBoolean(System.getenv().getOrDefault("FSR_SKIP_REFILL", "false"));
+        for (SecurityRef s : skipRefill ? List.<SecurityRef>of() : stocks) {
             try {
                 FullStatementResult r = full.fetchStatements(s, from, to, EnumSet.allOf(StatementPeriod.class));
                 writer.writeDetailed(s.stockId(), r.reports(), FinancialWriter.WriteMode.FILL_WITHOUT_REVISION);
@@ -80,6 +82,6 @@ class FsrReplayDerivationTest {
         deriver.krGate(gate);
         KrCommonIncomeDeriver.Derived derived = deriver.derive();
         System.out.printf("[fsr-replay] 관문=%s 쓴 종목 %d · 건너뜀 %d · 유도 %s%n", gate, written, skipped, derived);
-        assertThat(written).isPositive();
+        assertThat(skipRefill || written > 0).isTrue();
     }
 }

@@ -111,7 +111,7 @@ public class KrCommonIncomeDeriver {
             issuerFilings.add(new java.util.AbstractMap.SimpleEntry<>(filing.bsnsYear(), facts.get(filing.rceptNo())));
         }
         List<Resolved> resolved = KrCommonIncomeRows.resolve(rows, registers(stockId), multiple(stockId),
-                KrCommonEquity.Issuer.of(issuerFilings));
+                KrCommonEquity.Issuer.of(issuerFilings), krGate ? KrCommonIncome.Rules.V4 : KrCommonIncome.Rules.NONE);
         jdbc.update("""
                 DELETE FROM financial_common_income
                  WHERE financial_statement_id IN (SELECT id FROM financial_statement WHERE stock_id = ?)
@@ -124,7 +124,7 @@ public class KrCommonIncomeDeriver {
             }
             KrCommonEquity.Equity e = r.equity();
             batch.add(new Object[]{r.row().id(), reportCodes.get(r.row().id()), r.common(), String.valueOf(r.basis()), r.branch(),
-                    KrCommonIncome.ENGINE_VERSION, String.valueOf(r.statement()), r.payoutBase(), r.incomeSnapshot(),
+                    krGate ? KrCommonIncome.ENGINE_VERSION_V4 : KrCommonIncome.ENGINE_VERSION, String.valueOf(r.statement()), r.payoutBase(), r.incomeSnapshot(),
                     r.row().published(), e.hybrid(), e.hybrid(), e.branch(), e.fraction()});
         }
         jdbc.batchUpdate("""

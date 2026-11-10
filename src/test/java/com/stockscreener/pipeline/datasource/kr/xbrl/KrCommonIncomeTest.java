@@ -38,6 +38,20 @@ class KrCommonIncomeTest {
             row("의결권 없는 주식", 1_000_000, 0));
 
     @Test
+    void r1ClosesNoWeightedRowsWhenEpsTimesRegisterSharesMeetsTheIncome() {
+        // 우선주가 있어 지분상품 있음 · 3개월 W 없음 · E 1,000원 × 명부 보통주 1,000만 = 100억 = 지배 NI — 배분 0(국내 관문 켬 R1).
+        Judged off = judge(rowNi(10_000_000_000L), WITH_PREFERRED, owners(10_000_000_000L), eps(1000));
+        Judged on = judgeV4(rowNi(10_000_000_000L), WITH_PREFERRED, owners(10_000_000_000L), eps(1000));
+        // 대조군 — 우선주가 몫을 가져가면 E × S가 그만큼 작아 닫히지 않는다(EPS 990원 · 1억 차 > 0.5S).
+        Judged allocated = judgeV4(rowNi(10_000_000_000L), WITH_PREFERRED, owners(10_000_000_000L), eps(990));
+
+        assertThat(off.branch()).as("꺼짐 — 지금 동작").isEqualTo("none:no-w");
+        assertThat(on.branch()).isEqualTo("kr-ni");
+        assertThat(on.common()).isEqualByComparingTo("10000000000");
+        assertThat(allocated.branch()).isEqualTo("none:no-w");
+    }
+
+    @Test
     void noInstrumentsAndTheEpsIdentityClosesIsTheControllingIncome() {
         // 지배 NI 100억 · EPS 1,000원 × 1,000만 주 = 100억.
         Judged j = judge(rowNi(10_000_000_000L), COMMON_ONLY,
@@ -362,6 +376,10 @@ class KrCommonIncomeTest {
 
     private static Judged judge(RowIncome row, Register prior, Fact... facts) {
         return KrCommonIncome.judge(Q2, row, List.of(facts), prior, null, NO_ACTIONS);
+    }
+
+    private static Judged judgeV4(RowIncome row, Register prior, Fact... facts) {
+        return KrCommonIncome.judge(Q2, row, List.of(facts), prior, null, NO_ACTIONS, KrCommonIncome.Rules.V4);
     }
 
     private static RowIncome rowNi(long controlling) {

@@ -76,6 +76,12 @@ public final class KrCommonIncomeRows {
      */
     public static List<Resolved> resolve(List<Row> rows, Map<Integer, Register> registers, Multiple multiple,
                                          KrCommonEquity.Issuer issuer) {
+        return resolve(rows, registers, multiple, issuer, KrCommonIncome.Rules.NONE);
+    }
+
+    /** @param rules 엔진 4판 규칙(국내 관문 켬 · {@link KrCommonIncome.Rules#V4}) */
+    public static List<Resolved> resolve(List<Row> rows, Map<Integer, Register> registers, Multiple multiple,
+                                         KrCommonEquity.Issuer issuer, KrCommonIncome.Rules rules) {
         Map<Long, Resolved> out = new HashMap<>();
         List<Row> ordered = new ArrayList<>(rows);
         ordered.sort(Comparator.comparing(Row::fiscalYear).thenComparing(r -> order(r.fiscalPeriod()))
@@ -89,7 +95,7 @@ public final class KrCommonIncomeRows {
                 continue;
             }
             Judged j = KrCommonIncome.judge(row.period(), row.income(), row.facts(),
-                    registers.get(row.fiscalYear() - 1), registers.get(row.fiscalYear()), multiple);
+                    registers.get(row.fiscalYear() - 1), registers.get(row.fiscalYear()), multiple, rules);
             if (j.wantsCumulative() && ("Q2".equals(row.fiscalPeriod()) || "Q3".equals(row.fiscalPeriod()))) {
                 out.put(row.id(), cumulative(row, j, ordered, out));
                 continue;
