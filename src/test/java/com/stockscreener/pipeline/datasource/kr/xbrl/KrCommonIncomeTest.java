@@ -168,6 +168,21 @@ class KrCommonIncomeTest {
     }
 
     @Test
+    void reg2FoldsARegisterPrintedTwiceAndRefusesTwoDifferentCopies() {
+        // 같은 표를 두 번 실은 명부(024850 2023 꼴) — 접으면 보통주 한 종류다 · 안 접으면 보통주 줄 둘이 두 종류로 세어진다(국내 관문 켬 REG2).
+        List<ShareRow> twice = List.of(row("보통주", 66_507_231, 7_024), row("보통주", 66_507_231, 7_024), row("합계", 66_507_231, 7_024),
+                row("합계", 66_507_231, 7_024));
+        // 두 벌이 다르면(263750 2017 꼴) 어느 벌이 기말 명부인지 모른다.
+        List<ShareRow> differ = List.of(row("보통주", 12_066_300, 848_760), row("보통주", 10_266_300, 848_760), row("합계", 10_266_300, 848_760),
+                row("합계", 12_066_300, 848_760));
+
+        assertThat(Register.of(REGISTER_DAY, twice).multiClass()).as("접기 전 — 지금 동작").isTrue();
+        assertThat(Register.of(REGISTER_DAY, KrCommonIncomeDeriver.folded(twice)).multiClass()).isFalse();
+        assertThat(Register.of(REGISTER_DAY, KrCommonIncomeDeriver.folded(twice)).commonOutstanding()).isEqualByComparingTo("66500207");
+        assertThat(KrCommonIncomeDeriver.folded(differ)).isNull();
+    }
+
+    @Test
     void ncTakesTheConsolidatedIncomeWhenEquityShowsNoNoncontrollingInterest() {
         // 행 지배 NI가 빈 연결 행 — 연결 순이익 100억 · 기초(03-31) · 기말(06-30) 자본총계 = 지배 자본 · 비지배 손익 줄 없음(국내 관문 켬 NC-b).
         RowIncome row = new RowIncome(null, BigDecimal.valueOf(10_000_000_000L));

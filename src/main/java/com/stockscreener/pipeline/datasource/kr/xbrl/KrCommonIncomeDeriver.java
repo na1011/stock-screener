@@ -111,7 +111,7 @@ public class KrCommonIncomeDeriver {
             issuerFilings.add(new java.util.AbstractMap.SimpleEntry<>(filing.bsnsYear(), facts.get(filing.rceptNo())));
         }
         List<Resolved> resolved = KrCommonIncomeRows.resolve(rows, registers(stockId), multiple(stockId),
-                KrCommonEquity.Issuer.of(issuerFilings), krGate ? KrCommonIncome.Rules.V4 : KrCommonIncome.Rules.NONE);
+                KrCommonEquity.Issuer.of(issuerFilings), rules());
         jdbc.update("""
                 DELETE FROM financial_common_income
                  WHERE financial_statement_id IN (SELECT id FROM financial_statement WHERE stock_id = ?)
@@ -137,6 +137,10 @@ public class KrCommonIncomeDeriver {
     }
 
     /** 사업연도 → 명부 요약. 비고 줄은 주석 문구라 수로 안 읽는다 · 종류 · 합계 줄의 수가 안 읽히면 그 해 명부를 안 쓴다. */
+    private KrCommonIncome.Rules rules() {
+        return krGate ? KrCommonIncome.Rules.V4 : KrCommonIncome.Rules.NONE;
+    }
+
     Map<Integer, Register> registers(long stockId) {
         Map<Integer, Register> out = new HashMap<>();
         jdbc.query("""
@@ -157,6 +161,10 @@ public class KrCommonIncomeDeriver {
                 }
                 rows.add(new ShareRow(label, issued, treasury));
             }
+            if (readable && rules().has(KrCommonIncome.Rule.REG2) && rows.stream().filter(r -> "합계".equals(r.label())).count() >= 2) {
+                rows = folded(rows);
+                readable = rows != null;
+            }
             if (readable) {
                 Register r = Register.of(rs.getObject(2, LocalDate.class), rows);
                 if (r != null) {
@@ -165,6 +173,22 @@ public class KrCommonIncomeDeriver {
             }
         }, stockId);
         return out;
+    }
+
+    /** {@link KrCommonIncome.Rule#REG2} — 같은 표를 두 번 실은 명부를 라벨마다 한 줄로 접는다. 같은 라벨의 두 벌이 다르면 {@code null}(못 읽음). */
+    static List<ShareRow> folded(List<ShareRow> rows) {
+        Map<String, ShareRow> first = new java.util.LinkedHashMap<>();
+        for (ShareRow row : rows) {
+            ShareRow seen = first.putIfAbsent(row.label(), row);
+            if (seen != null && !(sameNumber(seen.issued(), row.issued()) && sameNumber(seen.treasury(), row.treasury()))) {
+                return null;
+            }
+        }
+        return new ArrayList<>(first.values());
+    }
+
+    private static boolean sameNumber(BigDecimal a, BigDecimal b) {
+        return a == null ? b == null : b != null && a.compareTo(b) == 0;
     }
 
     private static final BigDecimal UNREADABLE = new BigDecimal("-1");

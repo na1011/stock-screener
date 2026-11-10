@@ -119,7 +119,14 @@ public final class KrCommonIncome {
          * 축 붙은 W — 표준 구성원 W가 없을 때 {@code ClassesOfOrdinarySharesAxis} 구성원 하나뿐인 W(보통주 한 종류를 축으로 적은 판)와
          * {@code ContinuingAndDiscontinuedOperationsAxis} 두 구성원 값이 같은 W(계속 · 중단 열에 같은 W를 적은 판)를 후보로 쓴다(계획 RB).
          */
-        RB
+        RB,
+        /**
+         * 「합계」 줄이 둘 이상인 명부 — 같은 표를 두 번 실은 명부다. 라벨마다 두 벌이 같으면 하나로 접어 읽고(지금은 보통주 줄 둘을 두 종류로 세어
+         * 우선주 있음을 거짓으로 만든다 · 024850 2023 등 넷), 한 줄이라도 다르면 어느 벌이 기말 명부인지 몰라 못 읽음이다(263750 2017 ·
+         * 1,206만 대 1,026만). 계획 REG2의 「전부 못 읽음」은 같은 두 벌까지 버려 앞 해 명부를 잃는다. 적용은 명부를 짓는
+         * {@link KrCommonIncomeDeriver}가 한다.
+         */
+        REG2
     }
 
     /**
