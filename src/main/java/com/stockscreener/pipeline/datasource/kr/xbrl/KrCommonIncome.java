@@ -126,7 +126,12 @@ public final class KrCommonIncome {
          * 1,206만 대 1,026만). 계획 REG2의 「전부 못 읽음」은 같은 두 벌까지 버려 앞 해 명부를 잃는다. 적용은 명부를 짓는
          * {@link KrCommonIncomeDeriver}가 한다.
          */
-        REG2
+        REG2,
+        /**
+         * 지분상품 없는 행의 W 단위 — W가 단위 점검({@code w-unit})에 걸려도 E × W가 지배 NI와 0.5W 안에서 닫히면 배분 0이다(원장 W가 맞고 명부
+         * 쪽이 낡은 해 · 계획 U1). W ≤ 0은 W가 없는 것으로 보고 증인 갈래로 간다.
+         */
+        U1
     }
 
     /**
@@ -268,11 +273,15 @@ public final class KrCommonIncome {
             w = Set.of(pair[1]);
         }
         Register reference = prior != null ? prior : same;
-        if (e.size() == 1 && w.size() == 1) {
+        if (e.size() == 1 && w.size() == 1 && !(rules.has(Rule.U1) && !instruments && w.iterator().next().signum() <= 0)) {
             BigDecimal eps = e.iterator().next();
             BigDecimal weighted = w.iterator().next();
             String wrong = weightedCheck(weighted, reference, period, multiple, rules);
             if (wrong != null) {
+                if (rules.has(Rule.U1) && "w-unit".equals(wrong) && !instruments
+                        && income.subtract(eps.multiply(weighted)).abs().compareTo(HALF.multiply(weighted)) <= 0) {
+                    return decided("kr-ni", income, 'T', anchor.statement(), HALF.multiply(weighted), income, "ni", false);
+                }
                 return Judged.none(wrong, anchor.statement());
             }
             BigDecimal tolerance = HALF.multiply(weighted);

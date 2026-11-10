@@ -183,6 +183,22 @@ class KrCommonIncomeTest {
     }
 
     @Test
+    void u1TrustsTheLedgerWeightedSharesWhenTheEpsIdentityClosesWithoutInstruments() {
+        // 지분상품 없음 · W 2,500만이 명부 1,000만의 2.5배(단위 점검에 걸림) · 그래도 E 400 × W = 지배 NI 100억(국내 관문 켬 U1).
+        Judged off = judge(rowNi(10_000_000_000L), COMMON_ONLY, owners(10_000_000_000L), eps(400), weighted(25_000_000));
+        Judged on = judgeV4(rowNi(10_000_000_000L), COMMON_ONLY, owners(10_000_000_000L), eps(400), weighted(25_000_000));
+        // W 0은 W가 없는 것 — 명부 증인(E × S)으로 간다.
+        Judged zero = judgeV4(rowNi(10_000_000_000L), COMMON_ONLY, owners(10_000_000_000L), eps(1000), weighted(0));
+        // 대조군 — 지분상품이 있으면 그대로 단위 오류다.
+        Judged instruments = judgeV4(rowNi(10_000_000_000L), WITH_PREFERRED, owners(10_000_000_000L), eps(400), weighted(25_000_000));
+
+        assertThat(off.branch()).as("꺼짐 — 지금 동작").isEqualTo("none:w-unit");
+        assertThat(on.branch()).isEqualTo("kr-ni");
+        assertThat(zero.branch()).isEqualTo("kr-ni");
+        assertThat(instruments.branch()).isEqualTo("none:w-unit");
+    }
+
+    @Test
     void ncTakesTheConsolidatedIncomeWhenEquityShowsNoNoncontrollingInterest() {
         // 행 지배 NI가 빈 연결 행 — 연결 순이익 100억 · 기초(03-31) · 기말(06-30) 자본총계 = 지배 자본 · 비지배 손익 줄 없음(국내 관문 켬 NC-b).
         RowIncome row = new RowIncome(null, BigDecimal.valueOf(10_000_000_000L));
