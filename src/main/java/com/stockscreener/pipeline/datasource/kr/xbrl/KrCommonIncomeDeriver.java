@@ -127,8 +127,11 @@ public class KrCommonIncomeDeriver {
             }
             return out;
         };
-        List<Resolved> resolved = KrCommonIncomeRows.resolve(rows, registers(stockId), multiple(stockId),
-                KrCommonEquity.Issuer.of(issuerFilings), rules(), later);
+        Map<Integer, Register> registers = registers(stockId);
+        // 정기보고서 주식수 표(SW · 관문 마이그레이션 V70_17)는 관문 켬에서만 읽는다 — 꺼짐 DB에는 표가 없다.
+        KrShareTimeline timeline = krGate ? new KrShareTimeline(store.shareMaterial(stockId), registers) : KrShareTimeline.NONE;
+        List<Resolved> resolved = KrCommonIncomeRows.resolve(rows, registers, multiple(stockId),
+                KrCommonEquity.Issuer.of(issuerFilings), rules(), later, timeline);
         jdbc.update("""
                 DELETE FROM financial_common_income
                  WHERE financial_statement_id IN (SELECT id FROM financial_statement WHERE stock_id = ?)

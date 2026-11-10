@@ -140,6 +140,28 @@ class KrCommonIncomeTest {
     }
 
     @Test
+    void swWitnessesTheIncomeOnTheShareTimeline() {
+        // 지분상품 없음 · W 없음 · 기간 중 증자로 앞 해 명부(1,000만)가 W와 10% 갈려 지금 증인이 실패한다. 시간표 구간 [1,095만, 1,100만]이
+        // NI 110억 ÷ E 1,000과 닫힌다 — 배분 0 · 시간표 판 접수일부터 보인다(국내 관문 켬 SW).
+        List<Fact> facts = List.of(owners(11_000_000_000L), eps(1000));
+        KrShareTimeline.Window narrow = new KrShareTimeline.Window(new BigDecimal("10950000"), new BigDecimal("11000000"), LocalDate.of(2026, 9, 1));
+        Judged without = KrCommonIncome.judge(Q2, rowNi(11_000_000_000L), facts, COMMON_ONLY, null, NO_ACTIONS, KrCommonIncome.Rules.V4, null,
+                List.of(), null);
+        Judged on = KrCommonIncome.judge(Q2, rowNi(11_000_000_000L), facts, COMMON_ONLY, null, NO_ACTIONS, KrCommonIncome.Rules.V4, null,
+                List.of(), narrow);
+        // 대조군 — 구간 폭이 1%를 넘으면(자기주식 취득 · 처분 일자를 몰라 넓다) 숨은 배분을 가릴 수 없어 안 받는다.
+        KrShareTimeline.Window wide = new KrShareTimeline.Window(new BigDecimal("10600000"), new BigDecimal("11000000"), LocalDate.of(2026, 9, 1));
+        Judged loose = KrCommonIncome.judge(Q2, rowNi(11_000_000_000L), facts, COMMON_ONLY, null, NO_ACTIONS, KrCommonIncome.Rules.V4, null,
+                List.of(), wide);
+
+        assertThat(without.branch()).isEqualTo("none:witness");
+        assertThat(on.branch()).isEqualTo("kr-ni");
+        assertThat(on.common()).isEqualByComparingTo("11000000000");
+        assertThat(on.laterReceipt()).isEqualTo(LocalDate.of(2026, 9, 1));
+        assertThat(loose.branch()).isEqualTo("none:witness");
+    }
+
+    @Test
     void c1PicksTheClosingPairWhenTheLedgerCarriesTwoEps() {
         // 지분상품 없음 · 기본 EPS 개념에 1,000원과 950원이 함께 실렸다 · W 1,000만 — 1,000 × W만 지배 NI 100억과 0.5W 안에서 닫힌다(국내 관문 켬 C1).
         Judged off = judge(rowNi(10_000_000_000L), COMMON_ONLY, owners(10_000_000_000L), eps(1000), eps(950), weighted(10_000_000));

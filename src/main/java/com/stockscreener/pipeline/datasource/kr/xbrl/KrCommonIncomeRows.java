@@ -119,6 +119,12 @@ public final class KrCommonIncomeRows {
     /** @param later 행마다 뒤 판들({@link KrCommonIncome.Rule#CMP}) */
     public static List<Resolved> resolve(List<Row> rows, Map<Integer, Register> registers, Multiple multiple,
                                          KrCommonEquity.Issuer issuer, KrCommonIncome.Rules rules, Later later) {
+        return resolve(rows, registers, multiple, issuer, rules, later, KrShareTimeline.NONE);
+    }
+
+    /** @param timeline 정기보고서 주식수 표({@link KrCommonIncome.Rule#SW}) */
+    public static List<Resolved> resolve(List<Row> rows, Map<Integer, Register> registers, Multiple multiple,
+                                         KrCommonEquity.Issuer issuer, KrCommonIncome.Rules rules, Later later, KrShareTimeline timeline) {
         Map<Long, Resolved> out = new HashMap<>();
         List<Row> ordered = new ArrayList<>(rows);
         ordered.sort(Comparator.comparing(Row::fiscalYear).thenComparing(r -> order(r.fiscalPeriod()))
@@ -145,24 +151,25 @@ public final class KrCommonIncomeRows {
                     visible = annual == null ? NEVER : later(visible, annual);
                 }
             }
+            KrShareTimeline.Window window = rules.has(KrCommonIncome.Rule.SW) ? timeline.window(row, ordered) : null;
             Judged j;
             if (rules.has(KrCommonIncome.Rule.CMP)) {
                 // 비교열 W는 그 판 재료로 값이 안 설 때만 — 값이 서던 행을 뒤 판 공개 전 날들까지 바꾸지 않는다.
                 j = KrCommonIncome.judge(row.period(), row.income(), row.facts(), prior, same, multiple,
-                        rules.without(KrCommonIncome.Rule.CMP), nc);
+                        rules.without(KrCommonIncome.Rule.CMP), nc, List.of(), window);
                 // 누계 갈래(반기 · 3분기 누계 − 앞 분기)로 서는 값도 그 판 재료다 — 그것까지 안 설 때만 뒤 판을 본다.
                 // R1+(원장 비보통 몫 후보로 닫힌 값)도 그 판 재료다.
                 boolean own = j.common() != null || j.fallback() != null
                         || j.wantsCumulative() && ("Q2".equals(row.fiscalPeriod()) || "Q3".equals(row.fiscalPeriod()))
                         && cumulative(row, j, ordered, out, rules.without(KrCommonIncome.Rule.CMP), nc).common() != null;
                 if (!own) {
-                    j = KrCommonIncome.judge(row.period(), row.income(), row.facts(), prior, same, multiple, rules, nc, later.after(row));
+                    j = KrCommonIncome.judge(row.period(), row.income(), row.facts(), prior, same, multiple, rules, nc, later.after(row), window);
                 }
             } else {
-                j = KrCommonIncome.judge(row.period(), row.income(), row.facts(), prior, same, multiple, rules, nc);
+                j = KrCommonIncome.judge(row.period(), row.income(), row.facts(), prior, same, multiple, rules, nc, List.of(), window);
             }
-            if (j.comparativeReceipt() != null) {
-                visible = later(visible, j.comparativeReceipt());
+            if (j.laterReceipt() != null) {
+                visible = later(visible, j.laterReceipt());
             }
             Resolved resolved = null;
             if (j.wantsCumulative() && ("Q2".equals(row.fiscalPeriod()) || "Q3".equals(row.fiscalPeriod()))) {

@@ -166,7 +166,14 @@ public final class KrCommonIncome {
          * LG이노텍 · 한전KPS 2020 1분기 비지배 25,224원을 안 뺀 지배 줄)은 그 판 표준 지배 사실이 같은 틀린 값이라 기본 앵커가 못 맞댄다. 같은 기간
          * 자본변동표 지배 열이 행 지배 NI와 다르면 산수 앵커는 안 쓴다(손익 · 자본변동표가 각자 닫히며 지배 몫을 달리 나눈 판 — 043260 FY2024).
          */
-        AN4
+        AN4,
+        /**
+         * 주식수 시간표 증인 — 지분상품 없음 · W 없음 · 지금 증인 실패인 행에서, 같은 판(반기 · 3분기는 직전 판까지)의 증자(감자) 이력 · 자기주식
+         * 표 · 그 판 명부와 앞 해 명부로 지은 기간 가중 보통주 유통 구간({@link KrShareTimeline} — 닫힘이 서야 낸다)이 폭 1% 이하이고 NI ÷ (E ± 0.5)와
+         * 1% 안이면 배분 0(계획 K3-b · 표본 대조군 19 중 18이 원장 W를 품고 하나는 실패하는 쪽). 값은 지배 NI 그대로 · 그 행의 보통주 몫은 쓴 주식수 표
+         * 판의 접수일부터 보인다.
+         */
+        SW
     }
 
     /** {@link Rule#CMP}의 재료 — 그 행 판보다 뒤에 접수된 판 하나(접수번호 · 접수일 · 재료 · 재료가 없으면 {@code null}). */
@@ -254,9 +261,12 @@ public final class KrCommonIncome {
     }
 
     /** 판정 결과. 값이 없으면 {@code common}이 {@code null}이고 {@code branch}가 {@code none:*}다. */
-    /** @param fallback 누계 갈래로도 값이 안 설 때 쓰는 그 판 판정({@link Rule#R1P}) — 없으면 {@code null} */
+    /**
+     * @param laterReceipt 그 판 공시일보다 늦게 공개된 재료의 접수일 — 비교열 W의 뒤 판({@link Rule#CMP}) · 증인으로 쓴 주식수 표의 판({@link Rule#SW})
+     * @param fallback     누계 갈래로도 값이 안 설 때 쓰는 그 판 판정({@link Rule#R1P}) — 없으면 {@code null}
+     */
     public record Judged(String branch, BigDecimal common, char basis, char statement, BigDecimal tolerance,
-                         BigDecimal payoutBase, String payoutBranch, boolean wantsCumulative, LocalDate comparativeReceipt,
+                         BigDecimal payoutBase, String payoutBranch, boolean wantsCumulative, LocalDate laterReceipt,
                          Judged fallback) {
 
         public Judged(String branch, BigDecimal common, char basis, char statement, BigDecimal tolerance, BigDecimal payoutBase,
@@ -264,14 +274,14 @@ public final class KrCommonIncome {
             this(branch, common, basis, statement, tolerance, payoutBase, payoutBranch, wantsCumulative, null, null);
         }
 
-        /** 비교열 W({@link Rule#CMP})를 쓴 판정 — 뒤 판 접수일을 단다. */
-        Judged withComparative(LocalDate receipt) {
+        /** 늦게 공개된 재료(비교열 W · 주식수 표)를 쓴 판정 — 그 판 접수일을 단다. */
+        Judged withLaterReceipt(LocalDate receipt) {
             return receipt == null ? this
                     : new Judged(branch, common, basis, statement, tolerance, payoutBase, payoutBranch, wantsCumulative, receipt, fallback);
         }
 
         Judged withFallback(Judged decided) {
-            return new Judged(branch, common, basis, statement, tolerance, payoutBase, payoutBranch, wantsCumulative, comparativeReceipt,
+            return new Judged(branch, common, basis, statement, tolerance, payoutBase, payoutBranch, wantsCumulative, laterReceipt,
                     decided);
         }
 
@@ -314,6 +324,12 @@ public final class KrCommonIncome {
     /** @param later 그 행 판보다 뒤에 접수된 판들(접수번호 순 · {@link Rule#CMP}) */
     public static Judged judge(Period period, RowIncome row, List<Fact> facts, Register prior, Register same,
                                Multiple multiple, Rules rules, NcContext nc, List<LaterFiling> later) {
+        return judge(period, row, facts, prior, same, multiple, rules, nc, later, null);
+    }
+
+    /** @param window 그 행의 주식수 시간표 구간({@link Rule#SW} · 행 해석이 짓는다) — 없으면 {@code null} */
+    public static Judged judge(Period period, RowIncome row, List<Fact> facts, Register prior, Register same,
+                               Multiple multiple, Rules rules, NcContext nc, List<LaterFiling> later, KrShareTimeline.Window window) {
         Anchor anchor = anchor(period, row, facts, rules, nc);
         if (anchor == null) {
             // 행 지배 NI가 비었는데 연결 순이익이 행 NI와 같다 — 연결로 지은 행인데 지배 몫이 없다(매퍼 · 원장 몫 · reload-gate 국내
@@ -351,8 +367,8 @@ public final class KrCommonIncome {
                 comparative = found.receipt();
             }
         }
-        Judged judged = judgeWith(period, anchor, m, hybrid, instruments, income, e, w, reference, prior, same, multiple, rules)
-                .withComparative(comparative);
+        Judged judged = judgeWith(period, anchor, m, hybrid, instruments, income, e, w, reference, prior, same, multiple, rules, window)
+                .withLaterReceipt(comparative);
         if (rules.has(Rule.R1P) && "none:no-w".equals(judged.branch()) && e.size() == 1) {
             BigDecimal shares = adjusted(reference, period, multiple);
             BigDecimal common = shares == null || shares.signum() == 0 ? null
@@ -453,7 +469,7 @@ public final class KrCommonIncome {
 
     private static Judged judgeWith(Period period, Anchor anchor, Material m, boolean hybrid, boolean instruments, BigDecimal income,
                                     Set<BigDecimal> e, Set<BigDecimal> w, Register reference, Register prior, Register same,
-                                    Multiple multiple, Rules rules) {
+                                    Multiple multiple, Rules rules, KrShareTimeline.Window window) {
         if (e.size() > 1 || w.size() > 1) {
             BigDecimal[] pair = rules.has(Rule.C1) ? resolveConflict(income, e, w, instruments, m, period) : null;
             if (pair == null) {
@@ -538,6 +554,9 @@ public final class KrCommonIncome {
                     if (rules.has(Rule.U) && intervalWitness(income, eps, period, prior, same, multiple, rules.has(Rule.PIT))) {
                         return decided("kr-ni", income, 'T', anchor.statement(), null, income, "ni", false);
                     }
+                    if (rules.has(Rule.SW) && windowWitness(income, eps, window)) {
+                        return decided("kr-ni", income, 'T', anchor.statement(), null, income, "ni", false).withLaterReceipt(window.visible());
+                    }
                     return Judged.none("witness", anchor.statement());
                 }
             }
@@ -605,6 +624,26 @@ public final class KrCommonIncome {
         }
         double gap = ivHigh.compareTo(lo) < 0 ? lo.subtract(ivHigh).divide(lo, MathContext.DECIMAL64).doubleValue()
                 : ivLow.compareTo(hi) > 0 ? ivLow.subtract(hi).divide(hi, MathContext.DECIMAL64).doubleValue() : 0.0;
+        return gap <= 0.01;
+    }
+
+    /** SW — NI ÷ (E ± 0.5) 구간이 주식수 시간표 구간 [lo, hi]와 1% 안이고 시간표 구간 폭이 1% 이하인가(숨은 배분 여유를 약 2%로 묶는다). */
+    private static boolean windowWitness(BigDecimal income, BigDecimal eps, KrShareTimeline.Window window) {
+        if (window == null || eps.signum() == 0 || window.low().signum() <= 0
+                || window.high().subtract(window.low()).compareTo(new BigDecimal("0.01").multiply(window.low())) > 0) {
+            return false;
+        }
+        BigDecimal low = eps.subtract(HALF);
+        BigDecimal high = eps.add(HALF);
+        if (low.signum() <= 0 && high.signum() >= 0) {
+            return false;
+        }
+        BigDecimal a = income.divide(low, MathContext.DECIMAL64);
+        BigDecimal b = income.divide(high, MathContext.DECIMAL64);
+        BigDecimal ivLow = a.min(b);
+        BigDecimal ivHigh = a.max(b);
+        double gap = ivHigh.compareTo(window.low()) < 0 ? window.low().subtract(ivHigh).divide(window.low(), MathContext.DECIMAL64).doubleValue()
+                : ivLow.compareTo(window.high()) > 0 ? ivLow.subtract(window.high()).divide(window.high(), MathContext.DECIMAL64).doubleValue() : 0.0;
         return gap <= 0.01;
     }
 
