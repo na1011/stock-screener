@@ -232,6 +232,82 @@ class DartFullAccountMapperTest {
                 .as("비지배 줄 없이 순이익과 갈리면 귀속을 확인할 수 없다").isNull();
     }
 
+    @Test
+    @DisplayName("표준 지배 줄을 손익 산수와 자본변동표 지배 열이 함께 반박하면 자본변동표가 확인한 줄을 쓴다(K19)")
+    void switchesToTheLineTheEquityStatementConfirms() {
+        // LG이노텍 2020 FY 꼴 — 표준 지배 줄 330.9가 계속영업 몫이다. 순이익 236.1 − 비지배 0.0 = 236.1 = 자본변동표 지배 열.
+        List<JsonNode> income = incomeRows("""
+                {"account_id":"ifrs-full_ProfitLoss","account_nm":"당기순이익","sj_div":"CIS","thstrm_amount":"236127867008"}
+                {"account_id":"ifrs-full_ProfitLossAttributableToOwnersOfParent","account_nm":"지배기업 소유주","sj_div":"CIS","thstrm_amount":"330897692322"}
+                {"account_id":"ifrs-full_ProfitLossAttributableToNoncontrollingInterests","account_nm":"비지배지분","sj_div":"CIS","thstrm_amount":"4865445"}
+                """);
+        List<JsonNode> equity = incomeRows("""
+                {"account_id":"ifrs-full_ProfitLoss","sj_div":"SCE","account_detail":"자본 [member]|지배기업 소유주지분","thstrm_amount":"236123001563"}
+                {"account_id":"ifrs-full_ProfitLoss","sj_div":"SCE","account_detail":"자본 [member]|지배기업 소유주지분|이익잉여금 [member]","thstrm_amount":"236123001563"}
+                {"account_id":"ifrs-full_ProfitLoss","sj_div":"SCE","account_detail":"자본 [member]|비지배지분 [member]","thstrm_amount":"4865445"}
+                """);
+        assertThat(DartFullAccountMapper.confirmedControlling(income, equity, "thstrm_amount", "thstrm_amount"))
+                .isEqualByComparingTo("236123001563");
+
+        // 반기 꼴(삼성전기 2021 반기) — 줄은 누계 칸으로 고르고 그 줄의 3개월 칸을 낸다.
+        List<JsonNode> half = incomeRows("""
+                {"account_id":"ifrs-full_ProfitLoss","sj_div":"CIS","thstrm_amount":"234571251142","thstrm_add_amount":"477297573700"}
+                {"account_id":"ifrs-full_ProfitLossAttributableToOwnersOfParent","sj_div":"CIS","thstrm_amount":"231162849186","thstrm_add_amount":"466137557384"}
+                {"account_id":"ifrs-full_ProfitLossAttributableToNoncontrollingInterests","sj_div":"CIS","thstrm_amount":"12270751452","thstrm_add_amount":"22097318286"}
+                {"account_id":"-표준계정코드 미사용-","account_nm":"지배기업의 소유주에게 귀속되는 당기순이익","sj_div":"CIS","thstrm_amount":"224209370315","thstrm_add_amount":"457425029412"}
+                """);
+        List<JsonNode> halfEquity = incomeRows("""
+                {"account_id":"ifrs-full_ProfitLoss","sj_div":"SCE","account_detail":"자본 [구성요소]|지배기업의 소유주에게 귀속되는 지분 [구성요소]","thstrm_amount":"457425029412"}
+                """);
+        assertThat(DartFullAccountMapper.confirmedControlling(half, halfEquity, "thstrm_amount", "thstrm_add_amount"))
+                .isEqualByComparingTo("224209370315");
+    }
+
+    @Test
+    @DisplayName("표준코드 없는 줄만 있어도 같은 규칙 — 위메이드 2020 1분기(표준 지배 줄 6,455원)")
+    void readsNonstandardRowsOnBothStatements() {
+        List<JsonNode> income = incomeRows("""
+                {"account_id":"ifrs-full_ProfitLoss","account_nm":"당기순이익(손실)","sj_div":"CIS","thstrm_amount":"7900033657"}
+                {"account_id":"-표준계정코드 미사용-","account_nm":"지배기업의 소유주에 귀속될 당기순이익","sj_div":"CIS","thstrm_amount":"9050526620"}
+                {"account_id":"-표준계정코드 미사용-","account_nm":"비지배지분에 귀속될 당기순이익","sj_div":"CIS","thstrm_amount":"-1150492963"}
+                {"account_id":"ifrs-full_ProfitLossAttributableToOwnersOfParent","account_nm":"지배기업의 소유주에게 귀속되는 당기순이익(손실)","sj_div":"CIS","thstrm_amount":"6455"}
+                {"account_id":"-표준계정코드 미사용-","account_nm":"지배기업 소유주에 귀속될 총포괄손익","sj_div":"CIS","thstrm_amount":"11848039289"}
+                """);
+        List<JsonNode> equity = incomeRows("""
+                {"account_id":"-표준계정코드 미사용-","account_nm":"당기순이익","sj_div":"SCE","account_detail":"자본 [member]|지배기업의 소유주에게 귀속되는 자본 [member]","thstrm_amount":"9050526620"}
+                {"account_id":"-표준계정코드 미사용-","account_nm":"당기순이익","sj_div":"SCE","account_detail":"자본 [member]|비지배지분 [member]","thstrm_amount":"-1150492963"}
+                {"account_id":"-표준계정코드 미사용-","account_nm":"기타포괄손익-공정가치측정금융자산평가순손익","sj_div":"SCE","account_detail":"자본 [member]|지배기업의 소유주에게 귀속되는 자본 [member]","thstrm_amount":"1"}
+                """);
+        assertThat(DartFullAccountMapper.confirmedControlling(income, equity, "thstrm_amount", "thstrm_amount"))
+                .isEqualByComparingTo("9050526620");
+    }
+
+    @Test
+    @DisplayName("한쪽만 반박하면 표준 지배 줄 그대로 — 비지배 줄만 틀린 판 · 자본변동표만 다른 판")
+    void keepsTheStandardLineWhenOnlyOneStatementDisagrees() {
+        // 코미코 꼴 — 산수는 어긋나지만(비지배 줄이 틀렸다) 표준 지배 줄이 자본변동표 지배 열과 같다.
+        List<JsonNode> minorityWrong = incomeRows("""
+                {"account_id":"ifrs-full_ProfitLoss","sj_div":"CIS","thstrm_amount":"21464282254"}
+                {"account_id":"ifrs-full_ProfitLossAttributableToOwnersOfParent","sj_div":"CIS","thstrm_amount":"17794025922"}
+                {"account_id":"ifrs-full_ProfitLossAttributableToNoncontrollingInterests","sj_div":"CIS","thstrm_amount":"16590770485"}
+                """);
+        List<JsonNode> agrees = incomeRows("""
+                {"account_id":"ifrs-full_ProfitLoss","sj_div":"SCE","account_detail":"자본 [member]|지배기업 소유주지분","thstrm_amount":"17794025922"}
+                """);
+        assertThat(DartFullAccountMapper.confirmedControlling(minorityWrong, agrees, "thstrm_amount", "thstrm_amount")).isNull();
+
+        // 산수가 닫히는데 자본변동표만 다르다 — 표준 줄 그대로.
+        List<JsonNode> closes = incomeRows("""
+                {"account_id":"ifrs-full_ProfitLoss","sj_div":"CIS","thstrm_amount":"1000000"}
+                {"account_id":"ifrs-full_ProfitLossAttributableToOwnersOfParent","sj_div":"CIS","thstrm_amount":"900000"}
+                {"account_id":"ifrs-full_ProfitLossAttributableToNoncontrollingInterests","sj_div":"CIS","thstrm_amount":"100000"}
+                """);
+        List<JsonNode> differs = incomeRows("""
+                {"account_id":"ifrs-full_ProfitLoss","sj_div":"SCE","account_detail":"자본 [member]|지배기업 소유주지분","thstrm_amount":"880000"}
+                """);
+        assertThat(DartFullAccountMapper.confirmedControlling(closes, differs, "thstrm_amount", "thstrm_amount")).isNull();
+    }
+
     /** 한 줄에 행 하나씩 적은 JSON을 손익 행 목록으로 만든다. */
     private static List<JsonNode> incomeRows(String lines) {
         tools.jackson.databind.ObjectMapper mapper = new tools.jackson.databind.ObjectMapper();

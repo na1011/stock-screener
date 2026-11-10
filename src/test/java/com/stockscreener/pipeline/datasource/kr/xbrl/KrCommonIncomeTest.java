@@ -101,6 +101,45 @@ class KrCommonIncomeTest {
     }
 
     @Test
+    void an4AnchorsAQuarterRowOnTheEquityColumnDifference() {
+        // 반기 행 — 매퍼가 표준 지배 줄(3개월 120억 · 계속영업 몫)을 반박하고 100억을 골랐다(K19). 그 판 자본변동표 지배 열 누계 175억 − 1분기 판
+        // 누계 75억 = 100억 = 행 지배 NI · 연결 순이익 누계 차 180억 − 80억 = 3개월 100억(소급 가드).
+        List<Fact> facts = List.of(owners(12_000_000_000L), fact(Source.IFRS, "ProfitLoss", Q2, List.of(), 10_000_000_000L),
+                fact(Source.IFRS, "ProfitLoss", H1, List.of(), 18_000_000_000L), fact(Source.IFRS, "ProfitLoss", H1, List.of(PARENT), 17_500_000_000L));
+        Period first = quarter(2026, 1);
+        KrCommonIncome.NcContext nc = new KrCommonIncome.NcContext(H1.start(), first.end(), List.of(
+                fact(Source.IFRS, "ProfitLoss", first, List.of(), 8_000_000_000L), fact(Source.IFRS, "ProfitLoss", first, List.of(PARENT), 7_500_000_000L)));
+        Judged on = KrCommonIncome.judge(Q2, rowNi(10_000_000_000L), facts, COMMON_ONLY, null, NO_ACTIONS, KrCommonIncome.Rules.V4, nc);
+        Judged off = KrCommonIncome.judge(Q2, rowNi(10_000_000_000L), facts, COMMON_ONLY, null, NO_ACTIONS,
+                KrCommonIncome.Rules.V4.without(KrCommonIncome.Rule.AN4), nc);
+        // 대조군 — 누계 차가 행 지배 NI와 다르면(1분기 판 지배 열 80억 → 95억) 앵커가 안 선다.
+        KrCommonIncome.NcContext apart = new KrCommonIncome.NcContext(H1.start(), first.end(), List.of(
+                fact(Source.IFRS, "ProfitLoss", first, List.of(), 8_000_000_000L), fact(Source.IFRS, "ProfitLoss", first, List.of(PARENT), 8_000_000_000L)));
+        Judged differs = KrCommonIncome.judge(Q2, rowNi(10_000_000_000L), facts, COMMON_ONLY, null, NO_ACTIONS, KrCommonIncome.Rules.V4, apart);
+
+        assertThat(off.branch()).isEqualTo("none:anchor");
+        assertThat(on.branch()).isEqualTo("kr-ni");
+        assertThat(on.common()).isEqualByComparingTo("10000000000");
+        assertThat(differs.branch()).isEqualTo("none:anchor");
+    }
+
+    @Test
+    void an4AnchorsOnProfitLessMinorityUnlessTheEquityColumnSaysOtherwise() {
+        // 한전KPS 2020 1분기 꼴 — 그 판 표준 지배 사실(120억)이 비지배를 안 뺐다. 연결 순이익 105억 − 비지배 5억 = 100억 = 행 지배 NI(매퍼가 고른 값).
+        List<Fact> facts = List.of(owners(12_000_000_000L), fact(Source.IFRS, "ProfitLoss", Q2, List.of(), 10_500_000_000L),
+                fact(Source.IFRS, "ProfitLossAttributableToNoncontrollingInterests", Q2, List.of(), 500_000_000L));
+        Judged on = KrCommonIncome.judge(Q2, rowNi(10_000_000_000L), facts, COMMON_ONLY, null, NO_ACTIONS, KrCommonIncome.Rules.V4);
+        // 대조군 — 같은 기간 자본변동표 지배 열이 98억을 말하면(손익 · 자본변동표가 각자 닫히며 몫을 달리 나눈 판 · 043260 FY2024) 안 받는다.
+        List<Fact> twisted = new ArrayList<>(facts);
+        twisted.add(fact(Source.IFRS, "ProfitLoss", Q2, List.of(PARENT), 9_800_000_000L));
+        Judged apart = KrCommonIncome.judge(Q2, rowNi(10_000_000_000L), twisted, COMMON_ONLY, null, NO_ACTIONS, KrCommonIncome.Rules.V4);
+
+        assertThat(on.branch()).isEqualTo("kr-ni");
+        assertThat(on.common()).isEqualByComparingTo("10000000000");
+        assertThat(apart.branch()).isEqualTo("none:anchor");
+    }
+
+    @Test
     void c1PicksTheClosingPairWhenTheLedgerCarriesTwoEps() {
         // 지분상품 없음 · 기본 EPS 개념에 1,000원과 950원이 함께 실렸다 · W 1,000만 — 1,000 × W만 지배 NI 100억과 0.5W 안에서 닫힌다(국내 관문 켬 C1).
         Judged off = judge(rowNi(10_000_000_000L), COMMON_ONLY, owners(10_000_000_000L), eps(1000), eps(950), weighted(10_000_000));

@@ -400,6 +400,12 @@ final class DartFullAccountMapper {
      * @return 두 값 배열 {연결, 지배}. 중단 줄이 하나도 없으면 {0, 0}
      */
     static BigDecimal[] discontinued(List<JsonNode> income, boolean cumulative, boolean consolidatedStatement) {
+        return discontinued(income, cumulative, consolidatedStatement, null);
+    }
+
+    /** @param confirmedControlling {@link #confirmedControlling}이 고른 지배주주 순이익(그 칸) — 없으면 {@code null}(표준 줄) */
+    static BigDecimal[] discontinued(List<JsonNode> income, boolean cumulative, boolean consolidatedStatement,
+                                     BigDecimal confirmedControlling) {
         String field = cumulative ? "thstrm_add_amount" : "thstrm_amount";
         BigDecimal total = findBy(income, ID_DISCONTINUED, "account_id", field);
         BigDecimal parent = findBy(income, ID_DISCONTINUED_CONTROLLING, "account_id", field);
@@ -408,7 +414,8 @@ final class DartFullAccountMapper {
             return new BigDecimal[]{BigDecimal.ZERO, BigDecimal.ZERO};
         }
         BigDecimal net = findBy(income, ID_NET_INCOME, "account_id", field);
-        BigDecimal controllingNet = findBy(income, ID_NET_INCOME_CONTROLLING, "account_id", field);
+        BigDecimal controllingNet = confirmedControlling != null ? confirmedControlling
+                : findBy(income, ID_NET_INCOME_CONTROLLING, "account_id", field);
         if (controllingNet == null && consolidatedStatement) {
             controllingNet = controllingIncomeFromNonstandardRows(income, net, field);
         }
@@ -541,6 +548,116 @@ final class DartFullAccountMapper {
         }
         return null;
     }
+
+    /**
+     * <b>표준 지배 줄을 원장 둘이 반박할 때의 지배주주 순이익</b>(국내 관문 켬 · 계획 K19). 표준 {@code ProfitLossAttributableToOwnersOfParent}가
+     * 같은 보고서의 손익 산수(지배 + 비지배 = 당기순이익 — 비지배 후보는 표준 · 비표준 줄)에도, 자본변동표 지배 열 당기순이익에도 어긋나고, 다른 손익
+     * 줄(당기순이익 − 비지배 · 비표준 지배 줄) 하나가 자본변동표 지배 열과 같으면 그 줄의 값. 아니면 {@code null}(표준 줄 그대로).
+     *
+     * <p>자본변동표는 누계라 누계 칸으로 줄을 고르고 그 줄의 {@code field} 값을 낸다(반기 · 3분기 3개월 칸). 실측(녹화본 연결 8,462판 · 2026-11-10):
+     * 자본변동표 지배 열이 실린 판에서 표준 지배 줄과 같은 것 6,262 · 다른 것 113 — 그중 이 규칙이 바꾸는 것 27(삼성전기 2019~2023 · LG이노텍
+     * 2020 FY 330.9B → 236.1B — 표준 줄이 계속영업 몫이었다). 한쪽만 믿지 않는다 — 산수만 어긋나면 비지배 줄 쪽 결함(코미코)이고, 자본변동표만
+     * 다르면 그 표의 사정일 수 있다.
+     *
+     * @param equityChanges   같은 응답의 자본변동표 줄({@link #SJ_EQUITY_CHANGES})
+     * @param cumulativeField 그 보고서의 누계 칸 — 반기 · 3분기는 {@code thstrm_add_amount}, 1분기 · 연간은 {@code thstrm_amount}
+     */
+    static BigDecimal confirmedControlling(List<JsonNode> income, List<JsonNode> equityChanges, String field, String cumulativeField) {
+        BigDecimal owners = findBy(income, ID_NET_INCOME_CONTROLLING, "account_id", cumulativeField);
+        BigDecimal net = findBy(income, ID_NET_INCOME, "account_id", cumulativeField);
+        BigDecimal statement = equityControllingProfit(equityChanges);
+        if (owners == null || net == null || statement == null || near(owners, statement)) {
+            return null;
+        }
+        BigDecimal minority = findBy(income, ID_NET_INCOME_NONCONTROLLING, "account_id", cumulativeField);
+        List<BigDecimal> minorities = new ArrayList<>();
+        if (minority != null) {
+            minorities.add(minority);
+        }
+        List<JsonNode> nonstandardOwners = new ArrayList<>();
+        for (JsonNode row : income) {
+            String name = row.path("account_nm").asString("");
+            if (!row.path("account_id").asString("").contains("표준계정코드") || name.contains("포괄")) {
+                continue;
+            }
+            if (name.contains("비지배")) {
+                BigDecimal v = DartAccountMapper.parseAmount(row.path(cumulativeField).asString(""));
+                if (v != null) {
+                    minorities.add(v);
+                }
+            } else if (name.contains("지배")) {
+                nonstandardOwners.add(row);
+            }
+        }
+        if (minorities.isEmpty() ? near(owners, net) : minorities.stream().anyMatch(n -> near(owners.add(n), net))) {
+            return null;
+        }
+        java.util.Set<BigDecimal> confirmed = new java.util.LinkedHashSet<>();
+        if (minority != null && near(net.subtract(minority), statement)) {
+            BigDecimal periodNet = findBy(income, ID_NET_INCOME, "account_id", field);
+            BigDecimal periodMinority = findBy(income, ID_NET_INCOME_NONCONTROLLING, "account_id", field);
+            if (periodNet == null || periodMinority == null) {
+                return null;
+            }
+            confirmed.add(periodNet.subtract(periodMinority).stripTrailingZeros());
+        }
+        for (JsonNode row : nonstandardOwners) {
+            BigDecimal cumulative = DartAccountMapper.parseAmount(row.path(cumulativeField).asString(""));
+            if (cumulative != null && near(cumulative, statement)) {
+                BigDecimal v = DartAccountMapper.parseAmount(row.path(field).asString(""));
+                if (v == null) {
+                    return null;
+                }
+                confirmed.add(v.stripTrailingZeros());
+            }
+        }
+        return confirmed.size() == 1 ? confirmed.iterator().next() : null;
+    }
+
+    /** 자본변동표 지배 열(구성 열이 아닌 합계 열 하나)의 당기순이익 — 값이 하나가 아니면 {@code null}. */
+    private static BigDecimal equityControllingProfit(List<JsonNode> equityChanges) {
+        java.util.Set<BigDecimal> values = new java.util.LinkedHashSet<>();
+        for (JsonNode row : equityChanges) {
+            if (!"ifrs-full_ProfitLoss".equals(row.path("account_id").asString("")) && !nonstandardProfitRow(row)) {
+                continue;
+            }
+            String[] segments = row.path("account_detail").asString("").split("\\|");
+            boolean owners = false;
+            boolean minority = false;
+            for (String segment : segments) {
+                minority |= segment.contains("비지배");
+                owners |= segment.contains("지배");
+            }
+            if (!owners || minority || segments.length > 2) {
+                continue;
+            }
+            BigDecimal v = DartAccountMapper.parseAmount(row.path("thstrm_amount").asString(""));
+            if (v != null) {
+                values.add(v.stripTrailingZeros());
+            }
+        }
+        return values.size() == 1 ? values.iterator().next() : null;
+    }
+
+    /**
+     * 표준계정코드 없이 실린 자본변동표 순이익 줄 — 이름(공백 뺀)이 순이익 · 순손익 · 순손실이고 포괄 · 평가 줄이 아니다(녹화본 연결 판의 지배 열에서 센
+     * 이름: 당기순이익 160 · 당기순이익(손실) 127 · 분기순이익 106 · 반기순이익 51 · 연결당기순이익 36 · 「딩기순이익(손실)」 오타 13 …). 이름만으로 받는
+     * 것이 아니다 — 그 값이 손익의 다른 줄과 같을 때만 쓰인다({@link #confirmedControlling}).
+     */
+    private static boolean nonstandardProfitRow(JsonNode row) {
+        if (!row.path("account_id").asString("").contains("표준계정코드")) {
+            return false;
+        }
+        String name = row.path("account_nm").asString("").replace(" ", "");
+        return (name.contains("순이익") || name.contains("순손익") || name.contains("순손실")) && !name.contains("포괄") && !name.contains("평가");
+    }
+
+    /** 1천 원 반올림 안(천 원 단위로 낸 판). */
+    private static boolean near(BigDecimal a, BigDecimal b) {
+        return a.subtract(b).abs().compareTo(THOUSAND) <= 0;
+    }
+
+    private static final BigDecimal THOUSAND = BigDecimal.valueOf(1000);
 
     /** 같은 보고서의 당기순이익(연결) — {@link #controllingIncome}이 피감수로 쓰는 것과 같은 찾기. */
     static BigDecimal consolidatedIncome(List<JsonNode> income) {

@@ -158,7 +158,15 @@ public final class KrCommonIncome {
          * 때). 신종자본 증거가 있는데 H가 안 서면 P만으로는 안 받는다. 반기 · 3분기는 누계 갈래로 안 설 때만 쓴다(행 해석이 고른다 · 계획 K3-a —
          * 원장 W가 있는 행에 같은 산수를 태워 148/148이 E × W와 0.5W 안이다. 닫힘 검사 없이 H만 빼면 한 종류 대조군 90 중 15가 갈린다).
          */
-        R1P
+        R1P,
+        /**
+         * 매퍼가 고른 지배 NI의 앵커 — 행 지배 NI가 그 판 지배 귀속과 안 맞을 때, 같은 판의 연결 순이익 − 비지배 귀속(값이 하나씩)이 행 지배 NI와
+         * 같거나, 반기 · 3분기 행이면 자본변동표 지배 열 당기순이익의 누계 차(그 판 − 직전 판 · 연결 순이익 누계 차가 3개월과 닫힐 때만 — NC-a와 같은
+         * 소급 가드)가 같으면 앵커는 행 지배 NI다. 매퍼가 손익 산수 · 자본변동표로 표준 지배 줄을 반박해 다른 줄을 고른 행(계획 K19 · 삼성전기 ·
+         * LG이노텍 · 한전KPS 2020 1분기 비지배 25,224원을 안 뺀 지배 줄)은 그 판 표준 지배 사실이 같은 틀린 값이라 기본 앵커가 못 맞댄다. 같은 기간
+         * 자본변동표 지배 열이 행 지배 NI와 다르면 산수 앵커는 안 쓴다(손익 · 자본변동표가 각자 닫히며 지배 몫을 달리 나눈 판 — 043260 FY2024).
+         */
+        AN4
     }
 
     /** {@link Rule#CMP}의 재료 — 그 행 판보다 뒤에 접수된 판 하나(접수번호 · 접수일 · 재료 · 재료가 없으면 {@code null}). */
@@ -753,7 +761,59 @@ public final class KrCommonIncome {
                 return alternative;
             }
         }
-        return rules.has(Rule.AN3) ? ownersBesideNoncontrolling(period, row, facts) : null;
+        Anchor besides = rules.has(Rule.AN3) ? ownersBesideNoncontrolling(period, row, facts) : null;
+        if (besides != null) {
+            return besides;
+        }
+        if (!rules.has(Rule.AN4) || row.netIncomeControlling() == null) {
+            return null;
+        }
+        Set<Basis> consolidated = Set.of(Basis.CONSOLIDATED, Basis.NONE);
+        BigDecimal profit = single(axisless(facts, PROFIT, period, consolidated));
+        BigDecimal minority = single(axisless(facts, NONCONTROLLING, period, consolidated));
+        BigDecimal column = equityColumn(facts, period, consolidated);
+        // 자본변동표 지배 열이 다른 몫을 말하면(손익 · 자본변동표가 각자 닫히는데 나눔이 다르다 — 043260 FY2024 · K8) 산수만으로 안 받는다.
+        if (profit != null && minority != null && same(profit.subtract(minority), row.netIncomeControlling())
+                && (column == null || same(column, row.netIncomeControlling()))) {
+            return new Anchor(row.netIncomeControlling(), consolidated, 'C');
+        }
+        return nc != null ? equityColumnDifference(period, row, facts, nc) : null;
+    }
+
+    /** AN4 — 자본변동표 지배 열 당기순이익의 누계 차가 행 지배 NI와 같으면 앵커는 행 지배 NI다. */
+    private static Anchor equityColumnDifference(Period period, RowIncome row, List<Fact> facts, NcContext nc) {
+        if (row.netIncomeControlling() == null || nc.previousFacts() == null) {
+            return null;
+        }
+        Set<Basis> consolidated = Set.of(Basis.CONSOLIDATED, Basis.NONE);
+        Period cumulative = new Period(nc.yearStart(), period.end());
+        Period previous = new Period(nc.yearStart(), nc.previousEnd());
+        BigDecimal cum = equityColumn(facts, cumulative, consolidated);
+        BigDecimal earlier = equityColumn(nc.previousFacts(), previous, consolidated);
+        if (cum == null || earlier == null || !same(cum.subtract(earlier), row.netIncomeControlling())) {
+            return null;
+        }
+        BigDecimal plCum = single(axisless(facts, PROFIT, cumulative, consolidated));
+        BigDecimal plPrevious = single(axisless(nc.previousFacts(), PROFIT, previous, consolidated));
+        BigDecimal plQuarter = single(axisless(facts, PROFIT, period, consolidated));
+        if (plCum == null || plPrevious == null || plQuarter == null || !same(plCum.subtract(plPrevious), plQuarter)) {
+            return null;
+        }
+        return new Anchor(row.netIncomeControlling(), consolidated, 'C');
+    }
+
+    /** 자본변동표 지배 열(표준 구성원 하나)의 당기순이익 — 값이 하나가 아니면 {@code null}. */
+    private static BigDecimal equityColumn(List<Fact> facts, Period period, Set<Basis> consolidated) {
+        List<BigDecimal> out = new ArrayList<>();
+        for (Fact f : facts) {
+            if (f.source() == Source.IFRS && PROFIT.equals(f.concept()) && consolidated.contains(f.basis())
+                    && period.start().equals(f.start()) && period.end().equals(f.end()) && f.members().size() == 1
+                    && "ComponentsOfEquityAxis".equals(f.members().get(0).axis())
+                    && OWNERS_COLUMN.equals(f.members().get(0).member()) && f.members().get(0).source() != Source.ENTITY) {
+                out.add(f.value());
+            }
+        }
+        return single(out);
     }
 
     /** AN3 — 행 지배 NI = 연결 순이익(하나)이고 표준 지배 귀속 + 표준 비지배 귀속 = 행 지배 NI면 앵커는 지배 귀속이다. */

@@ -241,7 +241,7 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
             }
             if (annual != null && periods.contains(StatementPeriod.Q3)) {
                 RawFinancialReport q4 = toFourthQuarterBalance(annual, year, security, thisYear);
-                RawFinancialReport fourth = withFourthQuarterDiscontinued(q4, annual, annualConsolidated, third, thirdConsolidated);
+                RawFinancialReport fourth = withFourthQuarterDiscontinued(q4, annual, annualConsolidated, third, thirdConsolidated, krGate);
                 reports.add(fourth);
                 yearReports.put("Q4", fourth);
             }
@@ -478,6 +478,12 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
         if (controllingIncome == null && gateOpen) {
             controllingIncome = DartFullAccountMapper.consolidatedIncome(income);
         }
+        // 국내 관문 켬(K19) — 표준 지배 줄을 손익 산수와 자본변동표 지배 열이 함께 반박하면 자본변동표가 확인한 줄로(삼성전기 · LG이노텍).
+        BigDecimal confirmed = krGate && consolidated ? DartFullAccountMapper.confirmedControlling(income,
+                DartFullAccountMapper.sections(list, DartFullAccountMapper.SJ_EQUITY_CHANGES), "thstrm_amount", cumulativeField(period)) : null;
+        if (confirmed != null) {
+            controllingIncome = confirmed;
+        }
 
         RawFinancialReport report = new RawFinancialReport(
                 year, label, range[0], range[1],
@@ -546,9 +552,15 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
             // 손익 행이 안 온 보고서는 중단영업을 「읽지 않았다」(규칙 판 없음) — 줄이 없다고 0을 달면 그 판정이 틀린다.
             return report;
         }
-        BigDecimal[] discontinued = DartFullAccountMapper.discontinued(income, false, consolidated);
+        BigDecimal[] discontinued = DartFullAccountMapper.discontinued(income, false, consolidated, confirmed);
         return report.withDiscontinued(discontinued[0], discontinued[1],
                 discontinuedAbsence(report.assertedAbsent(), discontinued[0], discontinued[1]));
+    }
+
+    /** 그 보고서의 누계 칸 — 반기 · 3분기 보고서의 당기 칸은 3개월이다. */
+    private static String cumulativeField(StatementPeriod period) {
+        String label = period.label();
+        return "Q2".equals(label) || "Q3".equals(label) ? "thstrm_add_amount" : "thstrm_amount";
     }
 
     /**
@@ -558,8 +570,17 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
      */
     static RawFinancialReport withFourthQuarterDiscontinued(RawFinancialReport q4, JsonNode annual, boolean annualConsolidated,
                                                          JsonNode third, boolean thirdConsolidated) {
-        BigDecimal[] fy = DartFullAccountMapper.discontinued(DartFullAccountMapper.sections(annual,
-                DartFullAccountMapper.SJ_INCOME, DartFullAccountMapper.SJ_COMPREHENSIVE_INCOME), false, annualConsolidated);
+        return withFourthQuarterDiscontinued(q4, annual, annualConsolidated, third, thirdConsolidated, false);
+    }
+
+    /** @param krGate 국내 관문 켬 — 두 보고서의 지배주주 순이익을 {@link DartFullAccountMapper#confirmedControlling}과 같은 규칙으로 읽는다 */
+    static RawFinancialReport withFourthQuarterDiscontinued(RawFinancialReport q4, JsonNode annual, boolean annualConsolidated,
+                                                         JsonNode third, boolean thirdConsolidated, boolean krGate) {
+        List<JsonNode> annualIncome = DartFullAccountMapper.sections(annual,
+                DartFullAccountMapper.SJ_INCOME, DartFullAccountMapper.SJ_COMPREHENSIVE_INCOME);
+        BigDecimal annualControlling = krGate && annualConsolidated ? DartFullAccountMapper.confirmedControlling(annualIncome,
+                DartFullAccountMapper.sections(annual, DartFullAccountMapper.SJ_EQUITY_CHANGES), "thstrm_amount", "thstrm_amount") : null;
+        BigDecimal[] fy = DartFullAccountMapper.discontinued(annualIncome, false, annualConsolidated, annualControlling);
         BigDecimal consolidated = null;
         BigDecimal controlling = null;
         if (fy[0] != null && fy[0].signum() == 0) {
@@ -569,7 +590,10 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
             List<JsonNode> income = DartFullAccountMapper.sections(third,
                     DartFullAccountMapper.SJ_INCOME, DartFullAccountMapper.SJ_COMPREHENSIVE_INCOME);
             if (DartFullAccountMapper.hasDiscontinuedLine(income)) {
-                BigDecimal[] nine = DartFullAccountMapper.discontinued(income, true, thirdConsolidated);
+                BigDecimal nineControlling = krGate && thirdConsolidated ? DartFullAccountMapper.confirmedControlling(income,
+                        DartFullAccountMapper.sections(third, DartFullAccountMapper.SJ_EQUITY_CHANGES), "thstrm_add_amount",
+                        "thstrm_add_amount") : null;
+                BigDecimal[] nine = DartFullAccountMapper.discontinued(income, true, thirdConsolidated, nineControlling);
                 consolidated = fy[0] != null && nine[0] != null ? fy[0].subtract(nine[0]) : null;
                 controlling = fy[1] != null && nine[1] != null ? fy[1].subtract(nine[1]) : null;
             }
