@@ -256,7 +256,7 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
         List<com.stockscreener.pipeline.datasource.FlowBasis> bases = new ArrayList<>();
         for (int year = fromFiscalYear; year <= toFiscalYear; year++) {
             bases.addAll(flowBases(year, pendingByYear.get(year), pendingByYear.getOrDefault(year + 1, Map.of()),
-                    pendingByYear.getOrDefault(year + 2, Map.of()), reportsByYear.get(year)));
+                    pendingByYear.getOrDefault(year + 2, Map.of()), reportsByYear.get(year), krGate));
         }
         return new FullStatementResult(reports, calls, missing, FilingTrace.ofReports(seen), bases);
     }
@@ -637,6 +637,17 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
                                                                            Map<StatementPeriod, Pending> next,
                                                                            Map<StatementPeriod, Pending> twoLater,
                                                                            Map<String, RawFinancialReport> reports) {
+        return flowBases(year, pending, next, twoLater, reports, false);
+    }
+
+    /**
+     * @param krGate 국내 관문 켬 — 지배주주 순이익은 매퍼({@link DartFullAccountMapper#confirmedControlling})와 같은 규칙으로 판마다 · 칸마다
+     *               읽는다(K19-b). 표준 줄끼리 견주면 다음 해 판이 태그를 바로잡은 회사(삼성전기)의 고친 값이 「다시 실었다」로 읽혀 그날부터 모른다
+     */
+    static List<com.stockscreener.pipeline.datasource.FlowBasis> flowBases(int year, Map<StatementPeriod, Pending> pending,
+                                                                           Map<StatementPeriod, Pending> next,
+                                                                           Map<StatementPeriod, Pending> twoLater,
+                                                                           Map<String, RawFinancialReport> reports, boolean krGate) {
         if (pending == null || reports == null || reports.isEmpty()) {
             return List.of();
         }
@@ -662,6 +673,24 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
         for (Map.Entry<String, java.util.Set<String>> e : FLOW_COLUMNS.entrySet()) {
             java.util.Set<String> ids = e.getValue();
             boolean zero = ZERO_WHEN_ABSENT.contains(e.getKey());
+            if (krGate && "net_income_controlling".equals(e.getKey())) {
+                values.put(e.getKey(), new DartFlowBasis.Values(
+                        controlling(q1, ids, "thstrm_amount", "thstrm_amount", "thstrm_amount"),
+                        controlling(h1, ids, "thstrm_amount", "thstrm_add_amount", "thstrm_amount"),
+                        controlling(h1, ids, "thstrm_add_amount", "thstrm_add_amount", "thstrm_amount"),
+                        controlling(q3, ids, "thstrm_amount", "thstrm_add_amount", "thstrm_amount"),
+                        controlling(q3, ids, "thstrm_add_amount", "thstrm_add_amount", "thstrm_amount"),
+                        controlling(fy, ids, "thstrm_amount", "thstrm_amount", "thstrm_amount"),
+                        firstOf(controlling(nq1, ids, "frmtrm_q_amount", "frmtrm_add_amount", "frmtrm_q_amount"),
+                                controlling(nq1, ids, "frmtrm_add_amount", "frmtrm_add_amount", "frmtrm_q_amount")),
+                        controlling(nh1, ids, "frmtrm_q_amount", "frmtrm_add_amount", "frmtrm_q_amount"),
+                        controlling(nh1, ids, "frmtrm_add_amount", "frmtrm_add_amount", "frmtrm_q_amount"),
+                        controlling(nq3, ids, "frmtrm_q_amount", "frmtrm_add_amount", "frmtrm_q_amount"),
+                        controlling(nq3, ids, "frmtrm_add_amount", "frmtrm_add_amount", "frmtrm_q_amount"),
+                        controlling(nfy, ids, "frmtrm_amount", "frmtrm_amount", "frmtrm_amount"),
+                        controlling(n2fy, ids, "bfefrmtrm_amount", "bfefrmtrm_amount", "bfefrmtrm_amount")));
+                continue;
+            }
             values.put(e.getKey(), new DartFlowBasis.Values(
                     amount(q1, ids, "thstrm_amount", zero), amount(h1, ids, "thstrm_amount", zero),
                     amount(h1, ids, "thstrm_add_amount", zero), amount(q3, ids, "thstrm_amount", zero),
@@ -728,6 +757,18 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
             return BigDecimal.ZERO;
         }
         return v;
+    }
+
+    /** 판 비교의 지배주주 순이익 칸 — 원장 둘이 표준 줄을 반박하면 자본변동표가 확인한 줄({@link DartFullAccountMapper#confirmedControlling}). */
+    private static BigDecimal controlling(Pending p, java.util.Set<String> ids, String field, String cumulativeField, String equityField) {
+        if (p != null && p.consolidated()) {
+            BigDecimal confirmed = DartFullAccountMapper.confirmedControlling(incomeOf(p.list()),
+                    DartFullAccountMapper.sections(p.list(), DartFullAccountMapper.SJ_EQUITY_CHANGES), field, cumulativeField, equityField);
+            if (confirmed != null) {
+                return confirmed;
+            }
+        }
+        return amount(p, ids, field, false);
     }
 
     private static BigDecimal firstOf(BigDecimal a, BigDecimal b) {

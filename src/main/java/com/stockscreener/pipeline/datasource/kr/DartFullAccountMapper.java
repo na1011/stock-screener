@@ -563,9 +563,18 @@ final class DartFullAccountMapper {
      * @param cumulativeField 그 보고서의 누계 칸 — 반기 · 3분기는 {@code thstrm_add_amount}, 1분기 · 연간은 {@code thstrm_amount}
      */
     static BigDecimal confirmedControlling(List<JsonNode> income, List<JsonNode> equityChanges, String field, String cumulativeField) {
+        return confirmedControlling(income, equityChanges, field, cumulativeField, "thstrm_amount");
+    }
+
+    /**
+     * @param equityField 자본변동표에서 읽을 칸 — 당기 {@code thstrm_amount} · 비교 열은 사업보고서 {@code frmtrm_amount} ·
+     *                    {@code bfefrmtrm_amount}, 분기 보고서 {@code frmtrm_q_amount}(전년 누계 — 녹화본 분기 판 1,378 전부 이 이름)
+     */
+    static BigDecimal confirmedControlling(List<JsonNode> income, List<JsonNode> equityChanges, String field, String cumulativeField,
+                                           String equityField) {
         BigDecimal owners = findBy(income, ID_NET_INCOME_CONTROLLING, "account_id", cumulativeField);
         BigDecimal net = findBy(income, ID_NET_INCOME, "account_id", cumulativeField);
-        BigDecimal statement = equityControllingProfit(equityChanges);
+        BigDecimal statement = equityControllingProfit(equityChanges, equityField);
         if (owners == null || net == null || statement == null || near(owners, statement)) {
             return null;
         }
@@ -592,15 +601,8 @@ final class DartFullAccountMapper {
         if (minorities.isEmpty() ? near(owners, net) : minorities.stream().anyMatch(n -> near(owners.add(n), net))) {
             return null;
         }
-        java.util.Set<BigDecimal> confirmed = new java.util.LinkedHashSet<>();
-        if (minority != null && near(net.subtract(minority), statement)) {
-            BigDecimal periodNet = findBy(income, ID_NET_INCOME, "account_id", field);
-            BigDecimal periodMinority = findBy(income, ID_NET_INCOME_NONCONTROLLING, "account_id", field);
-            if (periodNet == null || periodMinority == null) {
-                return null;
-            }
-            confirmed.add(periodNet.subtract(periodMinority).stripTrailingZeros());
-        }
+        // 원장이 직접 적은 지배 줄을 앞에 — 순이익 − 비지배와 천 원 안이면 같은 값이고(반올림 · 삼성전기 2022 반기 1원) 그때는 적힌 줄을 쓴다.
+        List<BigDecimal> confirmed = new ArrayList<>();
         for (JsonNode row : nonstandardOwners) {
             BigDecimal cumulative = DartAccountMapper.parseAmount(row.path(cumulativeField).asString(""));
             if (cumulative != null && near(cumulative, statement)) {
@@ -611,11 +613,23 @@ final class DartFullAccountMapper {
                 confirmed.add(v.stripTrailingZeros());
             }
         }
-        return confirmed.size() == 1 ? confirmed.iterator().next() : null;
+        if (minority != null && near(net.subtract(minority), statement)) {
+            BigDecimal periodNet = findBy(income, ID_NET_INCOME, "account_id", field);
+            BigDecimal periodMinority = findBy(income, ID_NET_INCOME_NONCONTROLLING, "account_id", field);
+            if (periodNet == null || periodMinority == null) {
+                return null;
+            }
+            confirmed.add(periodNet.subtract(periodMinority).stripTrailingZeros());
+        }
+        if (confirmed.isEmpty()) {
+            return null;
+        }
+        BigDecimal first = confirmed.get(0);
+        return confirmed.stream().allMatch(v -> near(v, first)) ? first : null;
     }
 
     /** 자본변동표 지배 열(구성 열이 아닌 합계 열 하나)의 당기순이익 — 값이 하나가 아니면 {@code null}. */
-    private static BigDecimal equityControllingProfit(List<JsonNode> equityChanges) {
+    private static BigDecimal equityControllingProfit(List<JsonNode> equityChanges, String equityField) {
         java.util.Set<BigDecimal> values = new java.util.LinkedHashSet<>();
         for (JsonNode row : equityChanges) {
             if (!"ifrs-full_ProfitLoss".equals(row.path("account_id").asString("")) && !nonstandardProfitRow(row)) {
@@ -631,7 +645,7 @@ final class DartFullAccountMapper {
             if (!owners || minority || segments.length > 2) {
                 continue;
             }
-            BigDecimal v = DartAccountMapper.parseAmount(row.path("thstrm_amount").asString(""));
+            BigDecimal v = DartAccountMapper.parseAmount(row.path(equityField).asString(""));
             if (v != null) {
                 values.add(v.stripTrailingZeros());
             }
