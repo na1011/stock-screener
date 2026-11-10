@@ -70,9 +70,22 @@ public class KrEarlierVintages {
      * 다시 지어지지 않아, 재적재가 원천 판에 채운 칸(중단영업 · 비표준 지배 NI · 기저 대체)이 빈 채 남는다(반증 안 렌즈 · 11-01).
      */
     public KrEarlierVintages(JdbcTemplate jdbc, FinancialWriter writer) {
+        this(jdbc, writer, false);
+    }
+
+    /**
+     * @param krGate 국내 관문({@code stockscreener.gate.kr-provisional}) — 켜면 지은 4분기의 중단영업 판정 규칙을 네 입력이 모두 그 규칙으로
+     *               읽혔을 때만 FY 것으로 단다(계획 K17)
+     */
+    @org.springframework.beans.factory.annotation.Autowired
+    public KrEarlierVintages(JdbcTemplate jdbc, FinancialWriter writer,
+                             @org.springframework.beans.factory.annotation.Value("${stockscreener.gate.kr-provisional}") boolean krGate) {
         this.jdbc = jdbc;
         this.writer = writer;
+        this.krGate = krGate;
     }
+
+    private final boolean krGate;
 
     private record Candidate(long rowId, int fiscalYear, String fiscalPeriod, LocalDate earliest) {
     }
@@ -131,6 +144,13 @@ public class KrEarlierVintages {
                 exprs.add("fy.%1$s - (q1.%1$s + q2.%1$s + q3.%1$s)".formatted(n));
             } else if (QUARTER_EMPTY.contains(n)) {
                 exprs.add("NULL::numeric");
+            } else if (krGate && "discontinued_rule".equals(n)) {
+                // 국내 관문 켬(계획 K17): 4분기 중단영업 = FY − ΣQ라, 1~3분기 중 하나라도 그 규칙으로 안 읽혔으면 4분기 칸이 NULL인데 FY의 규칙을
+                // 달면 「규칙이 있는데 중단 몫 모름」이 되어 계속영업 손익이 빈다(10행/6종목 · NET_MARGIN 301칸). 네 입력이 모두 같은 규칙일 때만 FY 것.
+                exprs.add("""
+                        CASE WHEN q1.discontinued_rule IS NOT DISTINCT FROM fy.discontinued_rule
+                              AND q2.discontinued_rule IS NOT DISTINCT FROM fy.discontinued_rule
+                              AND q3.discontinued_rule IS NOT DISTINCT FROM fy.discontinued_rule THEN fy.discontinued_rule END""");
             } else {
                 exprs.add("fy." + n);
             }

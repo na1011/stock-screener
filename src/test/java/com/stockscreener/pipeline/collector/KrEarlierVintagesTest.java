@@ -145,6 +145,34 @@ class KrEarlierVintagesTest {
     }
 
     @Test
+    @DisplayName("국내 관문 켬(K17): 1~3분기가 FY의 중단영업 규칙으로 안 읽혔으면 지은 4분기의 규칙은 비운다 — 꺼짐은 FY 규칙을 복사한다(대조군)")
+    void fourthQuarterRuleNeedsAllFourInputs() {
+        jdbc.update("""
+                INSERT INTO financial_statement (stock_id, fiscal_year, fiscal_period, period_start, period_end, published_at,
+                    revision_no, is_latest, report_code, currency_code, net_income, discontinued_income, discontinued_rule)
+                VALUES (?, 2025, 'Q1', DATE '2025-01-01', DATE '2025-03-31', DATE '2025-05-15', 0, true, '11013', 'KRW', 1000, NULL, NULL),
+                       (?, 2025, 'Q2', DATE '2025-04-01', DATE '2025-06-30', DATE '2025-08-14', 0, true, '11012', 'KRW', 1000, NULL, NULL),
+                       (?, 2025, 'Q3', DATE '2025-07-01', DATE '2025-09-30', DATE '2025-11-14', 0, true, '11014', 'KRW', 1000, NULL, NULL),
+                       (?, 2025, 'FY', DATE '2025-01-01', DATE '2025-12-31', DATE '2026-03-13', 0, false, '11011', 'KRW', 5000, 0, 1),
+                       (?, 2025, 'FY', DATE '2025-01-01', DATE '2025-12-31', DATE '2026-06-19', 1, true, '11011', 'KRW', 5200, 0, 1),
+                       (?, 2025, 'Q4', DATE '2025-10-01', DATE '2025-12-31', DATE '2026-06-19', 0, true, '11011', 'KRW', 2200, 0, 1)
+                """, stockId, stockId, stockId, stockId, stockId, stockId);
+        FinancialWriter writer = new FinancialWriter(jdbc, new NoOpIndicatorInvalidationPort());
+
+        new KrEarlierVintages(jdbc, writer, false).restoreFourthQuarters(stockId);
+        assertThat(restoredRule()).as("꺼짐 — 지금 동작(FY 규칙 복사)").isEqualByComparingTo("1");
+
+        new KrEarlierVintages(jdbc, writer, true).restoreFourthQuarters(stockId);
+        assertThat(restoredRule()).as("켬 — 1~3분기가 그 규칙으로 안 읽혔다").isNull();
+    }
+
+    private java.math.BigDecimal restoredRule() {
+        return jdbc.queryForObject("""
+                SELECT discontinued_rule FROM financial_statement WHERE stock_id = ? AND fiscal_period = 'Q4' AND published_at = DATE '2026-03-13'
+                """, java.math.BigDecimal.class, stockId);
+    }
+
+    @Test
     @DisplayName("1~3분기가 다 안 보이면 4분기 판을 짓지 않는다")
     void doesNotRestoreWithoutTheGateOrTheQuarters() {
         jdbc.update("""
