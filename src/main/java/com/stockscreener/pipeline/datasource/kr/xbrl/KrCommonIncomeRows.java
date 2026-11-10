@@ -197,7 +197,7 @@ public final class KrCommonIncomeRows {
         Map<Long, KrCommonEquity.Equity> equity = new HashMap<>();
         for (Row row : ordered) {
             if (!"Q4".equals(row.fiscalPeriod())) {
-                equity.put(row.id(), KrCommonEquity.judge(row.end(), row.fiscalYear(), row.facts(), issuer, registers));
+                equity.put(row.id(), equity(row, issuer, registers, rules, timeline));
             }
         }
         for (Row row : ordered) {
@@ -211,6 +211,25 @@ public final class KrCommonIncomeRows {
             result.add(out.get(row.id()).withEquity(equity.get(row.id())));
         }
         return result;
+    }
+
+    /** 보통주 자본 판정 — {@link KrCommonIncome.Rule#QREG}면 첫해 분기 행이 그 해(미래) 명부 대신 그 시점 분기 명부를 쓴다. */
+    private static KrCommonEquity.Equity equity(Row row, KrCommonEquity.Issuer issuer, Map<Integer, Register> registers,
+                                                KrCommonIncome.Rules rules, KrShareTimeline timeline) {
+        Register same = registers.get(row.fiscalYear());
+        if (!rules.has(KrCommonIncome.Rule.QREG) || "FY".equals(row.fiscalPeriod()) || registers.get(row.fiscalYear() - 1) != null
+                || same == null) {
+            return KrCommonEquity.judge(row.end(), row.fiscalYear(), row.facts(), issuer, registers);
+        }
+        Map<Integer, Register> pointInTime = new HashMap<>(registers);
+        pointInTime.remove(row.fiscalYear());
+        Register quarter = timeline.quarterRegister(row);
+        if (quarter != null) {
+            pointInTime.put(row.fiscalYear(), quarter);
+        }
+        KrCommonEquity.Equity judged = KrCommonEquity.judge(row.end(), row.fiscalYear(), row.facts(), issuer, pointInTime);
+        // 그 시점 명부가 없는데 그 해 명부가 보통주 밖 종류를 싣는다 — 그 시점 몫을 모른다(그 판에 우선주 증거가 없어 1이 나와도 받지 않는다).
+        return quarter == null && same.multiClass() && judged.fraction() != null ? KrCommonEquity.Equity.OPEN_FRACTION : judged;
     }
 
     /** NC-a 재료 — Q2 · Q3 행에서 같은 해 1분기 시작과 직전 판(Q2면 Q1 · Q3면 Q2 · 그 행 공시일 이하 마지막 판)의 끝 · 사실. */

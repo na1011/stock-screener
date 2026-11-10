@@ -141,6 +141,44 @@ public final class KrShareTimeline {
         return new Window(weighted.subtract(acquired), weighted.add(disposed), visible);
     }
 
+    /**
+     * 그 분기 행 시점의 명부(K3-d · {@link KrCommonIncome.Rule#QREG}) — 그 판과 같은 해 앞 판의 주식총수 표 중 그 행 공시일까지 접수된 것, 숫자가
+     * 실린 가장 늦은 것. 기준일은 행 기간 끝으로 단다(자본 몫 판정이 그 명부를 그 날짜 명부로 고른다). 없으면 {@code null}.
+     */
+    Register quarterRegister(Row row) {
+        List<String> periods = switch (row.fiscalPeriod()) {
+            case "Q3" -> List.of("Q3", "Q2", "Q1");
+            case "Q2" -> List.of("Q2", "Q1");
+            case "Q1" -> List.of("Q1");
+            default -> List.of();
+        };
+        for (String period : periods) {
+            Table table = tables.get(key(row.fiscalYear(), code(period), "stockTotqySttus"));
+            LocalDate receipt = table == null ? null : receipt(table.rceptNo());
+            if (receipt == null || receipt.isAfter(row.published())) {
+                continue;
+            }
+            List<KrCommonIncome.ShareRow> rows = new ArrayList<>();
+            for (JsonNode r : table.rows()) {
+                if ("비고".equals(r.path("se").asString("").strip())) {
+                    continue;   // 주석 문구 줄(자기주식 칸에 「분할로 인한 단주 취득」) — 명부 요약과 같이 수로 안 읽는다
+                }
+                BigDecimal issued = number(r.path("istc_totqy").asString(""));
+                BigDecimal treasury = number(r.path("tesstk_co").asString(""));
+                if (issued == null || treasury == null) {
+                    rows = null;
+                    break;
+                }
+                rows.add(new KrCommonIncome.ShareRow(r.path("se").asString(""), issued, treasury));
+            }
+            Register register = rows == null ? null : Register.of(row.end(), rows);
+            if (register != null) {
+                return register;
+            }
+        }
+        return null;
+    }
+
     private static List<Event> events(List<JsonNode> rows, LocalDate from, LocalDate to) {
         List<Event> out = new ArrayList<>();
         for (JsonNode r : rows) {

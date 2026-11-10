@@ -648,6 +648,36 @@ class KrCommonIncomeTest {
 
 
     @Test
+    void qregTakesTheQuarterRegisterInsteadOfTheYearEndOneForAFirstYearQuarter() {
+        // 첫해 1분기 — 앞 해 명부가 없다. 그 해 명부(연말 · 미래)는 보통주 1,000만 · 우선주 15만(몫 0.98522)이고, 그 판 분기 명부는 보통주 990만 ·
+        // 우선주 10만(0.99)이다(국내 관문 켬 QREG — 둘 다 보통주 밖 2% 이하라 참가 증거 없이 몫을 낸다).
+        Period q1 = quarter(2025, 1);
+        Row first = new Row(1, 2025, "Q1", q1.start(), q1.end(), LocalDate.of(2025, 5, 15), BigDecimal.valueOf(10_000_000_000L), null,
+                List.of(fact(Source.IFRS, "ProfitLossAttributableToOwnersOfParent", q1, List.of(), 10_000_000_000L)));
+        Register yearEnd = register(row("보통주", 10_000_000, 0), row("우선주", 150_000, 0));
+        KrShareTimeline quarterTable = new KrShareTimeline(List.of(new KrXbrlStore.ShareMaterial(2025, "11013", "stockTotqySttus",
+                "20250515000001", List.of(table("보통주", "9,900,000"), table("우선주", "100,000"), table("합계", "10,000,000"),
+                table("비고", "분할로 인한 단주 취득")))), Map.of(2025, yearEnd));
+
+        Resolved off = byId(KrCommonIncomeRows.resolve(List.of(first), Map.of(2025, yearEnd), NO_ACTIONS, KrCommonEquity.Issuer.of(List.of()),
+                KrCommonIncome.Rules.V4.without(KrCommonIncome.Rule.QREG), KrCommonIncomeRows.Later.NONE, quarterTable)).get(1L);
+        Resolved on = byId(KrCommonIncomeRows.resolve(List.of(first), Map.of(2025, yearEnd), NO_ACTIONS, KrCommonEquity.Issuer.of(List.of()),
+                KrCommonIncome.Rules.V4, KrCommonIncomeRows.Later.NONE, quarterTable)).get(1L);
+        // 대조군 — 그 시점 분기 명부가 없으면(분기 표가 「-」인 회사) 연말 명부가 여러 종류라 몫을 모른다.
+        Resolved unknown = byId(KrCommonIncomeRows.resolve(List.of(first), Map.of(2025, yearEnd), NO_ACTIONS, KrCommonEquity.Issuer.of(List.of()),
+                KrCommonIncome.Rules.V4, KrCommonIncomeRows.Later.NONE, new KrShareTimeline(List.of(), Map.of(2025, yearEnd)))).get(1L);
+
+        assertThat(off.equity().fraction()).as("끔 — 연말 명부").isEqualByComparingTo("0.985221674876847291");
+        assertThat(on.equity().fraction()).isEqualByComparingTo("0.99");
+        assertThat(unknown.equity().fraction()).isNull();
+    }
+
+    private static tools.jackson.databind.JsonNode table(String label, String issued) {
+        return new tools.jackson.databind.ObjectMapper().readTree(
+                "{\"se\":\"%s\",\"istc_totqy\":\"%s\",\"tesstk_co\":\"-\"}".formatted(label, issued));
+    }
+
+    @Test
     void fourthQuarterIsTheAnnualShareLessTheThreeQuarterShares() {
         List<Row> rows = new ArrayList<>();
         long[] quarterNi = {1_000_000_000L, 2_000_000_000L, 3_000_000_000L};
