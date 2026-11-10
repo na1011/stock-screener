@@ -199,6 +199,22 @@ class KrCommonIncomeTest {
     }
 
     @Test
+    void an3AnchorsOnTheOwnersWhenTheRowCarriesTheConsolidatedProfit() {
+        // 행 지배 NI 100억이 연결 순이익과 같다(매퍼가 연결 순이익을 지배 칸에 둔 꼴) · 표준 지배 90억 + 비지배 10억 = 100억(국내 관문 켬 AN3).
+        Fact profit = fact(Source.IFRS, "ProfitLoss", Q2, List.of(), 10_000_000_000L);
+        Fact minority = fact(Source.IFRS, "ProfitLossAttributableToNoncontrollingInterests", Q2, List.of(), 1_000_000_000L);
+        Judged off = judge(rowNi(10_000_000_000L), COMMON_ONLY, profit, owners(9_000_000_000L), minority, eps(900), weighted(10_000_000));
+        Judged on = judgeV4(rowNi(10_000_000_000L), COMMON_ONLY, profit, owners(9_000_000_000L), minority, eps(900), weighted(10_000_000));
+        // 대조군 — 지배 + 비지배가 행 값과 안 맞으면 앵커가 안 선다.
+        Judged apart = judgeV4(rowNi(10_000_000_000L), COMMON_ONLY, profit, owners(8_000_000_000L), minority, eps(900), weighted(10_000_000));
+
+        assertThat(off.branch()).as("꺼짐 — 지금 동작").isEqualTo("none:anchor");
+        assertThat(on.branch()).isEqualTo("kr-ni");
+        assertThat(on.common()).isEqualByComparingTo("9000000000");
+        assertThat(apart.branch()).isEqualTo("none:anchor");
+    }
+
+    @Test
     void ncTakesTheConsolidatedIncomeWhenEquityShowsNoNoncontrollingInterest() {
         // 행 지배 NI가 빈 연결 행 — 연결 순이익 100억 · 기초(03-31) · 기말(06-30) 자본총계 = 지배 자본 · 비지배 손익 줄 없음(국내 관문 켬 NC-b).
         RowIncome row = new RowIncome(null, BigDecimal.valueOf(10_000_000_000L));

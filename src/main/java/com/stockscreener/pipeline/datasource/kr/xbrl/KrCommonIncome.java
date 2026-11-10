@@ -50,6 +50,7 @@ public final class KrCommonIncome {
     private static final String DIRECT = "ProfitLossAttributableToOrdinaryEquityHoldersOfParentEntity";
     private static final String OWNERS = "ProfitLossAttributableToOwnersOfParent";
     private static final String PROFIT = "ProfitLoss";
+    private static final String NONCONTROLLING = "ProfitLossAttributableToNoncontrollingInterests";
     private static final String OUTSTANDING = "NumberOfSharesOutstanding";
     static final String PREF_EPS_DART = "BasicEarningsLossPerSharePreferredStock";
     static final String PREF_EPS_IFRS = "BasicEarningsLossPerInstrumentParticipatingEquityInstrumentsOtherThanOrdinaryShares";
@@ -131,7 +132,12 @@ public final class KrCommonIncome {
          * 지분상품 없는 행의 W 단위 — W가 단위 점검({@code w-unit})에 걸려도 E × W가 지배 NI와 0.5W 안에서 닫히면 배분 0이다(원장 W가 맞고 명부
          * 쪽이 낡은 해 · 계획 U1). W ≤ 0은 W가 없는 것으로 보고 증인 갈래로 간다.
          */
-        U1
+        U1,
+        /**
+         * 행 지배 NI가 연결 순이익과 같은 행(매퍼가 연결 순이익을 지배 칸에 둔 꼴)의 대체 앵커 — 표준 지배 귀속 o와 표준 비지배 귀속 n이 하나씩이고
+         * o + n이 행 지배 NI와 같으면 앵커는 o다(계획 AN3).
+         */
+        AN3
     }
 
     /**
@@ -561,11 +567,43 @@ public final class KrCommonIncome {
     /** 3판 앵커 · 없으면 4판 대체 앵커(NC). */
     private static Anchor anchor(Period period, RowIncome row, List<Fact> facts, Rules rules, NcContext nc) {
         Anchor anchor = anchor(period, row, facts);
-        if (anchor != null || !rules.has(Rule.NC) || !consolidatedRow(period, row, facts)) {
+        if (anchor != null) {
             return anchor;
         }
-        Anchor cumulative = nc == null ? null : cumulativeDifference(period, facts, nc);
-        return cumulative != null ? cumulative : noNoncontrolling(period, row, facts);
+        if (rules.has(Rule.NC) && consolidatedRow(period, row, facts)) {
+            Anchor alternative = nc == null ? null : cumulativeDifference(period, facts, nc);
+            alternative = alternative != null ? alternative : noNoncontrolling(period, row, facts);
+            if (alternative != null) {
+                return alternative;
+            }
+        }
+        return rules.has(Rule.AN3) ? ownersBesideNoncontrolling(period, row, facts) : null;
+    }
+
+    /** AN3 — 행 지배 NI = 연결 순이익(하나)이고 표준 지배 귀속 + 표준 비지배 귀속 = 행 지배 NI면 앵커는 지배 귀속이다. */
+    private static Anchor ownersBesideNoncontrolling(Period period, RowIncome row, List<Fact> facts) {
+        if (row.netIncomeControlling() == null) {
+            return null;
+        }
+        Set<Basis> consolidated = Set.of(Basis.CONSOLIDATED, Basis.NONE);
+        BigDecimal profit = single(axisless(facts, PROFIT, period, consolidated));
+        if (profit == null || !same(profit, row.netIncomeControlling())) {
+            return null;
+        }
+        BigDecimal owners = single(owners(facts, period, consolidated));
+        List<BigDecimal> noncontrolling = new ArrayList<>(axisless(facts, NONCONTROLLING, period, consolidated));
+        for (Fact f : facts) {
+            if (f.source() == Source.IFRS && PROFIT.equals(f.concept()) && consolidated.contains(f.basis()) && period.start().equals(f.start())
+                    && period.end().equals(f.end()) && f.members().size() == 1
+                    && "NoncontrollingInterestsMember".equals(f.members().get(0).member()) && f.members().get(0).source() != Source.ENTITY) {
+                noncontrolling.add(f.value());
+            }
+        }
+        BigDecimal minority = single(noncontrolling);
+        if (owners == null || minority == null || !same(owners.add(minority), row.netIncomeControlling())) {
+            return null;
+        }
+        return new Anchor(owners, consolidated, 'C');
     }
 
     /** 행 지배 NI가 비었는데 연결 순이익이 행 NI와 같다 — 연결로 지은 행인데 지배 몫이 없다(no-controlling). */
