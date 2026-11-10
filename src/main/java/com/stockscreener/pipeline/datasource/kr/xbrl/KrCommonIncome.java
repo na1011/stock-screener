@@ -179,7 +179,20 @@ public final class KrCommonIncome {
          * 없다)로 보통주 자본 몫을 정하던 것을 그만둔다. 그 판 · 같은 해 앞 판의 분기 명부가 숫자면 그것, 없으면 그 해 명부가 여러 종류일 때 몫을
          * 모른다(미래 재료는 값을 막는 데만 쓴다) · 그 밖은 명부 없는 판의 규칙(그 판 우선주 증거)이다. 적용은 행 해석({@link KrCommonIncomeRows})이 한다.
          */
-        QREG
+        QREG,
+        /**
+         * 지배기업 자신의 신종자본 증거(계획 K7 P2 · M2) — 비지배 구성원을 빼던 거르기가 철자({@code NonControllingInterestsMember})가 틀려 한 번도 안
+         * 섰다(표준은 {@code NoncontrollingInterestsMember}). 비지배 구성원 밖 · 별도 기저 사실 · 지배 열 구성원만 세고, 별도 재무제표가 있는 판의 연결 축
+         * 없는 신종자본(자회사 것일 수 있다 — 현대차 · 한화에어로)은 안 센다. 앵커가 연결이어도 별도 기저의 지배기업 신종자본을 본다(엠케이전자 2024 FY).
+         */
+        HYOWN,
+        /**
+         * 배당성향 분모(계획 K7 P1 · P3) — 분자 판정과 따로 정한다. 앵커가 선 행은 지배기업 신종자본 증거({@link #HYOWN})가 없으면 지배 NI, 있으면 그
+         * 기간 지배 열 신종자본 배당 · 이자 하나를 뺀 값(반기 · 3분기는 그 판 누계 − 직전 판 누계)이다 — 사용자 결정 「지배 NI − 신종자본증권 몫」 문자
+         * 그대로(2026-10-25). 지금은 E 판정이 실패하면 분모까지 비웠다(작은 DB FY 판정 실패 962행) · 신종자본 행은 보통주 몫 + 우선주 몫으로 지었다.
+         * 흐름을 모르면 그 분모 그대로다.
+         */
+        PAY
     }
 
     /** {@link Rule#CMP}의 재료 — 그 행 판보다 뒤에 접수된 판 하나(접수번호 · 접수일 · 재료 · 재료가 없으면 {@code null}). */
@@ -291,9 +304,24 @@ public final class KrCommonIncome {
                     decided);
         }
 
-        /** 배당성향 분모가 보통주 몫에 기대는가 — 지배 NI 그대로({@code ni})면 보통주 몫의 가시일을 안 탄다. */
+        /** 배당성향 분모가 보통주 몫에 기대는가 — 지배 NI 그대로({@code ni}) · 지배 NI − 신종자본 흐름({@code ni-h})이면 보통주 몫의 가시일을 안 탄다. */
         public boolean payoutFollowsCommon() {
-            return payoutBase != null && !"ni".equals(payoutBranch);
+            return payoutBase != null && !payoutBranch.startsWith("ni");
+        }
+
+        Judged withPayout(BigDecimal base, String branch) {
+            return new Judged(this.branch, common, basis, statement, tolerance, base, branch, wantsCumulative, laterReceipt, fallback);
+        }
+
+        /**
+         * {@link Rule#PAY} — 앵커가 선 행의 분모(사용자 결정 「지배 NI − 신종자본증권 몫」): 지배기업 신종자본 증거가 없으면({@code flow} 0) 지배 NI,
+         * 있으면 그 기간 지배 열 신종자본 흐름을 뺀 값. 흐름을 모르면({@code null}) 지금 분모 그대로다.
+         */
+        Judged withDeclaredPayout(BigDecimal income, BigDecimal flow) {
+            if (flow == null) {
+                return this;
+            }
+            return flow.signum() == 0 ? withPayout(income, "ni") : withPayout(income.subtract(flow), "ni-h");
         }
 
         public boolean decided() {
@@ -347,9 +375,15 @@ public final class KrCommonIncome {
             return Judged.none(consolidatedRow ? "no-controlling" : "anchor", 'N');
         }
         Material m = new Material(facts, anchor.bases());
-        boolean hybrid = m.hybrid();
-        if (hybrid && rules.has(Rule.HY) && m.hybridRepaidBefore(fiscalStart(facts, period), period.end())) {
-            hybrid = false;
+        boolean hybrid;
+        if (rules.has(Rule.HYOWN)) {
+            List<Fact> own = ownHybridEvidence(facts);
+            hybrid = !own.isEmpty() && !(rules.has(Rule.HY) && repaidBefore(own, fiscalStart(facts, period), period.end()));
+        } else {
+            hybrid = m.hybrid();
+            if (hybrid && rules.has(Rule.HY) && m.hybridRepaidBefore(fiscalStart(facts, period), period.end())) {
+                hybrid = false;
+            }
         }
         boolean instruments = hybrid || m.preferenceConcepts() || (prior != null && prior.multiClass())
                 || (same != null && same.multiClass());
@@ -375,14 +409,22 @@ public final class KrCommonIncome {
         }
         Judged judged = judgeWith(period, anchor, m, hybrid, instruments, income, e, w, reference, prior, same, multiple, rules, window)
                 .withLaterReceipt(comparative);
+        if (rules.has(Rule.PAY)) {
+            // 분모는 분자 판정과 따로다 — 앵커가 섰으면 지배 NI가 있고, 빼야 할 것은 지배기업 신종자본증권 몫뿐이다.
+            Set<BigDecimal> flows = ownHybridFlows(m.facts(), m.bases(), period.start(), period.end());
+            BigDecimal flow = !hybrid ? BigDecimal.ZERO
+                    : flows.size() == 1 ? flows.iterator().next() : flows.isEmpty() ? ytdHybridFlow(m, nc, period) : null;
+            judged = judged.withDeclaredPayout(income, flow);
+        }
         if (rules.has(Rule.R1P) && "none:no-w".equals(judged.branch()) && e.size() == 1) {
             BigDecimal shares = adjusted(reference, period, multiple);
             BigDecimal common = shares == null || shares.signum() == 0 ? null
                     : allocated(m, nc, period, income, e.iterator().next(), shares, reference, hybrid, multiple);
             if (common != null) {
                 Payout payout = payout(hybrid, income, common, m, period, prior, same, multiple);
-                judged = judged.withFallback(decided("r1+", common, 'T', anchor.statement(), HALF.multiply(shares), payout.base(),
-                        payout.branch(), false));
+                Judged fallback = decided("r1+", common, 'T', anchor.statement(), HALF.multiply(shares), payout.base(), payout.branch(), false);
+                judged = judged.withFallback(judged.payoutBranch().startsWith("ni")
+                        ? fallback.withPayout(judged.payoutBase(), judged.payoutBranch()) : fallback);
             }
         }
         return judged;
@@ -1186,17 +1228,7 @@ public final class KrCommonIncome {
 
         /** {@link Rule#HY} — 신종자본 증거가 당기 열에 없고 앞 열에 상환 개념이 있는가. */
         boolean hybridRepaidBefore(LocalDate fiscalStart, LocalDate end) {
-            boolean repayment = false;
-            for (Fact f : facts) {
-                if (!hybridEvidence(f)) {
-                    continue;
-                }
-                if (f.end().isAfter(fiscalStart) || f.instant() && f.end().equals(end)) {
-                    return false;
-                }
-                repayment |= f.concept().contains("Repayment");
-            }
-            return repayment;
+            return repaidBefore(facts.stream().filter(Material::hybridEvidence).toList(), fiscalStart, end);
         }
 
         private static boolean hybridEvidence(Fact f) {
@@ -1208,6 +1240,39 @@ public final class KrCommonIncome {
         boolean preferenceConcepts() {
             return KrCommonIncome.preferenceConcepts(facts);
         }
+    }
+
+    /** HY — 신종자본 증거가 당기 열(사실 끝이 사업연도 시작 뒤 · 또는 기간 끝 시점)에 하나도 없고 앞 열에 상환 개념이 있는가. */
+    private static boolean repaidBefore(List<Fact> evidence, LocalDate fiscalStart, LocalDate end) {
+        boolean repayment = false;
+        for (Fact f : evidence) {
+            if (f.end().isAfter(fiscalStart) || f.instant() && f.end().equals(end)) {
+                return false;
+            }
+            repayment |= f.concept().contains("Repayment");
+        }
+        return repayment;
+    }
+
+    /**
+     * {@link Rule#HYOWN} — 지배기업 자신의 신종자본 증거: DART 표준 「Hybrid」 개념의 0 아닌 값 중 비지배 구성원 밖이고, 별도 기저 사실이거나 지배 열
+     * 구성원이거나, 그 판에 별도 재무제표가 없을 때의 연결 사실. 별도 재무제표가 있는 판의 연결 축 없는 신종자본은 자회사 것일 수 있다.
+     */
+    private static List<Fact> ownHybridEvidence(List<Fact> facts) {
+        boolean separate = facts.stream().anyMatch(f -> f.basis() == Basis.SEPARATE);
+        List<Fact> out = new ArrayList<>();
+        for (Fact f : facts) {
+            if (f.source() != Source.DART || !f.concept().contains("Hybrid") || f.value().signum() == 0) {
+                continue;
+            }
+            boolean minority = f.members().stream().anyMatch(mb -> "NoncontrollingInterestsMember".equals(mb.member())
+                    || "NonControllingInterestsMember".equals(mb.member()));
+            boolean owners = f.members().stream().anyMatch(mb -> OWNERS_COLUMN.equals(mb.member()));
+            if (!minority && (f.basis() == Basis.SEPARATE || owners || !separate)) {
+                out.add(f);
+            }
+        }
+        return out;
     }
 
     /** 표준 우선 개념의 0 아닌 값 — 보통주 밖 주식의 증거(기간 무관 · 판정 엔진과 자본 판정이 같은 술어를 쓴다). */

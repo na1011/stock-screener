@@ -162,6 +162,46 @@ class KrCommonIncomeTest {
     }
 
     @Test
+    void payDeclaresTheDenominatorApartFromTheNumerator() {
+        // 지분상품 없음 · 총 E 없음 — 분자는 판정 실패(no-eps)여도 분모는 지배 NI다(국내 관문 켬 PAY · 지금은 분모까지 비운다).
+        Judged noEpsOff = judge(rowNi(10_000_000_000L), WITH_PREFERRED, owners(10_000_000_000L));
+        Judged noEps = judgeV4(rowNi(10_000_000_000L), WITH_PREFERRED, owners(10_000_000_000L));
+        // 지배기업 신종자본 · 그 기간 지배 열 배당 5억 — 분모 = 지배 NI − 5억.
+        Judged hybrid = judgeV4(rowNi(10_000_000_000L), COMMON_ONLY, owners(10_000_000_000L),
+                fact(Source.DART, "DividendToHybridBond", Q2, List.of(PARENT), 500_000_000));
+        // 대조군 — 신종자본 증거는 있는데 그 기간 흐름이 없으면 분모를 지어내지 않는다.
+        Judged unknown = judgeV4(rowNi(10_000_000_000L), COMMON_ONLY, owners(10_000_000_000L),
+                fact(Source.DART, "DividendToHybridBond", H1, List.of(PARENT), 500_000_000));
+
+        assertThat(noEpsOff.payoutBase()).as("꺼짐 — 지금 동작").isNull();
+        assertThat(noEps.branch()).isEqualTo("none:no-eps");
+        assertThat(noEps.payoutBase()).isEqualByComparingTo("10000000000");
+        assertThat(hybrid.payoutBase()).isEqualByComparingTo("9500000000");
+        assertThat(hybrid.payoutFollowsCommon()).as("지배 NI − 흐름은 보통주 몫의 가시일을 안 탄다").isFalse();
+        assertThat(unknown.payoutBase()).isNull();
+    }
+
+    @Test
+    void hyownCountsOnlyTheParentsOwnHybridCapital() {
+        // 별도 재무제표가 있는 연결 판 — 연결 축 없는 신종자본 잔액(자회사 것일 수 있다)만 있으면 지분상품 없음 · 비지배 구성원 신종자본도 안 센다.
+        Fact consolidated = fact(Source.DART, "HybridBonds", Q2, List.of(), 300_000_000_000L);
+        Fact separateRow = new Fact(Source.IFRS, "ProfitLoss", Q2.start(), Q2.end(), Basis.SEPARATE, List.of(), BigDecimal.valueOf(1));
+        Fact minority = fact(Source.DART, "DividendToHybridBond", Q2,
+                List.of(new Member("ComponentsOfEquityAxis", "NoncontrollingInterestsMember", Source.IFRS)), 100_000_000);
+        Judged subsidiary = judgeV4(rowNi(10_000_000_000L), COMMON_ONLY, owners(10_000_000_000L), eps(1000), weighted(10_000_000),
+                consolidated, separateRow, minority);
+        // 별도 기저의 지배기업 신종자본 — 앵커가 연결이어도 지분상품이다(엠케이전자 2024 FY).
+        Fact own = new Fact(Source.DART, "DividendsPaidToHybridBond", Q2.start(), Q2.end(), Basis.SEPARATE, List.of(), BigDecimal.valueOf(-1_000_000_000L));
+        Judged parent = judgeV4(rowNi(10_000_000_000L), COMMON_ONLY, owners(10_000_000_000L), eps(1000), weighted(10_000_000), own);
+        Judged before = judge(rowNi(10_000_000_000L), COMMON_ONLY, owners(10_000_000_000L), eps(1000), weighted(10_000_000), consolidated,
+                separateRow, minority);
+
+        assertThat(before.branch()).as("꺼짐 — 연결 잔액 · 철자 틀린 비지배 거르기로 지분상품 있음").isEqualTo("exw");
+        assertThat(subsidiary.branch()).isEqualTo("kr-ni");
+        assertThat(parent.branch()).isEqualTo("exw");
+    }
+
+    @Test
     void c1PicksTheClosingPairWhenTheLedgerCarriesTwoEps() {
         // 지분상품 없음 · 기본 EPS 개념에 1,000원과 950원이 함께 실렸다 · W 1,000만 — 1,000 × W만 지배 NI 100억과 0.5W 안에서 닫힌다(국내 관문 켬 C1).
         Judged off = judge(rowNi(10_000_000_000L), COMMON_ONLY, owners(10_000_000_000L), eps(1000), eps(950), weighted(10_000_000));
