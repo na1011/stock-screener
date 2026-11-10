@@ -108,7 +108,7 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
     private boolean krGate;
 
     @org.springframework.beans.factory.annotation.Autowired
-    void krGate(@org.springframework.beans.factory.annotation.Value("${stockscreener.gate.kr-provisional}") boolean on) {
+    public void krGate(@org.springframework.beans.factory.annotation.Value("${stockscreener.gate.kr-provisional}") boolean on) {
         this.krGate = on;
     }
 
