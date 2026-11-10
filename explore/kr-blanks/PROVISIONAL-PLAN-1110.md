@@ -22,6 +22,12 @@
 7. **표시** — 상세 기준 줄 「재무 기준 2026 Q3 잠정」(`FinancialBasisReader` 상태 하나 더) · 잠정 행으로 계산된 지표 카드에 「잠정」 · 비운 재무 지표 카드에 「대기」와 이유(`UnavailabilityRule` 하나 · 지금은 사유 없는 빈 지표가 카드째 빠진다 `StockController` 지표 조립).
 8. **관문** — 국내 · 미국 둘 다 값이 바뀐다(미국도 빈 행이 연간 지표를 살린다). 설정 둘(기본 꺼짐 · 시장별 관문에 실림). 꺼진 상태 출력은 `main`과 바이트까지 같다.
 
+## 막기 경로의 소비자(grep `pendingRelease|withheldAt|financialsAt|withoutFinancials` · 2026-11-10)
+- `FinancialMath.financialsAt`(→ `byPublication` · `bySegment`) — 여기서 새 기간 행을 더한다.
+- `ValuationHistory.java:102-104` — **따로** `withheldAt` → `withoutFinancials`를 부른다. 같은 함수로 바꿔야 5년 중앙값 표본이 갈리지 않는다.
+- `FinancialBasisReader.java:172-173` — 화면 기준 줄 · 결과 행 「새 실적」 · 워치리스트 보류(`WatchlistAlertRunner.evaluateScreen`)가 이 상태를 읽는다. 상태에 「잠정」을 더하고, 워치리스트 보류는 「그 조건의 지표가 null」로 이미 판정 불가가 되므로 그대로 선다(시험으로 확인).
+- `GovernanceMath.java:221` — 연도를 명시한 FY 짝짓기는 막기 예외 · 새 기간 행과 무관(FY 행만 읽는다 · 잠정 FY 행은 그 해 FY 라벨이라 배당성향 분모가 잠정 지배 순이익이 된다 — **반증 대상**).
+
 ## 점검(44개 계산기 · 2026-11-10 · 읽기)에서 손볼 자리
 - `PbrMedian5yCalculator`의 창 전체 기저 판정이 봉 사본이 아닌 바깥 컨텍스트에서 돈다 — 새 기간 행(지배 자본 null)이 5년 기저를 뒤집는다. 계획 K11(같은 뿌리)과 함께 고친다: 봉 사본마다 판정.
 - `ValuationHistory` 중앙값은 최신 표본이 null이어도 옛 표본으로 낸다 — 지금도 그렇다(막힌 봉에도 PER 5년 중앙값이 있다). 원칙상 중앙값은 「그 봉의 값이 없으면 비운다」가 아니라 과거 표본의 통계라 그대로 둔다(내 판단 · 반증 대상).
