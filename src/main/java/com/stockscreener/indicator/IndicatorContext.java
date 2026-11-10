@@ -250,11 +250,22 @@ public final class IndicatorContext {
     }
 
     /**
-     * 잠정 분기 행을 더하고 연간 판을 비운 사본 — 새 실적 발표로 막힌 봉의 재무다({@code ReportingBasis.provisionalQuarter} ·
-     * {@code FinancialMath.financialsAt}). 행은 기말 내림차순 자리에 든다(판 이력 순서 — {@link #latestPerPeriod}가 기말마다 첫 판을 고른다).
-     * 연간을 비우는 것은 지금의 막기와 같다 — 잠정은 그 분기의 손익만 주므로 연간 지표 · 세율 · 현금흐름은 정식 보고서까지 빈다.
+     * 잠정 분기 행을 더한 사본 — 새 실적 발표로 막힌 봉의 재무다({@code ReportingBasis.provisionalQuarter} · {@code FinancialMath.financialsAt}).
+     * 행은 기말 내림차순 자리에 든다(판 이력 순서 — {@link #latestPerPeriod}가 기말마다 첫 판을 고른다). 연간 판은 {@code year}가 없으면 비운다(지금의
+     * 막기와 같다 — 1~3분기 잠정은 연간 값을 안 준다), 있으면(4분기 · 결산 공시) 그 행 + 앞선 해의 정식 판이다.
      */
-    public IndicatorContext withProvisionalQuarter(FinancialFigures provisional) {
+    public IndicatorContext withProvisionalQuarter(FinancialFigures provisional, FinancialFigures year) {
+        List<FinancialFigures> annual = List.of();
+        if (year != null) {
+            List<FinancialFigures> withYear = new java.util.ArrayList<>(annualRevisions.size() + 1);
+            withYear.add(year);
+            annualRevisions.stream().filter(f -> f.periodEnd() == null || f.periodEnd().isBefore(year.periodEnd())).forEach(withYear::add);
+            annual = withYear;
+        }
+        return withQuarterAndAnnual(provisional, annual);
+    }
+
+    private IndicatorContext withQuarterAndAnnual(FinancialFigures provisional, List<FinancialFigures> annual) {
         List<FinancialFigures> quarterly = new java.util.ArrayList<>(quarterlyRevisions.size() + 1);
         boolean placed = false;
         for (FinancialFigures f : quarterlyRevisions) {
@@ -267,7 +278,7 @@ public final class IndicatorContext {
         if (!placed) {
             quarterly.add(provisional);
         }
-        return new IndicatorContext(stockId, industryDivisionKey, priceBars, List.of(), quarterly,
+        return new IndicatorContext(stockId, industryDivisionKey, priceBars, annual, quarterly,
                 shareAdjustments, unadjustedActions, marketIndex, governanceFacts, dependencies, earningsReleaseDates, spinOffDates,
                 provisionalReleases);
     }

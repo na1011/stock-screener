@@ -184,7 +184,7 @@ public class FinancialBasisReader {
         if (pending != null) {
             // 지표 계산과 같은 함수다(FinancialMath.financialsAt) — 그 봉의 사본(보이는 판 · 분사 사본)에 묻는다.
             FinancialFigures provisional = ReportingBasis.provisionalQuarter(context.visibleAt(asOf).withoutPreSpinOffBasis(asOf), asOf)
-                    .orElse(null);
+                    .map(ReportingBasis.Provisional::quarter).orElse(null);
             if (provisional != null) {
                 return new Basis(label(provisional, true), null, Status.PROVISIONAL, null, pending,
                         "%s 잠정실적으로 %s 손익 지표(매출 · 이익률 · 성장률 · PSR 등)를 계산했습니다 — 주당 지표(EPS · PER · PEG)와 재무상태 · 현금흐름 · 연간 지표는 정식 보고서가 나오면 계산합니다."

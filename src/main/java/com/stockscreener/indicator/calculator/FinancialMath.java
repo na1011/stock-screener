@@ -664,7 +664,8 @@ final class FinancialMath {
         // 국내 잠정 관문 켬: 막힌 봉이라도 그 분기의 잠정실적이 서면 그 손익 행을 더한 사본이다(ReportingBasis.provisionalQuarter) —
         // 안 서면(잠정 공시 없음 · 못 읽음 · 기준 불일치 · 관문 꺼짐) 지금처럼 재무를 비운다.
         IndicatorContext base = visible.withoutPreSpinOffBasis(barDate);
-        return ReportingBasis.provisionalQuarter(base, barDate).map(base::withProvisionalQuarter).orElseGet(visible::withoutFinancials);
+        return ReportingBasis.provisionalQuarter(base, barDate).map(p -> base.withProvisionalQuarter(p.quarter(), p.year()))
+                .orElseGet(visible::withoutFinancials);
     }
 
     /** 그 봉의 재무 지표를 막는가 — {@code visible}은 그 봉 시점 사본({@link IndicatorContext#visibleAt})이다. */

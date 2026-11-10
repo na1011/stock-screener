@@ -80,6 +80,13 @@ public final class ReportingBasis {
     }
 
     /**
+     * 막힌 봉의 잠정 행 — 분기 행과, 그 공시가 결산 한 해를 덮으면(4분기) 연간 손익 행. 1~3분기 잠정은 연간 값을 안 주므로 {@code year}가 없고 연간 판은
+     * 지금처럼 막힌다.
+     */
+    public record Provisional(FinancialFigures quarter, FinancialFigures year) {
+    }
+
+    /**
      * <b>막힌 봉의 잠정 분기 행</b>(국내 잠정 관문 켬 · 탐색 {@code PROVISIONAL-PLAN-1110.md} v2) — 새 실적 발표로 막힌 봉에서, 정식 보고서
      * 전 그 분기의 손익을 잠정실적 공시로 짓는다. 대원칙: <b>잠정실적은 「그 분기의 손익 행」으로만 들어간다. 그 행으로 계산이 서는 지표만 값을
      * 내고 나머지는 정식 보고서까지 빈다. 같은 분기면 정식이 이긴다.</b> 지표 계산({@code FinancialMath.financialsAt})과 재무 기준 표시가
@@ -90,13 +97,16 @@ public final class ReportingBasis {
      * 분기 합(1분기는 당해 = 누계)이 두 값의 반올림 폭 안이다. 4분기는 당해가 없으면 결산(I001 · I002 누계) − 정식 1~3분기다. 같은 분기
      * 공시가 여럿이면 항목마다 그 봉에 보인 것 중 늦은 판(검사를 통과한 것)이다. 한 항목도 안 서면 비어 있다(전체 막기).
      *
+     * <p>4분기면 같은 공시의 누계로 연간 손익 행도 짓는다(대원칙 — 결산 공시가 연간 손익을 준다 · 2026-11-10 사용자 「대원칙대로 판단해」 뒤 내 판단).
+     * 사본의 연간 판은 그 행 + 앞선 해의 정식 판이다(연간 성장률의 비교 대상). 1~3분기는 연간 판을 비운다(잠정이 연간 값을 안 준다).
+     *
      * <p>행은 매출 · 영업이익 · 세전이익 · 순이익 · 지배 순이익만 싣는다 — 잔액 · 현금흐름 · 주식수는 비고(잔액 지표는 기준 판이 이 행이라
      * 빈다), 보통주 몫은 「못 정함」(갈래 {@code none:provisional} — 비우면 지배 계속영업으로 조용히 떨어진다 · 사용자 선택 「(나) 원칙대로
      * 비움」 · 주당 지표는 정식까지 빔), 중단영업 판정 규칙은 직전 정식 분기의 것을 잇는다(규칙이 있으면 중단 몫 모름 → 계속영업 지표가 빈다).
      *
      * @param visible 그 봉 시점 사본({@link IndicatorContext#visibleAt} · 분사 사본 뒤) — 그 봉에 보이는 잠정 공시만 든다
      */
-    public static Optional<FinancialFigures> provisionalQuarter(IndicatorContext visible, LocalDate barDate) {
+    public static Optional<Provisional> provisionalQuarter(IndicatorContext visible, LocalDate barDate) {
         List<ProvisionalRelease> releases = visible.provisionalReleases();
         if (releases.isEmpty()) {
             return Optional.empty();
@@ -117,7 +127,10 @@ public final class ReportingBasis {
             return Optional.empty();
         }
         java.util.EnumMap<ProvisionalRelease.Item, BigDecimal> values = new java.util.EnumMap<>(ProvisionalRelease.Item.class);
+        // 결산 한 해 값은 그 항목의 분기 값을 정한 바로 그 공시의 누계다 — 4분기 행과 연간 행이 같은 공시에서 짝을 이룬다.
+        java.util.EnumMap<ProvisionalRelease.Item, BigDecimal> yearValues = new java.util.EnumMap<>(ProvisionalRelease.Item.class);
         ProvisionalRelease newestUsed = null;
+        ProvisionalRelease newestYear = null;
         for (ProvisionalRelease.Item item : ProvisionalRelease.Item.values()) {
             for (ProvisionalRelease r : candidates) {
                 BigDecimal v = quarterValue(r, item, start, visible.quarterlyFigures());
@@ -125,6 +138,12 @@ public final class ReportingBasis {
                     values.put(item, v);
                     if (newestUsed == null || r.filedOn().isAfter(newestUsed.filedOn())) {
                         newestUsed = r;
+                    }
+                    if (coversFiscalYear(r) && r.cumulative().get(item) != null) {
+                        yearValues.put(item, r.won(r.cumulative().get(item)));
+                        if (newestYear == null || r.filedOn().isAfter(newestYear.filedOn())) {
+                            newestYear = r;
+                        }
                     }
                     break;
                 }
@@ -141,14 +160,27 @@ public final class ReportingBasis {
                 values.get(ProvisionalRelease.Item.PROFIT_BEFORE_TAX), null, null, null, null, false, null, null,
                 previous.discontinuedRule(), new CommonIncomeRead(null, null, PROVISIONAL_COMMON_BRANCH), java.util.Map.of(), null,
                 newestUsed.visibleOn());
-        IndicatorContext withRow = visible.withProvisionalQuarter(row);
+        FinancialFigures year = newestYear == null ? null : new FinancialFigures(target.getYear(), FinancialFigures.FiscalPeriod.FY,
+                newestYear.cumulativeStart(), target, newestYear.filedOn(), "KRW", yearValues.get(ProvisionalRelease.Item.REVENUE),
+                yearValues.get(ProvisionalRelease.Item.OPERATING_INCOME), yearValues.get(ProvisionalRelease.Item.NET_INCOME),
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+                yearValues.get(ProvisionalRelease.Item.NET_INCOME_CONTROLLING), null, null, null, null, null, null, null, null, null,
+                yearValues.get(ProvisionalRelease.Item.PROFIT_BEFORE_TAX), null, null, null, null, false, null, null,
+                previous.discontinuedRule(), new CommonIncomeRead(null, null, PROVISIONAL_COMMON_BRANCH), java.util.Map.of(), null,
+                newestYear.visibleOn());
+        IndicatorContext withRow = visible.withProvisionalQuarter(row, year);
         // 잠정 행을 넣은 사본이 그 행을 유량 기준으로 삼고(연속 네 분기) 그보다 새 발표가 없을 때만 선다 — 안 서면 지금처럼 전체 막기다.
         Optional<Basis> after = of(withRow);
         if (after.isEmpty() || !after.get().quarterly() || !target.equals(after.get().flow().periodEnd())
                 || pendingRelease(withRow, barDate).isPresent()) {
             return Optional.empty();
         }
-        return Optional.of(row);
+        return Optional.of(new Provisional(row, year));
+    }
+
+    /** 그 공시의 누계가 결산 한 해(1월 1일 ~ 12월 말 열두 달)인가 — 4분기 잠정 · 결산 공시(I001)만 참이다. */
+    private static boolean coversFiscalYear(ProvisionalRelease r) {
+        return r.cumulativeStart().plusYears(1).equals(r.cumulativeEnd().plusDays(1));
     }
 
     /** 잠정 행의 보통주 몫 갈래 — 잠정은 보통주 귀속 이익을 안 준다(주당 지표는 정식까지 빔). */

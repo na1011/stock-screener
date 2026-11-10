@@ -55,6 +55,12 @@ class ProvisionalQuarterTest {
                 .withProvisionalReleases(provisional);
     }
 
+    private static IndicatorContext context(List<FinancialFigures> annual, List<FinancialFigures> quarters, List<LocalDate> releases,
+                                            List<ProvisionalRelease> provisional) {
+        return new IndicatorContext(1L, List.of(), annual, quarters, Map.of()).withEarningsReleaseDates(releases)
+                .withProvisionalReleases(provisional);
+    }
+
     @Test
     @DisplayName("대조군: 잠정 본문이 없으면(관문 꺼짐) 막힌 봉은 지금처럼 재무를 비운다")
     void withoutProvisionalTheBarIsEmpty() {
@@ -175,11 +181,34 @@ class ProvisionalQuarterTest {
                 LocalDate.of(2026, 1, 1), LocalDate.of(2026, 12, 31), 1_000_000_000_000L,
                 new ProvisionalRelease.Lines(new BigDecimal("700.63"), null, null, null, null),
                 new ProvisionalRelease.Lines(new BigDecimal("700.63"), null, null, null, null));
-        IndicatorContext at = FinancialMath.financialsAt(context(quarters, List.of(filed), List.of(year)), filed);
+        FinancialFigures fy2025 = FinancialFiguresFixture.annual(LocalDate.of(2025, 12, 31))
+                .revenue(new BigDecimal("600").multiply(TRILLION)).totalAssets(new BigDecimal("500").multiply(TRILLION))
+                .publishedAt(LocalDate.of(2026, 3, 10)).build();
+        IndicatorContext at = FinancialMath.financialsAt(context(List.of(fy2025), quarters, List.of(filed), List.of(year)), filed);
 
         FinancialFigures row = at.quarterlyFigures().get(0);
         assertThat(row.fiscalPeriod()).isEqualTo(FinancialFigures.FiscalPeriod.Q4);
         assertThat(row.revenue()).isEqualByComparingTo(new BigDecimal("200.00").multiply(TRILLION));
+        // 결산 공시가 연간 손익을 준다 — 연간 판은 잠정 FY 행 + 앞선 해의 정식 판이고, 연간 매출 성장률이 선다. 잔액은 없다.
+        assertThat(at.annualFigures()).hasSize(2);
+        FinancialFigures fy = at.annualFigures().get(0);
+        assertThat(fy.fiscalPeriod()).isEqualTo(FinancialFigures.FiscalPeriod.FY);
+        assertThat(fy.revenue()).isEqualByComparingTo(new BigDecimal("700.63").multiply(TRILLION));
+        assertThat(fy.totalAssets()).isNull();
+        assertThat(fy.commonContinuingIncome()).isNull();
+        assertThat(YearOverYear.growth(at.annualFigures(), FinancialFigures::revenue)).isNotNull();
+    }
+
+    @Test
+    @DisplayName("1~3분기 잠정은 연간 값을 안 준다 — 앞선 해의 정식 연간 판이 있어도 연간 판은 비운다(지금 막기와 같다)")
+    void notFourthQuarterKeepsAnnualEmpty() {
+        FinancialFigures fy2025 = FinancialFiguresFixture.annual(LocalDate.of(2025, 12, 31))
+                .revenue(new BigDecimal("400").multiply(TRILLION)).publishedAt(LocalDate.of(2026, 3, 10)).build();
+        IndicatorContext at = FinancialMath.financialsAt(
+                context(List.of(fy2025), formalQuarters(), List.of(RELEASE), List.of(q3("r1", RELEASE, RELEASE, true, "500.63"))), RELEASE);
+
+        assertThat(at.quarterlyFigures().get(0).periodEnd()).isEqualTo(LocalDate.of(2026, 9, 30));
+        assertThat(at.annualFigures()).isEmpty();
     }
 
     @Test
