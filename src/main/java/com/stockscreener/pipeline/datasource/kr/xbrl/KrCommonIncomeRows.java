@@ -94,17 +94,18 @@ public final class KrCommonIncomeRows {
                 out.put(row.id(), new Resolved(row, "nokey", null, 'T', 'N', null));
                 continue;
             }
+            KrCommonIncome.NcContext nc = ncContext(row, ordered);
             Judged j = KrCommonIncome.judge(row.period(), row.income(), row.facts(),
-                    registers.get(row.fiscalYear() - 1), registers.get(row.fiscalYear()), multiple, rules);
+                    registers.get(row.fiscalYear() - 1), registers.get(row.fiscalYear()), multiple, rules, nc);
             if (j.wantsCumulative() && ("Q2".equals(row.fiscalPeriod()) || "Q3".equals(row.fiscalPeriod()))) {
-                out.put(row.id(), cumulative(row, j, ordered, out));
+                out.put(row.id(), cumulative(row, j, ordered, out, rules, nc));
                 continue;
             }
             out.put(row.id(), new Resolved(row, j.branch(), j.common(), j.basis(), j.statement(), j.payoutBase()));
         }
         for (Row row : ordered) {
             if ("Q4".equals(row.fiscalPeriod())) {
-                out.put(row.id(), fourth(row, ordered, out));
+                out.put(row.id(), fourth(row, ordered, out, rules));
             }
         }
         // 보통주 자본은 손익과 따로 — 대차대조표 날짜의 판으로 정한다. Q4는 같은 기말의 FY 판(Q4 published 이하 마지막)이다.
@@ -127,12 +128,26 @@ public final class KrCommonIncomeRows {
         return result;
     }
 
-    private static Resolved cumulative(Row row, Judged j, List<Row> ordered, Map<Long, Resolved> out) {
+    /** NC-a 재료 — Q2 · Q3 행에서 같은 해 1분기 시작과 직전 판(Q2면 Q1 · Q3면 Q2 · 그 행 공시일 이하 마지막 판)의 끝 · 사실. */
+    private static KrCommonIncome.NcContext ncContext(Row row, List<Row> ordered) {
+        if (!"Q2".equals(row.fiscalPeriod()) && !"Q3".equals(row.fiscalPeriod())) {
+            return null;
+        }
+        Row first = vintage(ordered, row.fiscalYear(), "Q1", row.published());
+        Row previous = vintage(ordered, row.fiscalYear(), "Q2".equals(row.fiscalPeriod()) ? "Q1" : "Q2", row.published());
+        if (first == null || previous == null || previous.facts() == null) {
+            return null;
+        }
+        return new KrCommonIncome.NcContext(first.start(), previous.end(), previous.facts());
+    }
+
+    private static Resolved cumulative(Row row, Judged j, List<Row> ordered, Map<Long, Resolved> out,
+                                       KrCommonIncome.Rules rules, KrCommonIncome.NcContext nc) {
         Row first = vintage(ordered, row.fiscalYear(), "Q1", row.published());
         if (first == null) {
             return new Resolved(row, "none:cum", null, 'T', j.statement(), null);
         }
-        BigDecimal cum = KrCommonIncome.cumulative(new Period(first.start(), row.end()), row.period(), row.income(), row.facts());
+        BigDecimal cum = KrCommonIncome.cumulative(new Period(first.start(), row.end()), row.period(), row.income(), row.facts(), rules, nc);
         if (cum == null) {
             return new Resolved(row, j.branch(), null, 'T', j.statement(), null);
         }
@@ -149,7 +164,7 @@ public final class KrCommonIncomeRows {
         return new Resolved(row, "cum", cum.subtract(earlier), 'T', j.statement(), null);
     }
 
-    private static Resolved fourth(Row q4, List<Row> ordered, Map<Long, Resolved> out) {
+    private static Resolved fourth(Row q4, List<Row> ordered, Map<Long, Resolved> out, KrCommonIncome.Rules rules) {
         Row fy = vintage(ordered, q4.fiscalYear(), "FY", q4.published());
         List<Row> quarters = new ArrayList<>();
         for (String period : List.of("Q1", "Q2", "Q3")) {
@@ -177,7 +192,7 @@ public final class KrCommonIncomeRows {
         for (Row r : quarters) {
             Resolved q = out.get(r.id());
             if (q == null || q.common() == null || q.basis() != annual.basis() || q.statement() != annual.statement()) {
-                return nineMonths(q4, annual, quarters);
+                return nineMonths(q4, annual, quarters, ordered, rules);
             }
             common = common.subtract(q.common());
             allNi &= "kr-ni".equals(q.branch());
@@ -193,13 +208,14 @@ public final class KrCommonIncomeRows {
      * 분기 하나가 안 정해졌을 때 — 3분기 판이 9개월 누계 EPS × 누계 W를 주면 Q4 = FY 몫 − 9개월 누계 몫이다(국내 어댑터의 Q4 = FY − 3분기
      * 누계와 같은 꼴 · 1분기 판에 가중평균 태그가 없는 금융지주 2025가 그 자리다). 연간 몫이 중단 포함 합(T)이고 3분기 판이 정해졌을 때만.
      */
-    private static Resolved nineMonths(Row q4, Resolved annual, List<Row> quarters) {
+    private static Resolved nineMonths(Row q4, Resolved annual, List<Row> quarters, List<Row> ordered, KrCommonIncome.Rules rules) {
         Row first = quarters.get(0);
         Row third = quarters.get(2);
         if (annual.basis() != 'T' || third.facts() == null) {
             return new Resolved(q4, "none:q4", null, 'T', annual.statement(), null);
         }
-        BigDecimal nine = KrCommonIncome.cumulative(new Period(first.start(), third.end()), third.period(), third.income(), third.facts());
+        BigDecimal nine = KrCommonIncome.cumulative(new Period(first.start(), third.end()), third.period(), third.income(), third.facts(),
+                rules, ncContext(third, ordered));
         if (nine == null) {
             return new Resolved(q4, "none:q4", null, 'T', annual.statement(), null);
         }

@@ -52,6 +52,34 @@ class KrCommonIncomeTest {
     }
 
     @Test
+    void ncTakesTheConsolidatedIncomeWhenEquityShowsNoNoncontrollingInterest() {
+        // 행 지배 NI가 빈 연결 행 — 연결 순이익 100억 · 기초(03-31) · 기말(06-30) 자본총계 = 지배 자본 · 비지배 손익 줄 없음(국내 관문 켬 NC-b).
+        RowIncome row = new RowIncome(null, BigDecimal.valueOf(10_000_000_000L));
+        Fact profit = fact(Source.IFRS, "ProfitLoss", Q2, List.of(), 10_000_000_000L);
+        List<Fact> equity = List.of(instant("Equity", LocalDate.of(2026, 3, 31), 500), instant("EquityAttributableToOwnersOfParent",
+                LocalDate.of(2026, 3, 31), 500), instant("Equity", END, 600), instant("EquityAttributableToOwnersOfParent", END, 600));
+        java.util.List<Fact> facts = new java.util.ArrayList<>(equity);
+        facts.addAll(List.of(profit, eps(1000), weighted(10_000_000)));
+
+        Judged off = KrCommonIncome.judge(Q2, row, facts, COMMON_ONLY, null, NO_ACTIONS);
+        Judged on = KrCommonIncome.judge(Q2, row, facts, COMMON_ONLY, null, NO_ACTIONS, KrCommonIncome.Rules.V4);
+        // 대조군 — 기말 자본총계가 지배 자본보다 크면(비지배 있음) 대체 앵커가 안 선다.
+        java.util.List<Fact> withMinority = new java.util.ArrayList<>(facts);
+        withMinority.removeIf(f -> "Equity".equals(f.concept()) && END.equals(f.end()));
+        withMinority.add(instant("Equity", END, 650));
+        Judged minority = KrCommonIncome.judge(Q2, row, withMinority, COMMON_ONLY, null, NO_ACTIONS, KrCommonIncome.Rules.V4);
+
+        assertThat(off.branch()).as("꺼짐 — 지금 동작").isEqualTo("none:no-controlling");
+        assertThat(on.branch()).isEqualTo("kr-ni");
+        assertThat(on.common()).isEqualByComparingTo("10000000000");
+        assertThat(minority.branch()).isEqualTo("none:no-controlling");
+    }
+
+    private static Fact instant(String concept, LocalDate at, long value) {
+        return new Fact(Source.IFRS, concept, null, at, Basis.CONSOLIDATED, List.of(), BigDecimal.valueOf(value));
+    }
+
+    @Test
     void noInstrumentsAndTheEpsIdentityClosesIsTheControllingIncome() {
         // 지배 NI 100억 · EPS 1,000원 × 1,000만 주 = 100억.
         Judged j = judge(rowNi(10_000_000_000L), COMMON_ONLY,

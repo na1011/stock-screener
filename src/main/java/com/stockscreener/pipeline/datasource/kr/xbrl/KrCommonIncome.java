@@ -73,7 +73,18 @@ public final class KrCommonIncome {
      */
     public enum Rule {
         /** 지분상품 있음 · W 없음 · E 하나 · |지배 NI − E × S| ≤ 0.5S면 배분 0(S = 기준 명부 보통주 유통 × 기업행위 배수). */
-        R1
+        R1,
+        /**
+         * 행 지배 NI가 빈 연결 행(no-controlling)의 대체 앵커 — NC-a: 같은 판 누계 지배 귀속 − 직전 판 누계 지배 귀속(연결 순이익 누계 차가 3개월
+         * 순이익과 닫힐 때만 · Q2 · Q3) · NC-b: 기초 · 기말 자본총계 = 지배 자본이고 0 아닌 비지배 손익이 없으면 연결 순이익이 지배 NI다.
+         */
+        NC
+    }
+
+    /**
+     * NC-a의 재료 — 같은 사업연도 1분기 시작과 직전 판(Q2면 Q1 · Q3면 Q2)의 기간 끝 · 사실. 1분기 · 연간 행이나 직전 판 재료가 없으면 {@code null}.
+     */
+    public record NcContext(LocalDate yearStart, LocalDate previousEnd, List<Fact> previousFacts) {
     }
 
     /** 켠 규칙 묶음. */
@@ -168,7 +179,13 @@ public final class KrCommonIncome {
 
     public static Judged judge(Period period, RowIncome row, List<Fact> facts, Register prior, Register same,
                                Multiple multiple, Rules rules) {
-        Anchor anchor = anchor(period, row, facts);
+        return judge(period, row, facts, prior, same, multiple, rules, null);
+    }
+
+    /** @param nc NC-a 재료(Q2 · Q3 · {@link Rule#NC}) — 없으면 {@code null} */
+    public static Judged judge(Period period, RowIncome row, List<Fact> facts, Register prior, Register same,
+                               Multiple multiple, Rules rules, NcContext nc) {
+        Anchor anchor = anchor(period, row, facts, rules, nc);
         if (anchor == null) {
             // 행 지배 NI가 비었는데 연결 순이익이 행 NI와 같다 — 연결로 지은 행인데 지배 몫이 없다(매퍼 · 원장 몫 · reload-gate 국내
             // 「매퍼가 지배주주 순이익을 못 집는다」). 앵커 실패와 갈라 센다.
@@ -260,7 +277,11 @@ public final class KrCommonIncome {
      * ({@link Judged#wantsCumulative()}). 값이 안 서면 {@code null}.
      */
     public static BigDecimal cumulative(Period cumulative, Period period, RowIncome row, List<Fact> facts) {
-        Anchor anchor = anchor(period, row, facts);
+        return cumulative(cumulative, period, row, facts, Rules.NONE, null);
+    }
+
+    public static BigDecimal cumulative(Period cumulative, Period period, RowIncome row, List<Fact> facts, Rules rules, NcContext nc) {
+        Anchor anchor = anchor(period, row, facts, rules, nc);
         if (anchor == null) {
             return null;
         }
@@ -411,6 +432,84 @@ public final class KrCommonIncome {
      * 앵커 — 행의 손익이 그 판 인스턴스의 어느 기저 맥락과 같은가. 행 지배 NI가 있으면 연결 지배 귀속(그 태그가 없으면 연결 순이익),
      * 지배 NULL이면 별도(연결 맥락이 없는 파일은 축 없는) 순이익. 1원 또는 상대 1e−9 안을 같다고 본다.
      */
+    /** 3판 앵커 · 없으면 4판 대체 앵커(NC). */
+    private static Anchor anchor(Period period, RowIncome row, List<Fact> facts, Rules rules, NcContext nc) {
+        Anchor anchor = anchor(period, row, facts);
+        if (anchor != null || !rules.has(Rule.NC) || !consolidatedRow(period, row, facts)) {
+            return anchor;
+        }
+        Anchor cumulative = nc == null ? null : cumulativeDifference(period, facts, nc);
+        return cumulative != null ? cumulative : noNoncontrolling(period, row, facts);
+    }
+
+    /** 행 지배 NI가 비었는데 연결 순이익이 행 NI와 같다 — 연결로 지은 행인데 지배 몫이 없다(no-controlling). */
+    private static boolean consolidatedRow(Period period, RowIncome row, List<Fact> facts) {
+        return row.netIncomeControlling() == null && row.netIncome() != null
+                && axisless(facts, PROFIT, period, Set.of(Basis.CONSOLIDATED, Basis.NONE)).stream().anyMatch(v -> same(v, row.netIncome()))
+                && facts.stream().anyMatch(f -> f.basis() == Basis.CONSOLIDATED);
+    }
+
+    /** NC-a — 누계 지배 귀속 차(그 판 · 직전 판)가 3개월 지배 NI다. 연결 순이익의 누계 차가 3개월 연결 순이익과 닫혀야 한다(소급 재작성 가드). */
+    private static Anchor cumulativeDifference(Period period, List<Fact> facts, NcContext nc) {
+        if (nc.previousFacts() == null) {
+            return null;
+        }
+        Set<Basis> consolidated = Set.of(Basis.CONSOLIDATED, Basis.NONE);
+        Period cumulative = new Period(nc.yearStart(), period.end());
+        Period previous = new Period(nc.yearStart(), nc.previousEnd());
+        BigDecimal cum = single(owners(facts, cumulative, consolidated));
+        BigDecimal earlier = single(owners(nc.previousFacts(), previous, consolidated));
+        BigDecimal plCum = single(axisless(facts, PROFIT, cumulative, consolidated));
+        BigDecimal plPrevious = single(axisless(nc.previousFacts(), PROFIT, previous, consolidated));
+        BigDecimal plQuarter = single(axisless(facts, PROFIT, period, consolidated));
+        if (cum == null || earlier == null || plCum == null || plPrevious == null || plQuarter == null
+                || !same(plCum.subtract(plPrevious), plQuarter)) {
+            return null;
+        }
+        return new Anchor(cum.subtract(earlier), consolidated, 'C');
+    }
+
+    /** NC-b — 기초 · 기말 자본총계가 지배 자본과 같고 0 아닌 비지배 손익 줄이 없으면 비지배가 없다 — 연결 순이익이 지배 NI다. */
+    private static Anchor noNoncontrolling(Period period, RowIncome row, List<Fact> facts) {
+        LocalDate priorEnd = period.start().getMonthValue() == 1 ? LocalDate.of(period.start().getYear() - 1, 12, 31)
+                : period.start().minusDays(1);
+        if (!equityIsOwners(facts, period.end()) || !equityIsOwners(facts, priorEnd)) {
+            return null;
+        }
+        Set<Basis> consolidated = Set.of(Basis.CONSOLIDATED, Basis.NONE);
+        for (Fact f : facts) {
+            if (f.source() == Source.IFRS && "ProfitLossAttributableToNoncontrollingInterests".equals(f.concept())
+                    && f.value().signum() != 0 && consolidated.contains(f.basis())) {
+                return null;
+            }
+        }
+        return new Anchor(row.netIncome(), consolidated, 'C');
+    }
+
+    private static boolean equityIsOwners(List<Fact> facts, LocalDate at) {
+        Set<BigDecimal> equity = new LinkedHashSet<>();
+        Set<BigDecimal> owners = new LinkedHashSet<>();
+        for (Fact f : facts) {
+            if (f.source() != Source.IFRS || f.start() != null || !at.equals(f.end()) || !f.members().isEmpty()
+                    || (f.basis() != Basis.CONSOLIDATED && f.basis() != Basis.NONE)) {
+                continue;
+            }
+            if ("Equity".equals(f.concept())) {
+                equity.add(normalized(f.value()));
+            } else if ("EquityAttributableToOwnersOfParent".equals(f.concept())) {
+                owners.add(normalized(f.value()));
+            }
+        }
+        return equity.size() == 1 && equity.equals(owners);
+    }
+
+    /** 정규화한 값이 하나면 그것 · 없거나 여럿이면 {@code null}. */
+    private static BigDecimal single(List<BigDecimal> values) {
+        Set<BigDecimal> distinct = new LinkedHashSet<>();
+        values.forEach(v -> distinct.add(normalized(v)));
+        return distinct.size() == 1 ? distinct.iterator().next() : null;
+    }
+
     private static Anchor anchor(Period period, RowIncome row, List<Fact> facts) {
         boolean hasConsolidated = facts.stream().anyMatch(f -> f.basis() == Basis.CONSOLIDATED);
         Set<Basis> consolidated = Set.of(Basis.CONSOLIDATED, Basis.NONE);
