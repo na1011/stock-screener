@@ -93,7 +93,12 @@ public final class KrCommonIncome {
          * 미끼일 수 있다 — 그 행은 W가 하나이고 버리는 E가 모두 고른 E보다 작으며 같은 기간 희석 EPS로도 실렸을 때만 받는다(C+⑵ · 파마리서치
          * 2025 FY · 2026 Q1이 그 꼴이고, HMM · 피엔티 · HD현대 꼴은 상충으로 남는다).
          */
-        C1
+        C1,
+        /**
+         * 지분상품 있음 · 총 E 없음 · 계속영업 E 하나 · W 하나면 계속영업 E × W(기저 C · 계획 C 「none:no-eps」). W 단위 점검은 다른 E × W 갈래와
+         * 같다. 총 E가 없어 중단 포함 보통주 몫을 모르므로 신종자본증권이 있으면 배당성향 분모는 비운다.
+         */
+        E2
     }
 
     /**
@@ -257,6 +262,17 @@ public final class KrCommonIncome {
         }
         if (instruments) {
             if (e.isEmpty()) {
+                Set<BigDecimal> continuing = m.values(EPS_CONTINUING, period, COMMON_MEMBERS);
+                if (rules.has(Rule.E2) && w.size() == 1 && continuing.size() == 1) {
+                    BigDecimal weighted = w.iterator().next();
+                    String wrong = weightedCheck(weighted, reference, period, multiple);
+                    if (wrong != null) {
+                        return Judged.none(wrong, anchor.statement());
+                    }
+                    Payout payout = hybrid ? new Payout(null, "none:no-eps") : payout(false, income, null, m, period, prior, same, multiple);
+                    return decided("exw", continuing.iterator().next().multiply(weighted), 'C', anchor.statement(), HALF.multiply(weighted),
+                            payout.base(), payout.branch(), false);
+                }
                 return Judged.none("no-eps", anchor.statement());
             }
             if (rules.has(Rule.R1) && e.size() == 1) {

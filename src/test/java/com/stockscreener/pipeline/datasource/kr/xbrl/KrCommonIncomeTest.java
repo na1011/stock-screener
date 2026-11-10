@@ -85,6 +85,22 @@ class KrCommonIncomeTest {
     }
 
     @Test
+    void e2UsesTheContinuingEpsWhenTheLedgerGivesNoTotalEps() {
+        // 우선주가 있어 지분상품 있음 · 총 E 없음 · 계속영업 E 950원 × W 1,000만 = 95억(중단영업이 있는 해 · 국내 관문 켬 E2).
+        Fact continuing = fact(Source.IFRS, "BasicEarningsLossPerShareFromContinuingOperations", Q2, List.of(ORDINARY), 950);
+        Judged off = judge(rowNi(10_000_000_000L), WITH_PREFERRED, owners(10_000_000_000L), continuing, weighted(10_000_000));
+        Judged on = judgeV4(rowNi(10_000_000_000L), WITH_PREFERRED, owners(10_000_000_000L), continuing, weighted(10_000_000));
+        // 대조군 — W가 명부의 천 배(단위 오류)면 다른 E × W 갈래처럼 안 받는다.
+        Judged unit = judgeV4(rowNi(10_000_000_000L), WITH_PREFERRED, owners(10_000_000_000L), continuing, weighted(10_000_000_000L));
+
+        assertThat(off.branch()).as("꺼짐 — 지금 동작").isEqualTo("none:no-eps");
+        assertThat(on.branch()).isEqualTo("exw");
+        assertThat(on.common()).isEqualByComparingTo("9500000000");
+        assertThat(on.basis()).isEqualTo('C');
+        assertThat(unit.branch()).isEqualTo("none:w-unit");
+    }
+
+    @Test
     void ncTakesTheConsolidatedIncomeWhenEquityShowsNoNoncontrollingInterest() {
         // 행 지배 NI가 빈 연결 행 — 연결 순이익 100억 · 기초(03-31) · 기말(06-30) 자본총계 = 지배 자본 · 비지배 손익 줄 없음(국내 관문 켬 NC-b).
         RowIncome row = new RowIncome(null, BigDecimal.valueOf(10_000_000_000L));
