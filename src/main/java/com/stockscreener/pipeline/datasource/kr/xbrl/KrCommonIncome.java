@@ -78,7 +78,13 @@ public final class KrCommonIncome {
          * 행 지배 NI가 빈 연결 행(no-controlling)의 대체 앵커 — NC-a: 같은 판 누계 지배 귀속 − 직전 판 누계 지배 귀속(연결 순이익 누계 차가 3개월
          * 순이익과 닫힐 때만 · Q2 · Q3) · NC-b: 기초 · 기말 자본총계 = 지배 자본이고 0 아닌 비지배 손익이 없으면 연결 순이익이 지배 NI다.
          */
-        NC
+        NC,
+        /**
+         * 증인 넓힘 — 지금 증인(E × S가 지배 NI와 0.5S + 5% 안)이 깨져도, NI ÷ E 구간(E ± 0.5)이 명부 구간(앞 해 · FY는 그 해까지) ±1% 안이면 배분
+         * 0이다(기간 가중평균을 앞 해 말 명부 한 점으로 대신해 증자 · 자사주 해에 멀쩡한 행이 떨어졌다 · 계획 C 「none:witness」). 명부 구간 폭이 증인
+         * 여유(5%)를 넘으면 안 받는다(C+⑷ — 한화오션 2023 FY 대규모 증자 · 17.5% 배분을 받았다).
+         */
+        U
     }
 
     /**
@@ -264,6 +270,9 @@ public final class KrCommonIncome {
             if (shares != null) {
                 BigDecimal bound = HALF.multiply(shares).add(WITNESS_SLACK.multiply(eps.abs()).multiply(shares));
                 if (income.subtract(eps.multiply(shares)).abs().compareTo(bound) > 0) {
+                    if (rules.has(Rule.U) && intervalWitness(income, eps, period, prior, same, multiple)) {
+                        return decided("kr-ni", income, 'T', anchor.statement(), null, income, "ni", false);
+                    }
                     return Judged.none("witness", anchor.statement());
                 }
             }
@@ -292,6 +301,42 @@ public final class KrCommonIncome {
             return null;
         }
         return e.iterator().next().multiply(w.iterator().next());
+    }
+
+    /** U — NI ÷ (E ± 0.5) 구간이 명부 구간(앞 해 · FY 행은 그 해까지 · 기간 끝으로 옮긴 보통주 유통) ±1% 안인가. 명부 구간 폭이 5%를 넘으면 아니다. */
+    private static boolean intervalWitness(BigDecimal income, BigDecimal eps, Period period, Register prior, Register same,
+                                           Multiple multiple) {
+        if (eps.signum() == 0 || income.signum() == 0 || (income.signum() > 0) != (eps.signum() > 0)) {
+            return false;
+        }
+        BigDecimal low = eps.subtract(HALF);
+        BigDecimal high = eps.add(HALF);
+        if (low.signum() <= 0 && high.signum() >= 0) {
+            return false;
+        }
+        BigDecimal a = income.divide(low, MathContext.DECIMAL64);
+        BigDecimal b = income.divide(high, MathContext.DECIMAL64);
+        BigDecimal ivLow = a.min(b);
+        BigDecimal ivHigh = a.max(b);
+        boolean annual = period.start().plusYears(1).equals(period.end().plusDays(1));
+        List<BigDecimal> registers = new ArrayList<>();
+        for (Register g : annual ? java.util.Arrays.asList(prior, same) : java.util.Collections.singletonList(prior)) {
+            BigDecimal adjusted = g == null ? null : adjusted(g, period, multiple);
+            if (adjusted != null && adjusted.signum() != 0) {
+                registers.add(adjusted);
+            }
+        }
+        if (registers.isEmpty()) {
+            return false;
+        }
+        BigDecimal lo = java.util.Collections.min(registers);
+        BigDecimal hi = java.util.Collections.max(registers);
+        if (hi.subtract(lo).compareTo(WITNESS_SLACK.multiply(lo)) > 0) {
+            return false;
+        }
+        double gap = ivHigh.compareTo(lo) < 0 ? lo.subtract(ivHigh).divide(lo, MathContext.DECIMAL64).doubleValue()
+                : ivLow.compareTo(hi) > 0 ? ivLow.subtract(hi).divide(hi, MathContext.DECIMAL64).doubleValue() : 0.0;
+        return gap <= 0.01;
     }
 
     private static Judged decided(String branch, BigDecimal common, char basis, char statement, BigDecimal tolerance,

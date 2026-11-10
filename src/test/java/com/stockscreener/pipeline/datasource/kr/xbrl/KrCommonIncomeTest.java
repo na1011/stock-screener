@@ -75,6 +75,24 @@ class KrCommonIncomeTest {
         assertThat(minority.branch()).isEqualTo("none:no-controlling");
     }
 
+    @Test
+    void uAcceptsTheIntervalOnlyWhenTheRegisterRangeIsNarrow() {
+        // FY · E 100원 · 지배 NI 10.6억 — 앞 해 명부 1,000만 한 점 증인은 깨진다(6천만 > 0.5S + 5%). NI ÷ (E ± 0.5) = [1,054.7만, 1,065.3만]이
+        // 명부 구간 [1,000만(앞 해), 1,045만(그 해)] 위 0.93% 안 · 구간 폭 4.5%(≤ 5%) — 국내 관문 켬 U가 배분 0으로 받는다.
+        Period fy = new Period(LocalDate.of(2026, 1, 1), LocalDate.of(2026, 12, 31));
+        RowIncome income = rowNi(1_060_000_000L);
+        List<Fact> facts = List.of(fact(Source.IFRS, "ProfitLossAttributableToOwnersOfParent", fy, List.of(), 1_060_000_000L),
+                fact(Source.IFRS, "BasicEarningsLossPerShare", fy, List.of(ORDINARY), 100));
+        Register prior = register(row("보통주", 10_000_000, 0));
+        Register narrow = register(row("보통주", 10_450_000, 0));
+        // 대조군 — 그 해 명부가 1,200만(구간 폭 20%)이면 넓은 구간이 배분을 감출 수 있어 안 받는다(C+⑷).
+        Register wide = register(row("보통주", 12_000_000, 0));
+
+        assertThat(KrCommonIncome.judge(fy, income, facts, prior, narrow, NO_ACTIONS).branch()).as("꺼짐").isEqualTo("none:witness");
+        assertThat(KrCommonIncome.judge(fy, income, facts, prior, narrow, NO_ACTIONS, KrCommonIncome.Rules.V4).branch()).isEqualTo("kr-ni");
+        assertThat(KrCommonIncome.judge(fy, income, facts, prior, wide, NO_ACTIONS, KrCommonIncome.Rules.V4).branch()).isEqualTo("none:witness");
+    }
+
     private static Fact instant(String concept, LocalDate at, long value) {
         return new Fact(Source.IFRS, concept, null, at, Basis.CONSOLIDATED, List.of(), BigDecimal.valueOf(value));
     }
