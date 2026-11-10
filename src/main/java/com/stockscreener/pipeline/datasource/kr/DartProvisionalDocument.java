@@ -28,7 +28,8 @@ import java.util.regex.Pattern;
  *   <li><b>옛 I002 서식</b>(2025-09 무렵까지)에는 「실적기간」 표가 없고 당기 칸 머리에 회사가 쓴 분기 표지만 있다 — {@code ('25.2Q)} ·
  *       {@code (2025.2Q)} · {@code (25.2분기)} · {@code ('25년2분기)} · {@code (2025년 2분기)}(2026-11-10 표본 18건). 연도와 분기 숫자로 읽고 누계는
  *       그 해 1월 1일부터로 본다 — 그 가정이 틀린 공시는 계산 쪽 자체 검사(당해 = 누계 − 정식 앞 분기 합)가 못 읽음으로 거른다. 표지가
- *       {@code (-)}이면(옛 월간 실적) 원장이 기간을 안 준 것이라 못 읽음이다(발표로 남아 막는다).</li>
+ *       비었으면({@code (-)} · {@code ()}) 원장이 기간을 안 준 것이라 못 읽음이다(발표로 남아 막는다). 월 표지({@code (2025.8월)})는 월간 실적이라
+ *       값은 안 읽고 기간만 싣는다(실적 발표에서 빠진다).</li>
  *   <li>정정 공시는 정정전 · 정정후 표 뒤에 <b>고친 서식 전체</b>를 다시 싣는다 — 서식의 마지막 닻부터 읽는다. 정정 표의 칸은 닻 앞이라
  *       안 읽힌다(정정 표의 열을 값으로 읽은 오독이 046890에 있었다 · 그것은 계산 쪽 자체 검사가 따로 거른다).</li>
  * </ul>
@@ -101,8 +102,16 @@ public final class DartProvisionalDocument {
             "백만원", 1_000_000L, "천원", 1_000L, "원", 1L);
     private static final Pattern UNIT = Pattern.compile("단위\\s*[:：]\\s*(조원|십억원|억원|백만원|천원|원)");
     private static final Pattern DATE = Pattern.compile("\\d{4}-\\d{2}-\\d{2}");
-    /** 옛 서식의 분기 표지(공백을 지운 칸) — 연도 2 · 4자리 + 분기 숫자. */
-    private static final Pattern QUARTER_LABEL = Pattern.compile("'?(\\d{4}|\\d{2})[.년]?([1-4])(?:Q|분기)");
+    /**
+     * 옛 서식의 기간 표지(공백을 지운 칸) — 넷이고 이 순서로 묻는다(2026-11-10 캐시 2,266건 전수): 날짜 구간 {@code (2025.4.1~2025.6.30)}
+     * {@code ('25.4.1~'25.6.30)} · 연도 앞 분기 {@code ('25.2Q)} {@code (2025-2Q)} {@code (25년2분기)} {@code ('25.Q2)} {@code (2025년2/4분기)} ·
+     * 분기 앞 연도 {@code (2Q25)} {@code (2Q'25)} · 월 {@code (2025.8월)}. 회사 기수({@code (제71기2분기)})는 달력 연도로 못 옮겨 안 읽는다.
+     */
+    private static final Pattern RANGE_LABEL = Pattern.compile(
+            "'?(\\d{4}|\\d{2})[.\\-](\\d{1,2})[.\\-](\\d{1,2})\\.?~(?:'?(\\d{4}|\\d{2})[.\\-])?(\\d{1,2})[.\\-](\\d{1,2})(?!\\d)");
+    private static final Pattern QUARTER_LABEL = Pattern.compile("'?(\\d{4}|\\d{2})[.년Y\\-]?(?:Q([1-4])|([1-4])(?:/4)?(?:Q|분기))");
+    private static final Pattern QUARTER_FIRST_LABEL = Pattern.compile("\\(([1-4])Q'?(\\d{4}|\\d{2})\\)");
+    private static final Pattern MONTH_LABEL = Pattern.compile("'?(\\d{4}|\\d{2})[.년\\-]?(\\d{1,2})월");
     private static final Pattern CELL_OPEN = Pattern.compile("(?is)<t[dh]\\b[^>]*>");
     private static final Pattern CELL_CLOSE = Pattern.compile("(?i)</t[dh]>");
     private static final Pattern TAG = Pattern.compile("(?s)<[^>]*>");
@@ -146,19 +155,34 @@ public final class DartProvisionalDocument {
         if (anchor >= 0) {
             current = periodAfter(cells, anchor, "당기실적");
             cumulative = periodAfter(cells, anchor, "당기누계실적");
+            if (current == null) {
+                // 「실적기간」 표의 날짜를 비우고 머리 표지만 쓴 공시(2026-11-10 전수 1건 · 월간) — 표지로 기간을 읽는다.
+                current = labelAfter(cells, anchor);
+                if (current != null && periodOf(current[0], current[1]) == ReleasePeriod.MONTH) {
+                    throw new Unreadable("monthly-label", current[0], current[1]);
+                }
+            }
         } else {
             anchor = lastMatching(cells, "^\\d\\.(연결)?실적내용$");
             if (anchor < 0) {
                 throw new Unreadable("no-anchor", null, null);
             }
-            current = quarterLabelAfter(cells, anchor);
+            current = labelAfter(cells, anchor);
             if (current == null) {
                 throw new Unreadable("no-period-label", null, null);
+            }
+            if (periodOf(current[0], current[1]) == ReleasePeriod.MONTH) {
+                // 옛 월간 실적 — 누계 기간을 안 주므로 값은 안 읽고, 기간만 실어 실적 발표에서 빼게 한다.
+                throw new Unreadable("monthly-label", current[0], current[1]);
             }
             cumulative = new LocalDate[]{current[1].withDayOfYear(1), current[1]};
         }
         if (current == null) {
             throw new Unreadable("no-period", null, null);
+        }
+        if (cumulative == null && periodOf(current[0], current[1]) == ReleasePeriod.YEAR) {
+            // 당기가 결산 한 해 전체면 누계가 곧 당기다(누계 칸을 「-」로 비워 낸 결산 공시 · 2026-11-10 전수 6건).
+            cumulative = current;
         }
         if (cumulative == null) {
             throw new Unreadable("no-cumulative-period", current[0], current[1]);
@@ -282,22 +306,59 @@ public final class DartProvisionalDocument {
     }
 
     /** 옛 서식 — 닻 뒤 첫 분기 표지(당기 칸 머리 · 당기 · 전기 · 전년동기 순서로 온다)의 분기 {시작, 끝}. */
-    private static LocalDate[] quarterLabelAfter(List<String> cells, int anchor) {
+    /** 옛 서식 — 닻 뒤 첫 기간 표지(당기 칸 머리 · 당기 · 전기 · 전년동기 순서로 온다)의 {시작, 끝}. */
+    private static LocalDate[] labelAfter(List<String> cells, int anchor) {
         for (int i = anchor + 1; i < Math.min(cells.size(), anchor + 20); i++) {
             String c = compact(cells.get(i));
             if (c.startsWith("매출액")) {
                 return null;
             }
-            Matcher m = QUARTER_LABEL.matcher(c);
-            if (m.find()) {
-                int year = Integer.parseInt(m.group(1));
-                year = year < 100 ? 2000 + year : year;
-                int quarter = Integer.parseInt(m.group(2));
-                LocalDate start = LocalDate.of(year, quarter * 3 - 2, 1);
-                return new LocalDate[]{start, start.plusMonths(3).minusDays(1)};
+            LocalDate[] period = periodOfLabel(c);
+            if (period != null) {
+                return period;
             }
         }
         return null;
+    }
+
+    /** 칸 하나의 기간 표지 — 없으면 {@code null}. */
+    static LocalDate[] periodOfLabel(String compactCell) {
+        Matcher range = RANGE_LABEL.matcher(compactCell);
+        if (range.find()) {
+            int startYear = fullYear(Integer.parseInt(range.group(1)));
+            // 끝 날짜의 연도를 뺀 꼴('25.4.1~6.30)은 시작 연도다.
+            int endYear = range.group(4) == null ? startYear : fullYear(Integer.parseInt(range.group(4)));
+            return new LocalDate[]{LocalDate.of(startYear, Integer.parseInt(range.group(2)), Integer.parseInt(range.group(3))),
+                    LocalDate.of(endYear, Integer.parseInt(range.group(5)), Integer.parseInt(range.group(6)))};
+        }
+        Matcher quarter = QUARTER_LABEL.matcher(compactCell);
+        if (quarter.find()) {
+            return quarterOf(Integer.parseInt(quarter.group(1)),
+                    Integer.parseInt(quarter.group(2) != null ? quarter.group(2) : quarter.group(3)));
+        }
+        Matcher first = QUARTER_FIRST_LABEL.matcher(compactCell);
+        if (first.find()) {
+            return quarterOf(Integer.parseInt(first.group(2)), Integer.parseInt(first.group(1)));
+        }
+        Matcher month = MONTH_LABEL.matcher(compactCell);
+        if (month.find()) {
+            int m = Integer.parseInt(month.group(2));
+            if (m < 1 || m > 12) {
+                return null;
+            }
+            LocalDate start = LocalDate.of(fullYear(Integer.parseInt(month.group(1))), m, 1);
+            return new LocalDate[]{start, start.withDayOfMonth(start.lengthOfMonth())};
+        }
+        return null;
+    }
+
+    private static LocalDate[] quarterOf(int year, int quarter) {
+        LocalDate start = LocalDate.of(fullYear(year), quarter * 3 - 2, 1);
+        return new LocalDate[]{start, start.plusMonths(3).minusDays(1)};
+    }
+
+    private static int fullYear(int year) {
+        return year < 100 ? 2000 + year : year;
     }
 
     private static int lastMatching(List<String> cells, String regex) {

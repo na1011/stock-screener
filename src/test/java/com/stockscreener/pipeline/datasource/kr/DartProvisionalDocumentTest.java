@@ -97,6 +97,21 @@ class DartProvisionalDocumentTest {
     }
 
     @Test
+    @DisplayName("옛 서식의 기간 표지 꼴 넷 — 날짜 구간 · 연도 앞 분기 · 분기 앞 연도 · 월(2026-11-10 캐시 전수에서 본 꼴)")
+    void oldFormLabels() {
+        LocalDate q2Start = LocalDate.of(2025, 4, 1);
+        LocalDate q2End = LocalDate.of(2025, 6, 30);
+        for (String label : new String[]{"('25.2Q)", "(2025.2Q)", "(2025-2Q)", "(25.2분기)", "('25년2분기)", "(2025년2분기)", "(2Q25)",
+                "(2Q'25)", "(2025.4.1~2025.6.30)", "('25.4.1~'25.6.30)", "(2025-04-01~2025-06-30)", "('25.Q2)", "(2025년2/4분기)", "('25Y2Q)", "('25.4.1~6.30)", "(2025.04.01.~2025.06.30.)", "2025.04.01~2025.06.30"}) {
+            assertThat(DartProvisionalDocument.periodOfLabel(label)).as(label).containsExactly(q2Start, q2End);
+        }
+        assertThat(DartProvisionalDocument.periodOfLabel("(2025.8월)")).containsExactly(LocalDate.of(2025, 8, 1), LocalDate.of(2025, 8, 31));
+        assertThat(DartProvisionalDocument.periodOfLabel("(-)")).isNull();
+        assertThat(DartProvisionalDocument.periodOfLabel("()")).isNull();
+        assertThat(DartProvisionalDocument.periodOfLabel("(제71기2분기)")).as("회사 기수는 달력 연도가 아니다").isNull();
+    }
+
+    @Test
     @DisplayName("기간 꼴 — 한 달 안만 월간이고, 잘못 적힌 기간(2026-03-01 ~ 06-30 · 098460)은 월간이 아니다(발표로 남는다)")
     void periodKinds() {
         assertThat(DartProvisionalDocument.periodOf(LocalDate.of(2026, 3, 1), LocalDate.of(2026, 6, 30)))
