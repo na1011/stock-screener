@@ -64,6 +64,14 @@ public class KrXbrlCollector implements DartEarlierInstances {
         this.cacheDir = Path.of(cacheDir);
     }
 
+    /** 국내 관문({@code stockscreener.gate.kr-provisional}) — 켜면 짝 고르기가 XBRL 없는 첨부정정 판을 건너뛴다(K5). 시험은 생성자만 부른다. */
+    private boolean krGate;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    void krGate(@Value("${stockscreener.gate.kr-provisional}") boolean on) {
+        this.krGate = on;
+    }
+
     /** 키가 없는 환경(시험 · 키 없는 사본)에서는 소스가 없다 — 잡이 시장 미완료로 센다. */
     public boolean hasSource() {
         return client.getIfAvailable() != null && corpCodes.getIfAvailable() != null;
@@ -86,7 +94,7 @@ public class KrXbrlCollector implements DartEarlierInstances {
                 DataSourceException.Kind.NOT_FOUND, "dart", "corp_code를 모른다(corpCode.xml에 없음): " + target.ticker()));
         List<RowVintage> rows = store.rowVintages(target.stockId());
         List<Filing> filings = store.filings(target.stockId());
-        if (rows.stream().anyMatch(r -> bound(r, filings) == null)) {
+        if (rows.stream().anyMatch(r -> bound(r, filings, krGate) == null)) {
             for (DartXbrlClient.Filing f : dart.periodicFilings(corpCode, LIST_FROM, today)) {
                 DartReportKey key = DartReportKey.of(f.detailType(), f.reportName(), target.accountingMonth());
                 store.upsertListed(target.stockId(), corpCode, f.detailType(), f.reportName(), f.rceptNo(), f.rceptDate(),
@@ -104,7 +112,7 @@ public class KrXbrlCollector implements DartEarlierInstances {
         String firstFailure = null;
         List<Filing> queue = new java.util.ArrayList<>();
         for (RowVintage row : rows) {
-            Filing filing = bound(row, filings);
+            Filing filing = bound(row, filings, krGate);
             if (filing == null) {
                 unbound++;
                 continue;
@@ -172,7 +180,7 @@ public class KrXbrlCollector implements DartEarlierInstances {
         // 받은 판은 이름표가 없어 한 번 더 받는다(같은 1콜 · 새로 받기 상한 안). 값을 안 바꾸는 재료다.
         int labels = 0;
         for (RowVintage row : rows) {
-            Filing filing = row.latest() ? null : bound(row, filings);
+            Filing filing = row.latest() ? null : bound(row, filings, krGate);
             if (filing == null || !"OK".equals(filing.status()) || Files.exists(labelPath(corpCode, filing.rceptNo()))
                     || !Files.exists(cachePath(corpCode, filing.rceptNo())) || fetchBudget.get() <= 0) {
                 continue;
@@ -213,6 +221,20 @@ public class KrXbrlCollector implements DartEarlierInstances {
 
     /** 재무 행 판 하나의 짝 — 같은 (사업연도, 보고서 코드) · 같은 날 판 중 가장 늦은 접수번호. 없으면 {@code null}. */
     static Filing bound(RowVintage row, List<Filing> filings) {
+        return bound(row, filings, false);
+    }
+
+    /**
+     * @param skipNoFile 국내 관문 켬(계획 K5) — 같은 날 판 중 XBRL이 없다고 확인된 판({@code NO_FILE} · 주로 {@code [첨부정정]})은 같은 날 다른 판이 있으면
+     *                   건너뛴다. 가장 늦은 접수번호만 고르면 첨부정정 판이 짝이 되어 원 판은 받지도 않고 그 판의 보통주 몫이 영영 「키 없음」이다
+     *                   (2026-11-10 운영: 36판/33종목 · 배당성향 분모 포함)
+     */
+    static Filing bound(RowVintage row, List<Filing> filings, boolean skipNoFile) {
+        Filing found = latestSameDay(row, filings, skipNoFile);
+        return found != null || !skipNoFile ? found : latestSameDay(row, filings, false);
+    }
+
+    private static Filing latestSameDay(RowVintage row, List<Filing> filings, boolean skipNoFile) {
         String code = switch (row.fiscalPeriod()) {
             case "Q1" -> "11013";
             case "Q2" -> "11012";
@@ -223,7 +245,8 @@ public class KrXbrlCollector implements DartEarlierInstances {
         Filing found = null;
         for (Filing f : filings) {
             if (code != null && code.equals(f.reprtCode()) && f.bsnsYear() != null && f.bsnsYear() == row.fiscalYear()
-                    && f.publishedOn(row.published()) && (found == null || f.rceptNo().compareTo(found.rceptNo()) > 0)) {
+                    && f.publishedOn(row.published()) && !(skipNoFile && "NO_FILE".equals(f.status()))
+                    && (found == null || f.rceptNo().compareTo(found.rceptNo()) > 0)) {
                 found = f;
             }
         }

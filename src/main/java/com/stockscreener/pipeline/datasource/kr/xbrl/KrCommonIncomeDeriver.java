@@ -46,6 +46,14 @@ public class KrCommonIncomeDeriver {
         this.transaction = new TransactionTemplate(transactionManager);
     }
 
+    /** 국내 관문({@code stockscreener.gate.kr-provisional}) — 켜면 짝 고르기가 XBRL 없는 첨부정정 판을 건너뛴다(K5 · 수집기와 같은 짝). */
+    private boolean krGate;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    void krGate(@org.springframework.beans.factory.annotation.Value("${stockscreener.gate.kr-provisional}") boolean on) {
+        this.krGate = on;
+    }
+
     /** 결과 수 — 종목 · 붙인 행 · 값을 정한 행 · 건너뛴 종목(예외). */
     public record Derived(int stocks, int rows, int decided, int failedStocks) {
     }
@@ -90,7 +98,7 @@ public class KrCommonIncomeDeriver {
             LocalDate published = rs.getObject("published_at", LocalDate.class);
             List<DartXbrlFactReader.Fact> f = null;
             if (!"Q4".equals(period)) {
-                Filing bound = KrXbrlCollector.bound(new RowVintage(year, period, published), filings);
+                Filing bound = KrXbrlCollector.bound(new RowVintage(year, period, published), filings, krGate);
                 f = bound == null ? null : facts.get(bound.rceptNo());
             }
             rows.add(new Row(id, year, period, rs.getObject("period_start", LocalDate.class),
