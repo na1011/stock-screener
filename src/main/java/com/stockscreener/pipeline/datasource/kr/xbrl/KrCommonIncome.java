@@ -53,6 +53,9 @@ public final class KrCommonIncome {
     private static final String NONCONTROLLING = "ProfitLossAttributableToNoncontrollingInterests";
     private static final String OUTSTANDING = "NumberOfSharesOutstanding";
     static final String PREF_EPS_DART = "BasicEarningsLossPerSharePreferredStock";
+    /** {@link Rule#R1P}의 H — 지배 열의 신종자본 배당 · 이자. */
+    private static final Set<String> HYBRID_FLOWS = Set.of("DividendToHybridBond", "InterestExpenseForHybridBond");
+    private static final String OWNERS_COLUMN = "EquityAttributableToOwnersOfParentMember";
     static final String PREF_EPS_IFRS = "BasicEarningsLossPerInstrumentParticipatingEquityInstrumentsOtherThanOrdinaryShares";
     private static final String PREF_WEIGHTED =
             "WeightedAverageNumberOfInstrumentsUsedInCalculatingBasicEarningsLossPerInstrumentParticipatingEquityInstrumentsOtherThanOrdinaryShares";
@@ -147,7 +150,15 @@ public final class KrCommonIncome {
          * 비교열 W — 그 판에 W가 없고 E가 하나면, 뒤에 접수된 판 중 같은 기간 W가 하나인 첫 판의 W를 쓴다(그 판의 같은 기간 E 집합이 이 판과 같을
          * 때만 · W 단위 점검에 걸리면 안 받는다). 그 판 재료로 값이 안 설 때만 쓰고(행 해석이 고른다), 그 행의 보통주 몫은 뒤 판 접수일부터 보인다.
          */
-        CMP
+        CMP,
+        /**
+         * R1 넓힘 — 지분상품 있음 · W 없음 · E 하나 · R1(배분 0)이 안 닫히면, 원장이 밝힌 비보통 몫 후보 a ∈ {H, P, H + P} 중 |지배 NI − a − E × S|
+         * ≤ 0.5S로 닫히는 것이 값으로 하나일 때 보통주 몫 = 지배 NI − a(갈래 {@code r1+}). H = 같은 판 지배 열의 신종자본 배당 · 이자 그 기간 값 하나
+         * (반기 · 3분기는 원장이 누계로만 주므로 그 판 누계 − 직전 판 누계) · P = 축 없는 우선주 EPS 그 기간 값 하나 × 기준 명부 우선 유통(종류가 둘일
+         * 때). 신종자본 증거가 있는데 H가 안 서면 P만으로는 안 받는다. 반기 · 3분기는 누계 갈래로 안 설 때만 쓴다(행 해석이 고른다 · 계획 K3-a —
+         * 원장 W가 있는 행에 같은 산수를 태워 148/148이 E × W와 0.5W 안이다. 닫힘 검사 없이 H만 빼면 한 종류 대조군 90 중 15가 갈린다).
+         */
+        R1P
     }
 
     /** {@link Rule#CMP}의 재료 — 그 행 판보다 뒤에 접수된 판 하나(접수번호 · 접수일 · 재료 · 재료가 없으면 {@code null}). */
@@ -235,18 +246,25 @@ public final class KrCommonIncome {
     }
 
     /** 판정 결과. 값이 없으면 {@code common}이 {@code null}이고 {@code branch}가 {@code none:*}다. */
+    /** @param fallback 누계 갈래로도 값이 안 설 때 쓰는 그 판 판정({@link Rule#R1P}) — 없으면 {@code null} */
     public record Judged(String branch, BigDecimal common, char basis, char statement, BigDecimal tolerance,
-                         BigDecimal payoutBase, String payoutBranch, boolean wantsCumulative, LocalDate comparativeReceipt) {
+                         BigDecimal payoutBase, String payoutBranch, boolean wantsCumulative, LocalDate comparativeReceipt,
+                         Judged fallback) {
 
         public Judged(String branch, BigDecimal common, char basis, char statement, BigDecimal tolerance, BigDecimal payoutBase,
                       String payoutBranch, boolean wantsCumulative) {
-            this(branch, common, basis, statement, tolerance, payoutBase, payoutBranch, wantsCumulative, null);
+            this(branch, common, basis, statement, tolerance, payoutBase, payoutBranch, wantsCumulative, null, null);
         }
 
         /** 비교열 W({@link Rule#CMP})를 쓴 판정 — 뒤 판 접수일을 단다. */
         Judged withComparative(LocalDate receipt) {
             return receipt == null ? this
-                    : new Judged(branch, common, basis, statement, tolerance, payoutBase, payoutBranch, wantsCumulative, receipt);
+                    : new Judged(branch, common, basis, statement, tolerance, payoutBase, payoutBranch, wantsCumulative, receipt, fallback);
+        }
+
+        Judged withFallback(Judged decided) {
+            return new Judged(branch, common, basis, statement, tolerance, payoutBase, payoutBranch, wantsCumulative, comparativeReceipt,
+                    decided);
         }
 
         /** 배당성향 분모가 보통주 몫에 기대는가 — 지배 NI 그대로({@code ni})면 보통주 몫의 가시일을 안 탄다. */
@@ -325,8 +343,81 @@ public final class KrCommonIncome {
                 comparative = found.receipt();
             }
         }
-        return judgeWith(period, anchor, m, hybrid, instruments, income, e, w, reference, prior, same, multiple, rules)
+        Judged judged = judgeWith(period, anchor, m, hybrid, instruments, income, e, w, reference, prior, same, multiple, rules)
                 .withComparative(comparative);
+        if (rules.has(Rule.R1P) && "none:no-w".equals(judged.branch()) && e.size() == 1) {
+            BigDecimal shares = adjusted(reference, period, multiple);
+            BigDecimal common = shares == null || shares.signum() == 0 ? null
+                    : allocated(m, nc, period, income, e.iterator().next(), shares, reference, hybrid, multiple);
+            if (common != null) {
+                Payout payout = payout(hybrid, income, common, m, period, prior, same, multiple);
+                judged = judged.withFallback(decided("r1+", common, 'T', anchor.statement(), HALF.multiply(shares), payout.base(),
+                        payout.branch(), false));
+            }
+        }
+        return judged;
+    }
+
+    /** {@link Rule#R1P}의 보통주 몫 — 닫히는 후보가 값으로 하나가 아니면 {@code null}. */
+    private static BigDecimal allocated(Material m, NcContext nc, Period period, BigDecimal income, BigDecimal eps, BigDecimal shares,
+                                        Register reference, boolean hybrid, Multiple multiple) {
+        Set<BigDecimal> flows = ownHybridFlows(m.facts(), m.bases(), period.start(), period.end());
+        BigDecimal h = flows.size() == 1 ? flows.iterator().next() : flows.isEmpty() ? ytdHybridFlow(m, nc, period) : null;
+        Set<BigDecimal> prefEps = new LinkedHashSet<>();
+        for (Fact f : m.facts()) {
+            if (f.source() == Source.DART && PREF_EPS_DART.equals(f.concept()) && f.members().isEmpty()
+                    && period.start().equals(f.start()) && period.end().equals(f.end())) {
+                prefEps.add(normalized(f.value()));
+            }
+        }
+        BigDecimal p = null;
+        if (prefEps.size() == 1 && reference != null && reference.classCount() == 2 && reference.totalOutstanding() != null
+                && reference.commonOutstanding() != null && reference.totalOutstanding().compareTo(reference.commonOutstanding()) > 0) {
+            BigDecimal preferred = reference.totalOutstanding().subtract(reference.commonOutstanding())
+                    .multiply(BigDecimal.valueOf(scale(reference, period, multiple)), MathContext.DECIMAL64);
+            p = prefEps.iterator().next().multiply(preferred);
+        }
+        List<BigDecimal> candidates = new ArrayList<>();
+        if (h != null) {
+            candidates.add(h);
+        }
+        if (p != null && (h != null || !hybrid)) {
+            candidates.add(p);
+        }
+        if (p != null && h != null) {
+            candidates.add(h.add(p));
+        }
+        BigDecimal product = eps.multiply(shares);
+        BigDecimal tolerance = HALF.multiply(shares);
+        Set<BigDecimal> hit = new LinkedHashSet<>();
+        for (BigDecimal a : candidates) {
+            if (a.signum() != 0 && income.subtract(a).subtract(product).abs().compareTo(tolerance) <= 0) {
+                hit.add(normalized(a));
+            }
+        }
+        return hit.size() == 1 ? income.subtract(hit.iterator().next()) : null;
+    }
+
+    /** 지배 열 하나({@code EquityAttributableToOwnersOfParentMember})의 신종자본 배당 · 이자 — 그 기간 값들(절댓값). */
+    private static Set<BigDecimal> ownHybridFlows(List<Fact> facts, Set<Basis> bases, LocalDate start, LocalDate end) {
+        Set<BigDecimal> out = new LinkedHashSet<>();
+        for (Fact f : facts) {
+            if (f.source() == Source.DART && HYBRID_FLOWS.contains(f.concept()) && bases.contains(f.basis()) && f.members().size() == 1
+                    && OWNERS_COLUMN.equals(f.members().get(0).member()) && start.equals(f.start()) && end.equals(f.end())) {
+                out.add(normalized(f.value().abs()));
+            }
+        }
+        return out;
+    }
+
+    /** 반기 · 3분기 3개월 몫 = 그 판 누계 − 직전 판 누계(NC-a 재료와 같은 정의) — 어느 쪽이든 하나가 아니면 {@code null}. */
+    private static BigDecimal ytdHybridFlow(Material m, NcContext nc, Period period) {
+        if (nc == null || !nc.previousEnd().plusDays(1).equals(period.start())) {
+            return null;
+        }
+        Set<BigDecimal> now = ownHybridFlows(m.facts(), m.bases(), nc.yearStart(), period.end());
+        Set<BigDecimal> before = ownHybridFlows(nc.previousFacts(), m.bases(), nc.yearStart(), nc.previousEnd());
+        return now.size() == 1 && before.size() == 1 ? now.iterator().next().subtract(before.iterator().next()) : null;
     }
 
     /** {@link Rule#CMP} — 뒤 판 중 같은 기간 W가 하나인 첫 판. 그 판의 같은 기간 E 집합이 {@code e}와 다르면 거기서 멈춘다({@code null}). */

@@ -151,7 +151,9 @@ public final class KrCommonIncomeRows {
                 j = KrCommonIncome.judge(row.period(), row.income(), row.facts(), prior, same, multiple,
                         rules.without(KrCommonIncome.Rule.CMP), nc);
                 // 누계 갈래(반기 · 3분기 누계 − 앞 분기)로 서는 값도 그 판 재료다 — 그것까지 안 설 때만 뒤 판을 본다.
-                boolean own = j.common() != null || j.wantsCumulative() && ("Q2".equals(row.fiscalPeriod()) || "Q3".equals(row.fiscalPeriod()))
+                // R1+(원장 비보통 몫 후보로 닫힌 값)도 그 판 재료다.
+                boolean own = j.common() != null || j.fallback() != null
+                        || j.wantsCumulative() && ("Q2".equals(row.fiscalPeriod()) || "Q3".equals(row.fiscalPeriod()))
                         && cumulative(row, j, ordered, out, rules.without(KrCommonIncome.Rule.CMP), nc).common() != null;
                 if (!own) {
                     j = KrCommonIncome.judge(row.period(), row.income(), row.facts(), prior, same, multiple, rules, nc, later.after(row));
@@ -162,12 +164,18 @@ public final class KrCommonIncomeRows {
             if (j.comparativeReceipt() != null) {
                 visible = later(visible, j.comparativeReceipt());
             }
-            Resolved resolved;
+            Resolved resolved = null;
             if (j.wantsCumulative() && ("Q2".equals(row.fiscalPeriod()) || "Q3".equals(row.fiscalPeriod()))) {
-                resolved = cumulative(row, j, ordered, out, rules, nc);
-                // 누계 몫 − 앞 분기 몫 — 앞 분기 몫이 늦게 보이면 이 값도 그날부터다.
-                visible = later(visible, partsVisible(ordered, row, "Q2".equals(row.fiscalPeriod()) ? List.of("Q1") : List.of("Q1", "Q2"), out));
-            } else {
+                Resolved cumulative = cumulative(row, j, ordered, out, rules, nc);
+                if (cumulative.common() != null || j.fallback() == null) {
+                    resolved = cumulative;
+                    // 누계 몫 − 앞 분기 몫 — 앞 분기 몫이 늦게 보이면 이 값도 그날부터다.
+                    visible = later(visible, partsVisible(ordered, row, "Q2".equals(row.fiscalPeriod()) ? List.of("Q1") : List.of("Q1", "Q2"), out));
+                }
+            }
+            if (resolved == null) {
+                // 누계로 안 선 반기 · 3분기와 1분기 · 연간 — 그 판 판정(값이 없고 R1+가 섰으면 그것).
+                j = j.common() == null && j.fallback() != null ? j.fallback() : j;
                 resolved = new Resolved(row, j.branch(), j.common(), j.basis(), j.statement(), j.payoutBase());
             }
             out.put(row.id(), resolved.visible(visible, resolved.payoutBase() != null && j.payoutFollowsCommon() ? visible : null));

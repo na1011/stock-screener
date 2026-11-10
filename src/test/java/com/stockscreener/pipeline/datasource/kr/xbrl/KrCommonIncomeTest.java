@@ -29,6 +29,7 @@ class KrCommonIncomeTest {
     private static final LocalDate END = LocalDate.of(2026, 6, 30);
     private static final LocalDate REGISTER_DAY = LocalDate.of(2025, 12, 31);
     private static final Member ORDINARY = new Member("ClassesOfShareCapitalAxis", "OrdinarySharesMember", Source.IFRS);
+    private static final Member PARENT = new Member("ComponentsOfEquityAxis", "EquityAttributableToOwnersOfParentMember", Source.IFRS);
     private static final KrCommonIncome.Multiple NO_ACTIONS = (from, to) -> 1.0;
 
     /** 보통주만 1,000만 주(자기주식 0). */
@@ -49,6 +50,54 @@ class KrCommonIncomeTest {
         assertThat(on.branch()).isEqualTo("kr-ni");
         assertThat(on.common()).isEqualByComparingTo("10000000000");
         assertThat(allocated.branch()).isEqualTo("none:no-w");
+    }
+
+    @Test
+    void r1PlusTakesTheLedgerPreferredShareWhenItCloses() {
+        // 우선주 100만 · 3개월 W 없음 · 보통주 E 1,000 · 우선주 E 1,050 · 지배 NI 110.5억 — R1(배분 0)은 안 닫히고 NI − 우선 EPS × 명부 우선 유통
+        // = 100억이 E × 명부 보통주와 닫힌다(국내 관문 켬 R1+). 값은 행 해석이 누계 갈래 뒤에 고르므로 판정은 no-w에 대체 판정을 단다.
+        Fact preferred = fact(Source.DART, "BasicEarningsLossPerSharePreferredStock", Q2, List.of(), 1050);
+        Judged off = judge(rowNi(11_050_000_000L), WITH_PREFERRED, owners(11_050_000_000L), eps(1000), preferred);
+        Judged on = judgeV4(rowNi(11_050_000_000L), WITH_PREFERRED, owners(11_050_000_000L), eps(1000), preferred);
+        // 대조군 — 우선주 E 1,100이면 5,000만 어긋나 보통주 반올림 폭(500만) 밖이다.
+        Judged apart = judgeV4(rowNi(11_050_000_000L), WITH_PREFERRED, owners(11_050_000_000L), eps(1000),
+                fact(Source.DART, "BasicEarningsLossPerSharePreferredStock", Q2, List.of(), 1100));
+
+        assertThat(off.fallback()).as("꺼짐 — 지금 동작").isNull();
+        assertThat(on.branch()).isEqualTo("none:no-w");
+        assertThat(on.fallback().branch()).isEqualTo("r1+");
+        assertThat(on.fallback().common()).isEqualByComparingTo("10000000000");
+        assertThat(apart.fallback()).isNull();
+    }
+
+    @Test
+    void r1PlusTakesTheOwnHybridFlowAndNeedsItWhenHybridEvidenceExists() {
+        // 신종자본 · 지배 열 배당 5억(그 기간) · E 1,000 × 명부 1,000만 = 100억 = 지배 NI 105억 − 5억.
+        Fact flow = fact(Source.DART, "DividendToHybridBond", Q2, List.of(PARENT), 500_000_000);
+        Judged on = judgeV4(rowNi(10_500_000_000L), COMMON_ONLY, owners(10_500_000_000L), eps(1000), flow);
+        // 대조군 — 신종자본 증거(다른 기간 배당)가 있는데 그 기간 지배 열 값이 없으면 우선주 몫만으로 닫혀도 안 받는다.
+        Fact elsewhere = fact(Source.DART, "DividendToHybridBond", H1, List.of(PARENT), 500_000_000);
+        Fact preferred = fact(Source.DART, "BasicEarningsLossPerSharePreferredStock", Q2, List.of(), 500);
+        Judged unknown = judgeV4(rowNi(10_500_000_000L), WITH_PREFERRED, owners(10_500_000_000L), eps(1000), elsewhere, preferred);
+
+        assertThat(on.fallback().branch()).isEqualTo("r1+");
+        assertThat(on.fallback().common()).isEqualByComparingTo("10000000000");
+        assertThat(unknown.fallback()).isNull();
+    }
+
+    @Test
+    void r1PlusBuildsTheQuarterHybridFlowFromTwoYearToDateFilings() {
+        // 반기 판은 지배 열 신종자본 배당을 누계(1~6월 8억)로만 싣는다 — 3개월 몫 = 8억 − 1분기 판 누계 3억 = 5억.
+        Fact now = fact(Source.DART, "DividendToHybridBond", H1, List.of(PARENT), 800_000_000);
+        Fact before = fact(Source.DART, "DividendToHybridBond", quarter(2026, 1), List.of(PARENT), 300_000_000);
+        KrCommonIncome.NcContext nc = new KrCommonIncome.NcContext(H1.start(), quarter(2026, 1).end(), List.of(before));
+        Judged on = KrCommonIncome.judge(Q2, rowNi(10_500_000_000L), List.of(owners(10_500_000_000L), eps(1000), now), COMMON_ONLY, null,
+                NO_ACTIONS, KrCommonIncome.Rules.V4, nc);
+        Judged alone = KrCommonIncome.judge(Q2, rowNi(10_500_000_000L), List.of(owners(10_500_000_000L), eps(1000), now), COMMON_ONLY, null,
+                NO_ACTIONS, KrCommonIncome.Rules.V4, null);
+
+        assertThat(on.fallback().common()).isEqualByComparingTo("10000000000");
+        assertThat(alone.fallback()).as("직전 판 누계가 없으면 3개월 몫을 모른다").isNull();
     }
 
     @Test
