@@ -36,7 +36,8 @@ class IndicatorContextCopyTest {
             "withMarketIndex", "marketIndex",
             "withGovernanceFacts", "governanceFacts",
             "withEarningsReleaseDates", "earningsReleaseDates",
-            "withSpinOffDates", "spinOffDates");
+            "withSpinOffDates", "spinOffDates",
+            "withProvisionalReleases", "provisionalReleases");
 
     @Test
     @DisplayName("withDependencies가 나머지 필드를 전부 나른다")
@@ -70,6 +71,13 @@ class IndicatorContextCopyTest {
         IndicatorContext base = fullyPopulated();
         assertCarriesEverythingExcept(base, base.withEarningsReleaseDates(List.of(LocalDate.of(2026, 7, 7))),
                 "withEarningsReleaseDates");
+    }
+
+    @Test
+    @DisplayName("withProvisionalReleases가 나머지 필드를 전부 나른다")
+    void withProvisionalReleasesCarriesEveryOtherField() throws Exception {
+        IndicatorContext base = fullyPopulated();
+        assertCarriesEverythingExcept(base, base.withProvisionalReleases(List.of()), "withProvisionalReleases");
     }
 
     @Test
@@ -178,7 +186,12 @@ class IndicatorContextCopyTest {
                         new GovernanceValue(BigDecimal.valueOf(9), LocalDate.of(2026, 3, 10))))),
                 Map.of("PARENT", new TreeMap<>(index)),
                 List.of(LocalDate.of(2026, 4, 7)))
-                .withSpinOffDates(List.of(LocalDate.of(2024, 4, 2)));
+                .withSpinOffDates(List.of(LocalDate.of(2024, 4, 2)))
+                .withProvisionalReleases(List.of(new com.stockscreener.indicator.ProvisionalRelease("20260708800001",
+                        LocalDate.of(2026, 7, 8), LocalDate.of(2026, 7, 8), true, LocalDate.of(2026, 4, 1),
+                        LocalDate.of(2026, 6, 30), LocalDate.of(2026, 1, 1), LocalDate.of(2026, 6, 30), 1_000_000L,
+                        new com.stockscreener.indicator.ProvisionalRelease.Lines(BigDecimal.ONE, null, null, null, null),
+                        new com.stockscreener.indicator.ProvisionalRelease.Lines(BigDecimal.TEN, null, null, null, null))));
     }
 
     private static FinancialFigures annual() {

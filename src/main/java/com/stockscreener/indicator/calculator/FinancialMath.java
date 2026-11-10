@@ -658,7 +658,13 @@ final class FinancialMath {
         IndicatorContext visible = context.visibleAt(barDate);
         // 관문 켬 · ADR-0168 F1: 분사 뒤 봉은 분사 뒤에 시작한 기간의 판만 본다(IndicatorContext.withoutPreSpinOffBasis) — 분사 앞
         // 회사의 재무로 분사 뒤 회사의 지표를 내지 않는다. 새 실적 발표로 막는 것과 같은 꼴이다(그 봉의 회사와 재무의 회사가 다르다).
-        return withheldAt(visible, barDate) ? visible.withoutFinancials() : visible.withoutPreSpinOffBasis(barDate);
+        if (!withheldAt(visible, barDate)) {
+            return visible.withoutPreSpinOffBasis(barDate);
+        }
+        // 국내 잠정 관문 켬: 막힌 봉이라도 그 분기의 잠정실적이 서면 그 손익 행을 더한 사본이다(ReportingBasis.provisionalQuarter) —
+        // 안 서면(잠정 공시 없음 · 못 읽음 · 기준 불일치 · 관문 꺼짐) 지금처럼 재무를 비운다.
+        IndicatorContext base = visible.withoutPreSpinOffBasis(barDate);
+        return ReportingBasis.provisionalQuarter(base, barDate).map(base::withProvisionalQuarter).orElseGet(visible::withoutFinancials);
     }
 
     /** 그 봉의 재무 지표를 막는가 — {@code visible}은 그 봉 시점 사본({@link IndicatorContext#visibleAt})이다. */

@@ -391,11 +391,28 @@ public class IndicatorDataReader {
     /** 미국 종목의 재무 행에 주식수 클래스 축 판정을 입힌다({@link ShareClassLine}). */
     private final ShareClassStore shareClasses;
 
+    /** 국내 잠정 관문({@code stockscreener.gate.kr-provisional}) — 켜면 잠정실적 본문을 싣고 월간 실적을 발표에서 뺀다. */
+    private final boolean provisionalGate;
+
+    /** 관문 꺼짐 — 시험이 직접 부른다. */
     public IndicatorDataReader(JdbcTemplate jdbcTemplate, CorporateActionLedger corporateActions,
                                ShareClassStore shareClasses) {
+        this(jdbcTemplate, corporateActions, shareClasses, false);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public IndicatorDataReader(JdbcTemplate jdbcTemplate, CorporateActionLedger corporateActions,
+                               ShareClassStore shareClasses,
+                               @org.springframework.beans.factory.annotation.Value("${stockscreener.gate.kr-provisional}") boolean provisionalGate) {
         this.jdbcTemplate = jdbcTemplate;
         this.corporateActions = corporateActions;
         this.shareClasses = shareClasses;
+        this.provisionalGate = provisionalGate;
+    }
+
+    /** 국내 잠정 관문이 켜졌는가 — 재무 기준 표시가 같은 판정을 쓴다. */
+    public boolean provisionalGate() {
+        return provisionalGate;
     }
 
     /**
@@ -654,7 +671,7 @@ public class IndicatorDataReader {
                 SELECT r.market, r.effective_on, t.opened_at FROM earnings_release r JOIN stock s ON s.id = r.stock_id
                   LEFT JOIN kr_filing_time t ON r.market = 'KR' AND t.rcept_no = r.filing_no
                 WHERE r.stock_id = ? AND r.effective_on <= ? AND (s.market_code = 'US' OR s.accounting_month = 12)
-                  AND """ + EarningsReleaseStore.IS_EARNINGS_RELEASE, rs -> {
+                  AND """ + EarningsReleaseStore.IS_EARNINGS_RELEASE + EarningsReleaseStore.periodReleaseOnly(provisionalGate), rs -> {
             LocalDate stored = rs.getObject("effective_on", LocalDate.class);
             LocalDate day = "KR".equals(rs.getString("market")) ? ReportingBasis.domesticReleaseEffective(stored, instant(rs, "opened_at")) : stored;
             if (!day.isAfter(asOf)) {
@@ -662,6 +679,62 @@ public class IndicatorDataReader {
             }
         }, stockId, asOf);
         return new ArrayList<>(out);
+    }
+
+    /**
+     * 국내 실적 발표 공시 본문(국내 잠정 관문 켬만 · {@code kr_provisional_release}) — {@code asOf}까지 접수된, 읽은 분기 · 연도 서식. 꺼짐 ·
+     * 미국은 빈 목록이다(막힌 봉은 지금처럼 재무를 비운다). 보이는 날은 재무 판과 같은 규칙이다(DART 게시 시각 · 모르면 다음 날 ·
+     * {@link ReportingBasis#visibleFrom}).
+     *
+     * <p>양식 기준 일치({@link ProvisionalRelease#basisMatches})는 그 공시 접수일까지 보인 가장 최근 정식 분기 판으로 판정한다 — 연결 · 별도
+     * 기준은 보통주 몫 유도가 정식 판 재료로 정한 것({@code financial_common_income.statement_basis} · C 연결 · S 별도 · N 못 정함)이고, 못 정했거나
+     * 정식 판이 원화가 아니면(241560 · 950160 · 950260의 USD 정식 판 — 잠정은 원화 환산이다) 일치하지 않는다.
+     */
+    public List<ProvisionalRelease> readProvisionalReleases(long stockId, LocalDate asOf) {
+        return readProvisionalReleases(List.of(stockId), asOf).getOrDefault(stockId, List.of());
+    }
+
+    /** {@link #readProvisionalReleases(long, LocalDate)}를 여러 종목 한 번에 — 재무 기준 표시가 읽는다. 본문이 없는 종목은 맵에 없다. */
+    public Map<Long, List<ProvisionalRelease>> readProvisionalReleases(Collection<Long> stockIds, LocalDate asOf) {
+        Map<Long, List<ProvisionalRelease>> out = new HashMap<>();
+        if (!provisionalGate || stockIds.isEmpty()) {
+            return out;
+        }
+        jdbcTemplate.query(con -> {
+            var ps = con.prepareStatement("""
+                    SELECT p.*, t.opened_at,
+                           (SELECT CASE WHEN fs.currency_code <> 'KRW' THEN false
+                                        WHEN ci.statement_basis = 'C' THEN p.consolidated
+                                        WHEN ci.statement_basis = 'S' THEN NOT p.consolidated
+                                        ELSE false END
+                              FROM financial_statement fs
+                              LEFT JOIN financial_common_income ci ON ci.financial_statement_id = fs.id
+                             WHERE fs.stock_id = p.stock_id AND fs.fiscal_period <> 'FY' AND fs.published_at <= p.filed_on
+                             ORDER BY fs.period_end DESC, fs.published_at DESC, fs.revision_no DESC
+                             LIMIT 1) AS basis_matches
+                      FROM kr_provisional_release p
+                      LEFT JOIN kr_filing_time t ON t.rcept_no = p.rcept_no
+                     WHERE p.stock_id = ANY(?) AND p.status = 'OK' AND p.filed_on <= ? AND p.release_period IN ('QUARTER', 'YEAR')
+                     ORDER BY p.stock_id, p.filed_on, p.rcept_no
+                    """);
+            ps.setArray(1, con.createArrayOf("bigint", stockIds.toArray()));
+            ps.setObject(2, asOf);
+            return ps;
+        }, rs -> {
+            LocalDate filed = rs.getObject("filed_on", LocalDate.class);
+            out.computeIfAbsent(rs.getLong("stock_id"), k -> new ArrayList<>()).add(new ProvisionalRelease(
+                    rs.getString("rcept_no"), filed, ReportingBasis.visibleFrom(filed, instant(rs, "opened_at"), false, null),
+                    rs.getBoolean("basis_matches"), rs.getObject("period_start", LocalDate.class),
+                    rs.getObject("period_end", LocalDate.class), rs.getObject("cumulative_start", LocalDate.class),
+                    rs.getObject("cumulative_end", LocalDate.class), rs.getLong("unit_won"),
+                    new ProvisionalRelease.Lines(rs.getBigDecimal("revenue"), rs.getBigDecimal("operating_income"),
+                            rs.getBigDecimal("profit_before_tax"), rs.getBigDecimal("net_income"),
+                            rs.getBigDecimal("net_income_controlling")),
+                    new ProvisionalRelease.Lines(rs.getBigDecimal("cum_revenue"), rs.getBigDecimal("cum_operating_income"),
+                            rs.getBigDecimal("cum_profit_before_tax"), rs.getBigDecimal("cum_net_income"),
+                            rs.getBigDecimal("cum_net_income_controlling"))));
+        });
+        return out;
     }
 
     /**

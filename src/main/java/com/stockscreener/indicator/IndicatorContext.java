@@ -36,6 +36,12 @@ public final class IndicatorContext {
      * 분사 앞 기준 재무를 가격과 짝짓지 않는 재료다({@link #withoutPreSpinOffBasis}).
      */
     private final List<LocalDate> spinOffDates;
+    /**
+     * 국내 실적 발표 공시 본문(잠정실적 · 국내 잠정 관문 켬만 · 러너가 싣는다) — 새 실적 발표로 막힌 봉에서 정식 보고서 전 그 분기의 손익 행을
+     * 짓는 재료다({@code ReportingBasis.provisionalQuarter}). 비면 막힌 봉은 지금처럼 재무를 비운다 — 관문 꺼짐 · 미국의 동작이 이 축이
+     * 생기기 전과 같다.
+     */
+    private final List<ProvisionalRelease> provisionalReleases;
 
     public IndicatorContext(
             long stockId,
@@ -69,7 +75,7 @@ public final class IndicatorContext {
             Map<String, NavigableMap<LocalDate, BigDecimal>> dependencies,
             List<LocalDate> earningsReleaseDates) {
         this(stockId, industryDivisionKey, priceBars, annualFigures, quarterlyFigures, shareAdjustments,
-                unadjustedActions, marketIndex, governanceFacts, dependencies, earningsReleaseDates, List.of());
+                unadjustedActions, marketIndex, governanceFacts, dependencies, earningsReleaseDates, List.of(), List.of());
     }
 
     private IndicatorContext(
@@ -84,7 +90,9 @@ public final class IndicatorContext {
             List<GovernanceFigures> governanceFacts,
             Map<String, NavigableMap<LocalDate, BigDecimal>> dependencies,
             List<LocalDate> earningsReleaseDates,
-            List<LocalDate> spinOffDates) {
+            List<LocalDate> spinOffDates,
+            List<ProvisionalRelease> provisionalReleases) {
+        this.provisionalReleases = provisionalReleases == null ? List.of() : List.copyOf(provisionalReleases);
         this.spinOffDates = spinOffDates == null ? List.of() : spinOffDates.stream().distinct().sorted().toList();
         this.earningsReleaseDates = earningsReleaseDates == null ? List.of()
                 : earningsReleaseDates.stream().distinct().sorted().toList();
@@ -142,7 +150,7 @@ public final class IndicatorContext {
             Map<String, NavigableMap<LocalDate, BigDecimal>> newDependencies) {
         return new IndicatorContext(stockId, industryDivisionKey, priceBars, annualRevisions,
                 quarterlyRevisions, shareAdjustments, unadjustedActions, marketIndex,
-                governanceFacts, newDependencies, earningsReleaseDates, spinOffDates);
+                governanceFacts, newDependencies, earningsReleaseDates, spinOffDates, provisionalReleases);
     }
 
     public long stockId() {
@@ -192,7 +200,8 @@ public final class IndicatorContext {
                 annual,
                 quarterlyWithAnnual,
                 shareAdjustments, unadjustedActions, marketIndex, governanceFacts, dependencies,
-                earningsReleaseDates.stream().filter(d -> !d.isAfter(tradeDate)).toList(), spinOffDates);
+                earningsReleaseDates.stream().filter(d -> !d.isAfter(tradeDate)).toList(), spinOffDates,
+                provisionalReleases.stream().filter(r -> !r.visibleOn().isAfter(tradeDate)).toList());
     }
 
     /**
@@ -201,7 +210,7 @@ public final class IndicatorContext {
      */
     public IndicatorContext withoutFinancials() {
         return new IndicatorContext(stockId, industryDivisionKey, priceBars, List.of(), List.of(),
-                shareAdjustments, unadjustedActions, marketIndex, governanceFacts, dependencies, earningsReleaseDates, spinOffDates);
+                shareAdjustments, unadjustedActions, marketIndex, governanceFacts, dependencies, earningsReleaseDates, spinOffDates, provisionalReleases);
     }
 
     /** 실적 발표가 공개된 날(오름차순). */
@@ -213,7 +222,7 @@ public final class IndicatorContext {
     public IndicatorContext withEarningsReleaseDates(List<LocalDate> dates) {
         return new IndicatorContext(stockId, industryDivisionKey, priceBars, annualRevisions,
                 quarterlyRevisions, shareAdjustments, unadjustedActions, marketIndex,
-                governanceFacts, dependencies, dates, spinOffDates);
+                governanceFacts, dependencies, dates, spinOffDates, provisionalReleases);
     }
 
     /** 이 종목이 모체인 분사의 효력일(오름차순 · {@link #spinOffDates} 필드). */
@@ -225,7 +234,42 @@ public final class IndicatorContext {
     public IndicatorContext withSpinOffDates(List<LocalDate> dates) {
         return new IndicatorContext(stockId, industryDivisionKey, priceBars, annualRevisions,
                 quarterlyRevisions, shareAdjustments, unadjustedActions, marketIndex,
-                governanceFacts, dependencies, earningsReleaseDates, dates);
+                governanceFacts, dependencies, earningsReleaseDates, dates, provisionalReleases);
+    }
+
+    /** 국내 실적 발표 공시 본문(접수 순서 그대로 · {@link #provisionalReleases} 필드). {@code visibleAt} 사본은 그 봉에 보이는 것만 든다. */
+    public List<ProvisionalRelease> provisionalReleases() {
+        return provisionalReleases;
+    }
+
+    /** 실적 발표 공시 본문만 갈아끼운 사본. 러너가 국내 잠정 관문 켬일 때 채우고, 시험이 시드할 때 쓴다. */
+    public IndicatorContext withProvisionalReleases(List<ProvisionalRelease> releases) {
+        return new IndicatorContext(stockId, industryDivisionKey, priceBars, annualRevisions,
+                quarterlyRevisions, shareAdjustments, unadjustedActions, marketIndex,
+                governanceFacts, dependencies, earningsReleaseDates, spinOffDates, releases);
+    }
+
+    /**
+     * 잠정 분기 행을 더하고 연간 판을 비운 사본 — 새 실적 발표로 막힌 봉의 재무다({@code ReportingBasis.provisionalQuarter} ·
+     * {@code FinancialMath.financialsAt}). 행은 기말 내림차순 자리에 든다(판 이력 순서 — {@link #latestPerPeriod}가 기말마다 첫 판을 고른다).
+     * 연간을 비우는 것은 지금의 막기와 같다 — 잠정은 그 분기의 손익만 주므로 연간 지표 · 세율 · 현금흐름은 정식 보고서까지 빈다.
+     */
+    public IndicatorContext withProvisionalQuarter(FinancialFigures provisional) {
+        List<FinancialFigures> quarterly = new java.util.ArrayList<>(quarterlyRevisions.size() + 1);
+        boolean placed = false;
+        for (FinancialFigures f : quarterlyRevisions) {
+            if (!placed && (f.periodEnd() == null || !f.periodEnd().isAfter(provisional.periodEnd()))) {
+                quarterly.add(provisional);
+                placed = true;
+            }
+            quarterly.add(f);
+        }
+        if (!placed) {
+            quarterly.add(provisional);
+        }
+        return new IndicatorContext(stockId, industryDivisionKey, priceBars, List.of(), quarterly,
+                shareAdjustments, unadjustedActions, marketIndex, governanceFacts, dependencies, earningsReleaseDates, spinOffDates,
+                provisionalReleases);
     }
 
     /**
@@ -260,7 +304,7 @@ public final class IndicatorContext {
             return this;
         }
         return new IndicatorContext(stockId, industryDivisionKey, priceBars, annual, quarterly, shareAdjustments,
-                unadjustedActions, marketIndex, governanceFacts, dependencies, earningsReleaseDates, spinOffDates);
+                unadjustedActions, marketIndex, governanceFacts, dependencies, earningsReleaseDates, spinOffDates, provisionalReleases);
     }
 
     /**
@@ -321,9 +365,12 @@ public final class IndicatorContext {
                         java.util.stream.Stream.concat(annualRevisions.stream(), quarterlyRevisions.stream())
                                 // 보이기 시작하는 날이 경계다 — 공시일로 자르면 장 마감 뒤 공시 판이 다음 경계까지 안 들어온다.
                                 .map(FinancialFigures::visibleOn),
-                        java.util.stream.Stream.concat(earningsReleaseDates.stream(),
+                        java.util.stream.Stream.concat(java.util.stream.Stream.concat(earningsReleaseDates.stream(),
                                 // 분사 효력일도 경계다(F1) — 그날부터 가격과 짝짓는 재무가 바뀐다(withoutPreSpinOffBasis).
-                                spinOffDates.stream()))
+                                spinOffDates.stream()),
+                                // 잠정실적이 보이기 시작하는 날도 경계다 — 막힌 구간 안에서 그날부터 잠정 분기 행이 선다(장 마감 뒤 발표는 막기
+                                // 시작과 보이기가 하루 갈린다).
+                                provisionalReleases.stream().map(ProvisionalRelease::visibleOn)))
                 .filter(java.util.Objects::nonNull)
                 .distinct()
                 .sorted()
@@ -528,7 +575,7 @@ public final class IndicatorContext {
     public IndicatorContext withGovernanceFacts(List<GovernanceFigures> newGovernanceFacts) {
         return new IndicatorContext(stockId, industryDivisionKey, priceBars, annualRevisions,
                 quarterlyRevisions, shareAdjustments, unadjustedActions, marketIndex,
-                newGovernanceFacts, dependencies, earningsReleaseDates, spinOffDates);
+                newGovernanceFacts, dependencies, earningsReleaseDates, spinOffDates, provisionalReleases);
     }
 
     /** 계산 대상 날짜들(시세 기준, 오름차순). */
@@ -551,6 +598,6 @@ public final class IndicatorContext {
     public IndicatorContext withMarketIndex(NavigableMap<LocalDate, BigDecimal> newMarketIndex) {
         return new IndicatorContext(stockId, industryDivisionKey, priceBars, annualRevisions,
                 quarterlyRevisions, shareAdjustments, unadjustedActions, newMarketIndex,
-                governanceFacts, dependencies, earningsReleaseDates, spinOffDates);
+                governanceFacts, dependencies, earningsReleaseDates, spinOffDates, provisionalReleases);
     }
 }

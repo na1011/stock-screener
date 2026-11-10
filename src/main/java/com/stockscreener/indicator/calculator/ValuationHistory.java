@@ -83,10 +83,14 @@ final class ValuationHistory {
         Double[] ratios = new Double[bars.size()];
         // 재무가 막힌 봉(ADR-0195 · 새 실적 발표가 공개됐는데 기준은 옛 분기)은 배수도 중앙값도 안 낸다.
         boolean[] withheld = new boolean[bars.size()];
+        // 잠정 분기 행으로 계산한 봉(국내 잠정 관문 켬) — 그 봉의 표본이 있을 때만 중앙값을 낸다. 표본이 없는 봉(잠정 행으로 분모가 안 서는
+        // 지표 · PBR)에 앞 봉들의 표본으로 중앙값을 내면 막힌 봉에 옛 분기 값이 나간다.
+        boolean[] provisional = new boolean[bars.size()];
         List<LocalDate> cuts = context.financialPublicationDates();
         int cut = 0;
         FinancialMath.PeriodSeries visible = null;
         boolean blocked = false;
+        boolean onProvisional = false;
         for (int i = 0; i < bars.size(); i++) {
             PriceBar bar = bars.get(i);
             boolean crossed = false;
@@ -99,11 +103,15 @@ final class ValuationHistory {
                 // 연속 네 분기가 서는지도 달라지므로, 창 밖에서 한 번 고른 기저를 쓰면
                 // 과거 봉이 그때 성립하지 않던 기저로 계산된다(ADR-0164).
                 IndicatorContext atBar = context.visibleAt(bar.tradeDate());
-                blocked = FinancialMath.withheldAt(atBar, bar.tradeDate());
-                // 분사 뒤 봉은 분사 뒤 회사의 판만 본다(관문 켬 · ADR-0168 F1 · FinancialMath.financialsAt과 같은 사본).
-                visible = FinancialMath.seriesOf(blocked ? atBar.withoutFinancials() : atBar.withoutPreSpinOffBasis(bar.tradeDate()));
+                // 분사 뒤 봉은 분사 뒤 회사의 판만 보고, 막힌 봉은 잠정 행이 서면 그 사본이다 — FinancialMath.financialsAt과 같은 사본이다.
+                IndicatorContext financials = FinancialMath.financialsAt(context, bar.tradeDate());
+                boolean pending = FinancialMath.withheldAt(atBar, bar.tradeDate());
+                onProvisional = pending && !financials.quarterlyFigures().isEmpty();
+                blocked = pending && !onProvisional;
+                visible = FinancialMath.seriesOf(financials);
             }
             withheld[i] = blocked;
+            provisional[i] = onProvisional;
             int published = FinancialMath.publishedIndexOn(visible.rows(), bar.tradeDate());
             if (published < 0) {
                 continue;
@@ -128,7 +136,7 @@ final class ValuationHistory {
                 removeSorted(window, ratios[i - LOOKBACK - 1]);
                 insertSorted(window, ratios[i]);
             }
-            if (window.size() < MIN_SAMPLES || withheld[i]) {
+            if (window.size() < MIN_SAMPLES || withheld[i] || (provisional[i] && ratios[i] == null)) {
                 continue;
             }
             points.add(new IndicatorPoint(bars.get(i).tradeDate(),
