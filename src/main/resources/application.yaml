@@ -210,6 +210,15 @@ management:
 # 뒤엣것으로 덮으므로, 앞 블록의 설정이 전부 조용히 사라진다.
 stockscreener:
 
+  # ── 재적재 관문(국내 잠정실적 · 탐색 explore/kr-blanks/PROVISIONAL-PLAN-1110.md) ───
+  # 값을 바꾸는 어댑터·계산기 변경은 이 설정 뒤에 두고 main에 쌓았다가 국내 관문에서 켠다(CLAUDE.md 「재적재·백필」 ·
+  # docs/reload-gate.md). 꺼진 상태의 출력은 설정이 생기기 전과 같다.
+  # MUST NOT: 저장소 .env에 켜 두지 않는다 — 수동 bootRun으로 새고, 배포(ops/stage.sh)가 그 .env를 배포 디렉터리로 복사해 운영 jar에도 샌다.
+  # 켜는 길은 하나 — 관문 날 이 기본값을 뒤집은 jar를 배포한다(재적재·백필은 앱을 내린 채 인자로 켠 bootRun). 사본 실행도 인자로만 켠다.
+  # MUST NOT: 환경변수 자리표시자(${...})로 바꾸지 않는다. GateSettingGuard가 출처를 classpath yaml과 명령줄 인자로만 허용한다.
+  gate:
+    kr-provisional: false
+
   # ── 미국 순위 후보의 정기 공급(ADR-0178) ─────────────────────
   # 14:16 후보 공시 소비 · 21:00 후보 분할 다리 · 토요일 후보 풀 화해와 새 행 인입. 후보 재무·원장을 써서 명부를 바꾸므로 작은 DB 드라이런(D4 ·
   # 2026-10-15 통과 — ADR-0178 §결과)을 지난 뒤 기본값을 뒤집었다(UsCandidateFeed). 관문 설정과 달리 켠 뒤 재적재가 필요 없다.
