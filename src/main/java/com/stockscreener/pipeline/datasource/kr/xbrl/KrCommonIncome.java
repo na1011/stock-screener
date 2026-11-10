@@ -98,7 +98,13 @@ public final class KrCommonIncome {
          * 지분상품 있음 · 총 E 없음 · 계속영업 E 하나 · W 하나면 계속영업 E × W(기저 C · 계획 C 「none:no-eps」). W 단위 점검은 다른 E × W 갈래와
          * 같다. 총 E가 없어 중단 포함 보통주 몫을 모르므로 신종자본증권이 있으면 배당성향 분모는 비운다.
          */
-        E2
+        E2,
+        /**
+         * 총 E 부호 거르기 — E가 하나면 E > 0인데 지배 NI < 0일 때만 버리고(신종자본 · 우선 배분은 보통주 몫을 줄이므로 NI > 0 · E < 0은 정당하다 ·
+         * 롯데지주 2026 Q1), 여럿이면 지배 NI와 부호가 같은 것만 남긴다(두산 2025 FY ±4,230 · 같은 것이 없으면 그대로). 0은 안 거른다.
+         * 계속영업 E · 누계 E에는 안 건다 — 맞댈 지배 NI가 같은 기저가 아니다.
+         */
+        SIGN
     }
 
     /**
@@ -221,6 +227,9 @@ public final class KrCommonIncome {
                 || (same != null && same.multiClass());
         BigDecimal income = anchor.income();
         Set<BigDecimal> e = m.values(EPS, period, COMMON_MEMBERS);
+        if (rules.has(Rule.SIGN)) {
+            e = signed(e, income);
+        }
         Set<BigDecimal> w = m.values(WEIGHTED, period, COMMON_MEMBERS);
         if (e.size() > 1 || w.size() > 1) {
             BigDecimal[] pair = rules.has(Rule.C1) ? resolveConflict(income, e, w, instruments, m, period) : null;
@@ -645,6 +654,28 @@ public final class KrCommonIncome {
             }
         }
         return out;
+    }
+
+    /** {@link Rule#SIGN}으로 거른 총 E 후보. */
+    private static Set<BigDecimal> signed(Set<BigDecimal> e, BigDecimal income) {
+        Set<BigDecimal> kept = new LinkedHashSet<>();
+        for (BigDecimal x : e) {
+            if (x.signum() == 0 || income.signum() == 0 || !(x.signum() > 0 && income.signum() < 0)) {
+                kept.add(x);
+            }
+        }
+        if (kept.size() > 1) {
+            Set<BigDecimal> same = new LinkedHashSet<>();
+            for (BigDecimal x : kept) {
+                if (x.signum() == 0 || income.signum() == 0 || x.signum() == income.signum()) {
+                    same.add(x);
+                }
+            }
+            if (!same.isEmpty()) {
+                return same;
+            }
+        }
+        return kept;
     }
 
     /** {@link Rule#C1}의 짝 {E, W} — 못 고르면 {@code null}. */

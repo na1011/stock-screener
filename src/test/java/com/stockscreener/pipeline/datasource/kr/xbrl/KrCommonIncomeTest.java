@@ -101,6 +101,21 @@ class KrCommonIncomeTest {
     }
 
     @Test
+    void signDropsTheTotalEpsWhoseSignContradictsTheControllingIncome() {
+        // 지배 NI 100억 · E 후보 −1,000 · +1,000(같은 크기 부호 상충 · 두산 2025 FY 꼴) — NI와 부호가 같은 +1,000만 남아 닫힌다(국내 관문 켬 SIGN).
+        Judged off = judge(rowNi(10_000_000_000L), COMMON_ONLY, owners(10_000_000_000L), eps(1000), eps(-1000), weighted(10_000_000));
+        Judged on = judgeV4(rowNi(10_000_000_000L), COMMON_ONLY, owners(10_000_000_000L), eps(1000), eps(-1000), weighted(10_000_000));
+        // 대조군 — E 하나는 한 방향만 거른다: 지배 NI > 0 · E < 0은 지분상품 배분으로 정당하게 생겨 남긴다(롯데지주 2026 Q1 꼴).
+        Judged negative = judgeV4(rowNi(10_000_000_000L), WITH_PREFERRED, owners(10_000_000_000L), eps(-26), weighted(10_000_000));
+
+        assertThat(off.branch()).as("꺼짐 — 지금 동작").isEqualTo("none:conflict");
+        assertThat(on.branch()).isEqualTo("kr-ni");
+        assertThat(on.common()).isEqualByComparingTo("10000000000");
+        assertThat(negative.branch()).isEqualTo("exw");
+        assertThat(negative.common()).isEqualByComparingTo("-260000000");
+    }
+
+    @Test
     void ncTakesTheConsolidatedIncomeWhenEquityShowsNoNoncontrollingInterest() {
         // 행 지배 NI가 빈 연결 행 — 연결 순이익 100억 · 기초(03-31) · 기말(06-30) 자본총계 = 지배 자본 · 비지배 손익 줄 없음(국내 관문 켬 NC-b).
         RowIncome row = new RowIncome(null, BigDecimal.valueOf(10_000_000_000L));
