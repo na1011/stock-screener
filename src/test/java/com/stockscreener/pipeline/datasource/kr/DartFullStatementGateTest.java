@@ -47,27 +47,75 @@ class DartFullStatementGateTest {
     }
 
     @Test
-    @DisplayName("국내 관문 켬(K9): 0원 비지배 줄은 증거가 아니다 — 값이 있는 비지배 줄이나 재무상태표 비지배지분이 증거다(꺼짐은 0원 줄도 센다 · 대조군)")
+    @DisplayName("국내 관문 켬(K9): 0원 비지배 줄은 흔적이 아니다 — 값이 있는 비지배 줄이나 재무상태표 비지배지분이 흔적이다(꺼짐은 0원 줄도 센다 · 대조군)")
     void zeroNoncontrollingLineIsNotEvidenceWhenGated() {
         DartFullStatementAdapter.Pending zeroLine = new DartFullStatementAdapter.Pending(2026, StatementPeriod.Q1, withNoncontrolling(), true);
         assertThat(DartFullStatementAdapter.lastNoncontrollingIncome(List.of(zeroLine))).as("꺼짐 — 지금 동작").isEqualTo(LocalDate.of(2026, 3, 31));
-        assertThat(DartFullStatementAdapter.lastNoncontrollingIncome(List.of(zeroLine), true)).as("171090 꼴 — 0원 줄 하나").isNull();
+        assertThat(DartFullStatementAdapter.gateOpen(zeroLine, null, true)).as("171090 꼴 — 0원 줄 하나").isTrue();
 
         JsonNode balanceNci = MAPPER.readTree("""
                 {"list":[
+                  {"account_id":"ifrs-full_ProfitLoss","sj_div":"CIS","thstrm_amount":"1000"},
                   {"account_id":"ifrs-full_ProfitLossAttributableToNoncontrollingInterests","sj_div":"CIS","thstrm_amount":"0"},
-                  {"account_id":"ifrs-full_NoncontrollingInterests","sj_div":"BS","thstrm_amount":"500","frmtrm_amount":"480"}
+                  {"account_id":"ifrs-full_NoncontrollingInterests","sj_div":"BS","thstrm_amount":"0","frmtrm_amount":"480"}
                 ]}""").get("list");
-        assertThat(DartFullStatementAdapter.lastNoncontrollingIncome(List.of(
-                new DartFullStatementAdapter.Pending(2026, StatementPeriod.Q1, balanceNci, true)), true))
-                .as("비지배 몫은 0이어도 비지배 자본이 있으면 증거").isEqualTo(LocalDate.of(2026, 3, 31));
+        assertThat(DartFullStatementAdapter.gateOpen(new DartFullStatementAdapter.Pending(2026, StatementPeriod.Q1, balanceNci, true), null, true))
+                .as("비지배 몫은 0이어도 기초 비지배 자본이 있으면 흔적").isFalse();
 
         JsonNode nonzeroLine = MAPPER.readTree("""
                 {"list":[
                   {"account_id":"ifrs-full_ProfitLossAttributableToNoncontrollingInterests","sj_div":"CIS","thstrm_amount":"-12"}
                 ]}""").get("list");
-        assertThat(DartFullStatementAdapter.lastNoncontrollingIncome(List.of(
-                new DartFullStatementAdapter.Pending(2025, StatementPeriod.FY, nonzeroLine, true)), true)).isEqualTo(LocalDate.of(2025, 12, 31));
+        assertThat(DartFullStatementAdapter.gateOpen(new DartFullStatementAdapter.Pending(2025, StatementPeriod.FY, nonzeroLine, true), null, true))
+                .isFalse();
+    }
+
+    @Test
+    @DisplayName("국내 관문 켬(K9b · K10): 뒤 기간의 진짜 비지배가 앞 판을 안 닫고 · 답이 부른 기간 집합에 안 갈린다 · 꺼짐은 뒤 비지배가 앞을 닫는다(대조군)")
+    void laterNoncontrollingDoesNotCloseAnEarlierReportWhenGated() {
+        // 그 해 3분기에 비지배가 처음 생긴 회사(00339391 2021 꼴 — FY 자본변동표 비지배 기초 0 · 종속기업 지분 취득): 1분기 판에는 흔적이 없다.
+        DartFullStatementAdapter.Pending q1 = pending(2021, StatementPeriod.Q1, false);
+        DartFullStatementAdapter.Pending fy = new DartFullStatementAdapter.Pending(2021, StatementPeriod.FY, MAPPER.readTree("""
+                {"list":[
+                  {"account_id":"ifrs-full_ProfitLoss","sj_div":"CIS","thstrm_amount":"1000"},
+                  {"account_id":"ifrs-full_ProfitLossAttributableToNoncontrollingInterests","sj_div":"CIS","thstrm_amount":"-43"},
+                  {"account_id":"ifrs-full_NoncontrollingInterests","sj_div":"BS","thstrm_amount":"17263","frmtrm_amount":"0"}
+                ]}""").get("list"), true);
+        List<DartFullStatementAdapter.Pending> all = List.of(q1, fy);
+
+        assertThat(DartFullStatementAdapter.gateOpen(q1, DartFullStatementAdapter.lastNoncontrollingIncome(all))).as("꺼짐 — 지금 동작").isFalse();
+        assertThat(DartFullStatementAdapter.gateOpen(q1, null, true)).isTrue();
+        assertThat(DartFullStatementAdapter.gateOpen(fy, null, true)).isFalse();
+        // K10 — 꺼짐은 FY만 부르면 1분기 판이 없어 답이 다르다(마지막 비지배가 어느 판까지 받았나에 매인다) · 켬은 판 하나로 정해 집합이 무관하다.
+        assertThat(DartFullStatementAdapter.lastNoncontrollingIncome(List.of(q1))).as("꺼짐 — 1분기만 받으면 마지막 비지배가 없다").isNull();
+    }
+
+    @Test
+    @DisplayName("국내 관문 켬: 손익 밖 흔적(자본변동표 비지배 열 · 현금흐름 표준 비지배 줄)도 판을 닫는다 · 표준계정코드 없는 이름 줄은 흔적이 아니다(089970)")
+    void traceOutsideTheIncomeStatementClosesTheReport() {
+        String sce = """
+                {"list":[
+                  {"account_id":"ifrs-full_ProfitLoss","sj_div":"CIS","thstrm_amount":"1000"},
+                  {"account_id":"-표준계정코드 미사용-","sj_div":"SCE","account_nm":"연결범위변동","account_detail":"자본 [member]|비지배지분 [member]","thstrm_amount":"43496000"}
+                ]}""";
+        String cashFlow = """
+                {"list":[
+                  {"account_id":"ifrs-full_ProfitLoss","sj_div":"CIS","thstrm_amount":"1000"},
+                  {"account_id":"dart_IncreaseInNoncontrollingInterests","sj_div":"CF","thstrm_amount":"62357250895"}
+                ]}""";
+        String namedOnly = """
+                {"list":[
+                  {"account_id":"ifrs-full_ProfitLoss","sj_div":"CIS","thstrm_amount":"11304886368"},
+                  {"account_id":"-표준계정코드 미사용-","sj_div":"CIS","account_nm":"비지배지분","thstrm_amount":"11304886368"}
+                ]}""";
+        assertThat(DartFullStatementAdapter.gateOpen(new DartFullStatementAdapter.Pending(2023, StatementPeriod.Q2, MAPPER.readTree(sce).get("list"), true), null, true))
+                .isFalse();
+        assertThat(DartFullStatementAdapter.gateOpen(new DartFullStatementAdapter.Pending(2024, StatementPeriod.FY, MAPPER.readTree(cashFlow).get("list"), true), null, true))
+                .isFalse();
+        assertThat(DartFullStatementAdapter.gateOpen(new DartFullStatementAdapter.Pending(2025, StatementPeriod.Q3, MAPPER.readTree(namedOnly).get("list"), true), null, true))
+                .isTrue();
+        assertThat(DartFullStatementAdapter.gateOpen(new DartFullStatementAdapter.Pending(2023, StatementPeriod.Q2, withoutSplit(), false), null, true))
+                .as("별도 응답은 판 단독으로도 못 연다").isFalse();
     }
 
     @Test
@@ -122,7 +170,7 @@ class DartFullStatementGateTest {
     }
 
     /**
-     * <b>같은 회계연도 안에서 갈래가 섞이지 않는다.</b> 섞이면
+     * <b>같은 회계연도 안에서 갈래가 섞이지 않는다</b>(꺼짐 — 켬은 판마다 그 기간의 흔적으로 정한다). 섞이면
      * {@code deriveFourthQuarterControlling}의 뺄셈이 「직접 태그 − 게이트 값」이 되어
      * 어느 쪽도 아닌 수를 낸다.
      */

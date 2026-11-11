@@ -104,7 +104,7 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
                 earlierInstances == null ? null : earlierInstances.getIfAvailable());
     }
 
-    /** 국내 관문({@code stockscreener.gate.kr-provisional}) — 켜면 비지배 증거를 값이 0이 아닌 줄로 좁힌다(K9). 시험은 생성자만 부른다. */
+    /** 국내 관문({@code stockscreener.gate.kr-provisional}) — 켜면 「비지배 전무」 게이트를 판 하나의 흔적으로 연다(K9 · K9b · K10). 시험은 생성자만 부른다. */
     private boolean krGate;
 
     @org.springframework.beans.factory.annotation.Autowired
@@ -193,12 +193,13 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
         }
 
         // ── 2패스: 종목 단위 판정(순수). 외부 호출 0.
-        LocalDate lastNoncontrolling = lastNoncontrollingIncome(pending, krGate);
+        // 국내 관문 켬은 판 단독(gateOpen의 perReport) — 종목 단위 「마지막 비지배」를 안 쓴다.
+        LocalDate lastNoncontrolling = krGate ? null : lastNoncontrollingIncome(pending);
         // MUST: 게이트가 몇 판에서 열렸는지 남긴다. 스윕이 이 축을 못 태우므로(픽스처가
         // 종목당 한 기간뿐이다) **적재 직후 검침이 유일한 확인 수단**이고, 로그가 없으면
         // 「게이트가 돌았는가」를 저장된 값으로만 추정하게 된다 — 그 값은 폴백이 쓰던 것과
         // 같아서 구분되지 않는다.
-        long gated = pending.stream().filter(p -> gateOpen(p, lastNoncontrolling)).count();
+        long gated = pending.stream().filter(p -> gateOpen(p, lastNoncontrolling, krGate)).count();
         long separate = pending.stream().filter(p -> !p.consolidated()).count();
         if (gated > 0 || separate > 0) {
             log.info("지배주주 손익 게이트. ticker={} 판={} 게이트열림={} 별도재무제표={} 마지막비지배={}",
@@ -225,7 +226,7 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
                     continue;
                 }
                 RawFinancialReport report = toReport(p.list(), year, p.period(), security,
-                        gateOpen(p, lastNoncontrolling), p.consolidated());
+                        gateOpen(p, lastNoncontrolling, krGate), p.consolidated());
                 reports.add(report);
                 thisYear.add(report);
                 yearPending.put(p.period(), p);
@@ -291,7 +292,9 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
                 continue;
             }
             Pending p = new Pending(latest.year(), latest.period(), built.list(), built.consolidated());
-            out.add(instanceReport(built, latest.year(), latest.period(), security, gateOpen(p, lastNoncontrolling)));
+            // 켬: 인스턴스로 옮긴 행이 자본변동표 · 현금흐름을 다 싣는다는 보장이 없어 그 기간 최신 응답의 흔적도 함께 본다.
+            boolean gate = gateOpen(p, lastNoncontrolling, krGate) && (!krGate || gateOpen(latest, null, true));
+            out.add(instanceReport(built, latest.year(), latest.period(), security, gate));
         }
         return out;
     }
@@ -325,11 +328,6 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
      * 그것이 「비지배를 낸 적 있다」의 증거다.
      */
     static LocalDate lastNoncontrollingIncome(List<Pending> pending) {
-        return lastNoncontrollingIncome(pending, false);
-    }
-
-    /** @param nonzeroOnly 국내 관문 켬(계획 K9) — 증거를 값이 0이 아닌 비지배 줄 · 재무상태표 비지배지분으로 좁힌다({@link DartFullAccountMapper#hasNonzeroNoncontrolling}) */
-    static LocalDate lastNoncontrollingIncome(List<Pending> pending, boolean nonzeroOnly) {
         LocalDate last = null;
         for (Pending p : pending) {
             if (!p.consolidated()) {
@@ -338,12 +336,8 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
             List<JsonNode> income = DartFullAccountMapper.sections(p.list(),
                     DartFullAccountMapper.SJ_INCOME,
                     DartFullAccountMapper.SJ_COMPREHENSIVE_INCOME);
-            // 꺼짐: 비지배 귀속 줄이면 무엇이든 증거로 센다(DartFullAccountMapper.hasAnyNoncontrollingIncome).
-            boolean evidence = nonzeroOnly
-                    ? DartFullAccountMapper.hasNonzeroNoncontrolling(income,
-                            DartFullAccountMapper.sections(p.list(), DartFullAccountMapper.SJ_BALANCE))
-                    : DartFullAccountMapper.hasAnyNoncontrollingIncome(income);
-            if (!evidence) {
+            // 비지배 귀속 줄이면 무엇이든 증거로 센다(DartFullAccountMapper.hasAnyNoncontrollingIncome).
+            if (!DartFullAccountMapper.hasAnyNoncontrollingIncome(income)) {
                 continue;
             }
             LocalDate end = DartReportPeriods.periodRange(p.year(), p.period().label())[1];
@@ -368,8 +362,20 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
      * {@code deriveFourthQuarterControlling}의 뺄셈에 「직접 태그 − 게이트 값」이 섞이지 않는다.
      */
     static boolean gateOpen(Pending p, LocalDate lastNoncontrolling) {
+        return gateOpen(p, lastNoncontrolling, false);
+    }
+
+    /**
+     * @param perReport 국내 관문 켬 — 이 판 하나에 비지배 흔적이 없으면 연다({@link DartFullAccountMapper#hasNoncontrollingTrace} · 계획 K9b · K10).
+     *                  그 판 재무상태표 기초 · 기말과 자본변동표 비지배 열이 그 기간을 덮으므로 같은 해 FY가 비지배를 내도 그 앞 분기는 열릴 수 있고,
+     *                  Q4 뺄셈은 분기마다 맞는 지배 값끼리 한다(아래 「갈래가 안 섞인다」는 꺼짐에만 선다)
+     */
+    static boolean gateOpen(Pending p, LocalDate lastNoncontrolling, boolean perReport) {
         if (!p.consolidated()) {
             return false;
+        }
+        if (perReport) {
+            return !DartFullAccountMapper.hasNoncontrollingTrace(p.list());
         }
         LocalDate start = DartReportPeriods.periodRange(p.year(), p.period().label())[0];
         return lastNoncontrolling == null || lastNoncontrolling.isBefore(start);
@@ -552,7 +558,8 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
             // 손익 행이 안 온 보고서는 중단영업을 「읽지 않았다」(규칙 판 없음) — 줄이 없다고 0을 달면 그 판정이 틀린다.
             return report;
         }
-        BigDecimal[] discontinued = DartFullAccountMapper.discontinued(income, false, consolidated, confirmed);
+        // 켬: 게이트가 열린 판(판 단독 · 비지배 흔적 없음)은 지배 중단도 같은 증거로 정한다.
+        BigDecimal[] discontinued = DartFullAccountMapper.discontinued(income, false, consolidated, confirmed, krGate && gateOpen);
         return report.withDiscontinued(discontinued[0], discontinued[1],
                 discontinuedAbsence(report.assertedAbsent(), discontinued[0], discontinued[1]));
     }
@@ -573,14 +580,18 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
         return withFourthQuarterDiscontinued(q4, annual, annualConsolidated, third, thirdConsolidated, false);
     }
 
-    /** @param krGate 국내 관문 켬 — 두 보고서의 지배주주 순이익을 {@link DartFullAccountMapper#confirmedControlling}과 같은 규칙으로 읽는다 */
+    /**
+     * @param krGate 국내 관문 켬 — 두 보고서의 지배주주 순이익을 {@link DartFullAccountMapper#confirmedControlling}과 같은 규칙으로 읽고, 비지배 흔적이
+     *               없는 보고서의 지배 중단은 연결 중단으로 읽는다(판 단독 게이트와 같은 증거)
+     */
     static RawFinancialReport withFourthQuarterDiscontinued(RawFinancialReport q4, JsonNode annual, boolean annualConsolidated,
                                                          JsonNode third, boolean thirdConsolidated, boolean krGate) {
         List<JsonNode> annualIncome = DartFullAccountMapper.sections(annual,
                 DartFullAccountMapper.SJ_INCOME, DartFullAccountMapper.SJ_COMPREHENSIVE_INCOME);
         BigDecimal annualControlling = krGate && annualConsolidated ? DartFullAccountMapper.confirmedControlling(annualIncome,
                 DartFullAccountMapper.sections(annual, DartFullAccountMapper.SJ_EQUITY_CHANGES), "thstrm_amount", "thstrm_amount") : null;
-        BigDecimal[] fy = DartFullAccountMapper.discontinued(annualIncome, false, annualConsolidated, annualControlling);
+        BigDecimal[] fy = DartFullAccountMapper.discontinued(annualIncome, false, annualConsolidated, annualControlling,
+                krGate && annualConsolidated && !DartFullAccountMapper.hasNoncontrollingTrace(annual));
         BigDecimal consolidated = null;
         BigDecimal controlling = null;
         if (fy[0] != null && fy[0].signum() == 0) {
@@ -593,7 +604,8 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
                 BigDecimal nineControlling = krGate && thirdConsolidated ? DartFullAccountMapper.confirmedControlling(income,
                         DartFullAccountMapper.sections(third, DartFullAccountMapper.SJ_EQUITY_CHANGES), "thstrm_add_amount",
                         "thstrm_add_amount") : null;
-                BigDecimal[] nine = DartFullAccountMapper.discontinued(income, true, thirdConsolidated, nineControlling);
+                BigDecimal[] nine = DartFullAccountMapper.discontinued(income, true, thirdConsolidated, nineControlling,
+                        krGate && thirdConsolidated && !DartFullAccountMapper.hasNoncontrollingTrace(third));
                 consolidated = fy[0] != null && nine[0] != null ? fy[0].subtract(nine[0]) : null;
                 controlling = fy[1] != null && nine[1] != null ? fy[1].subtract(nine[1]) : null;
             }

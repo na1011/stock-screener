@@ -264,6 +264,30 @@ class DartFullAccountMapperTest {
     }
 
     @Test
+    @DisplayName("비지배 흔적이 없는 칸은 당기순이익이 후보다 — LG이노텍 2022 FY(비지배 줄 값 없음 · 자본변동표 비지배 열 0) · 비지배 열에 값이 있으면 아니다(대조군)")
+    void netIncomeIsTheCandidateWhenTheColumnHasNoNoncontrollingTrace() {
+        List<JsonNode> income = incomeRows("""
+                {"account_id":"ifrs-full_ProfitLoss","account_nm":"당기순이익","sj_div":"IS","thstrm_amount":"979848640817"}
+                {"account_id":"ifrs-full_ProfitLossAttributableToOwnersOfParent","account_nm":"지배기업의 소유주지분","sj_div":"IS","thstrm_amount":"976863035583"}
+                {"account_id":"ifrs-full_ProfitLossAttributableToNoncontrollingInterests","account_nm":"비지배지분","sj_div":"IS","thstrm_amount":""}
+                {"account_id":"-표준계정코드 미사용-","account_nm":"지배기업의 소유주지분","sj_div":"IS","thstrm_amount":"2985605234"}
+                """);
+        List<JsonNode> equity = incomeRows("""
+                {"account_id":"ifrs-full_ProfitLoss","sj_div":"SCE","account_detail":"자본 [member]|지배기업의 소유주에게 귀속되는 자본 [member]","thstrm_amount":"979848640817"}
+                {"account_id":"ifrs-full_ProfitLoss","sj_div":"SCE","account_detail":"자본 [member]|비지배지분 [member]","thstrm_amount":""}
+                """);
+        assertThat(DartFullAccountMapper.confirmedControlling(income, equity, "thstrm_amount", "thstrm_amount"))
+                .isEqualByComparingTo("979848640817");
+
+        List<JsonNode> minorityColumn = incomeRows("""
+                {"account_id":"ifrs-full_ProfitLoss","sj_div":"SCE","account_detail":"자본 [member]|지배기업의 소유주에게 귀속되는 자본 [member]","thstrm_amount":"979848640817"}
+                {"account_id":"dart_EquityAtBeginningOfPeriod","sj_div":"SCE","account_detail":"자본 [member]|비지배지분 [member]","thstrm_amount":"17000000"}
+                """);
+        assertThat(DartFullAccountMapper.confirmedControlling(income, minorityColumn, "thstrm_amount", "thstrm_amount"))
+                .as("자본변동표 비지배 열에 기초 잔액이 있으면 비지배가 있다").isNull();
+    }
+
+    @Test
     @DisplayName("표준코드 없는 줄만 있어도 같은 규칙 — 위메이드 2020 1분기(표준 지배 줄 6,455원)")
     void readsNonstandardRowsOnBothStatements() {
         List<JsonNode> income = incomeRows("""

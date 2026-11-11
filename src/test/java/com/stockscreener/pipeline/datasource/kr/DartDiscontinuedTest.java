@@ -137,6 +137,18 @@ class DartDiscontinuedTest {
     }
 
     @Test
+    @DisplayName("국내 관문 켬(K9b): 판에 비지배 흔적이 없으면(게이트 판) 지배 중단 = 연결 중단 · 흔적 판정 없이는 지금처럼 모른다(대조군)")
+    void reportWithoutNoncontrollingTraceGivesTheConsolidatedShare() throws Exception {
+        // 007660 2021 FY 꼴 — 순이익 · 연결 중단만 싣고 지배 줄이 없다.
+        List<JsonNode> income = income(String.join(",",
+                row("ifrs-full_ProfitLoss", "-3603718792", ""),
+                row("ifrs-full_ProfitLossFromDiscontinuedOperations", "-35256470705", "")));
+
+        assertThat(DartFullAccountMapper.discontinued(income, false, true, null)[1]).as("꺼짐 — 지금 동작").isNull();
+        assertThat(DartFullAccountMapper.discontinued(income, false, true, null, true)[1]).isEqualByComparingTo("-35256470705");
+    }
+
+    @Test
     @DisplayName("4분기 = FY − Q3 보고서 누계 — Q3에 중단 줄이 없는데 FY ≠ 0이면 모른다(솔브레인홀딩스 · 카카오 꼴)")
     void fourthQuarterIsFiscalYearMinusNineMonths() throws Exception {
         ObjectMapper json = new ObjectMapper();

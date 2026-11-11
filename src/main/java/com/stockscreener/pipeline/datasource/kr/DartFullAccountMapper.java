@@ -354,7 +354,7 @@ final class DartFullAccountMapper {
      * (ADR-0159 §결정은 두 컬럼의 뜻이 두 시장 공통이라 정했다).
      *
      * <p><b>MUST: 게이트 판정을 이 함수가 하지 않는다 — 호출부가 준다.</b> 그 판정은
-     * <b>종목 단위 증거</b>를 요구하는데(*"그 종목이 비지배를 한 번도 안 내면"*) 이 함수는
+     * <b>종목 단위 증거</b>(국내 관문 켬은 판 전체의 흔적 — {@link #hasNoncontrollingTrace} · ADR-0209)를 요구하는데 이 함수는
      * 보고서 하나만 보기 때문이다. {@link #controllingEquity}가 같은 이유로 게이트를 아예
      * 안 두는데, 이쪽은 <b>호출부가 여러 판을 모아 판정하도록 구조를 바꿔</b> 연다.
      *
@@ -406,6 +406,17 @@ final class DartFullAccountMapper {
     /** @param confirmedControlling {@link #confirmedControlling}이 고른 지배주주 순이익(그 칸) — 없으면 {@code null}(표준 줄) */
     static BigDecimal[] discontinued(List<JsonNode> income, boolean cumulative, boolean consolidatedStatement,
                                      BigDecimal confirmedControlling) {
+        return discontinued(income, cumulative, consolidatedStatement, confirmedControlling, false);
+    }
+
+    /**
+     * @param noNoncontrolling 국내 관문 켬 — 그 판에 비지배 흔적이 없다({@link #hasNoncontrollingTrace} · 연결 응답). 그러면 지배 중단 = 연결 중단이다 —
+     *                         지배주주 순이익을 연결 순이익으로 여는 게이트와 같은 증거 · 같은 항등식이다(한쪽만 두면 그 판이 「비지배 없음」과 「지배
+     *                         중단 모름」을 함께 말한다). 위의 「비지배 몫 0 가정 금지」는 판 안 증거 없이 줄 부재로 가정하는 것에 선다. 답을 아는 판
+     *                         (녹화본 · 흔적 없음 · 표준 지배 중단 줄 있음) 6/6이 같았다
+     */
+    static BigDecimal[] discontinued(List<JsonNode> income, boolean cumulative, boolean consolidatedStatement,
+                                     BigDecimal confirmedControlling, boolean noNoncontrolling) {
         String field = cumulative ? "thstrm_add_amount" : "thstrm_amount";
         BigDecimal total = findBy(income, ID_DISCONTINUED, "account_id", field);
         BigDecimal parent = findBy(income, ID_DISCONTINUED_CONTROLLING, "account_id", field);
@@ -439,6 +450,8 @@ final class DartFullAccountMapper {
                 controlling = controllingNet.subtract(continuing);
             } else if (consolidated != null && controllingNet != null && net != null
                     && controllingNet.compareTo(net) == 0) {
+                controlling = consolidated;
+            } else if (consolidated != null && noNoncontrolling) {
                 controlling = consolidated;
             } else {
                 controlling = controllingNet == null ? null : byEpsRatio(income, field, controllingNet);
@@ -552,7 +565,7 @@ final class DartFullAccountMapper {
     /**
      * <b>표준 지배 줄을 원장 둘이 반박할 때의 지배주주 순이익</b>(국내 관문 켬 · 계획 K19). 표준 {@code ProfitLossAttributableToOwnersOfParent}가
      * 같은 보고서의 손익 산수(지배 + 비지배 = 당기순이익 — 비지배 후보는 표준 · 비표준 줄)에도, 자본변동표 지배 열 당기순이익에도 어긋나고, 다른 손익
-     * 줄(당기순이익 − 비지배 · 비표준 지배 줄) 하나가 자본변동표 지배 열과 같으면 그 줄의 값. 아니면 {@code null}(표준 줄 그대로).
+     * 줄(당기순이익 − 비지배 · 비표준 지배 줄 · 그 칸에 비지배 흔적이 없으면 당기순이익 — K9b) 하나가 자본변동표 지배 열과 같으면 그 줄의 값. 아니면 {@code null}(표준 줄 그대로).
      *
      * <p>자본변동표는 누계라 누계 칸으로 줄을 고르고 그 줄의 {@code field} 값을 낸다(반기 · 3분기 3개월 칸). 실측(녹화본 연결 8,462판 · 2026-11-10):
      * 자본변동표 지배 열이 실린 판에서 표준 지배 줄과 같은 것 6,262 · 다른 것 113 — 그중 이 규칙이 바꾸는 것 27(삼성전기 2019~2023 · LG이노텍
@@ -621,11 +634,33 @@ final class DartFullAccountMapper {
             }
             confirmed.add(periodNet.subtract(periodMinority).stripTrailingZeros());
         }
+        // 그 칸에 비지배 흔적이 없으면(비지배 손익 줄이 비었거나 0 · 다른 표준 비지배 손익 줄 0 · 자본변동표 비지배 열 0) 당기순이익이 곧 지배 몫이다 —
+        // 판 단독 게이트(hasNoncontrollingTrace)와 같은 증거. LG이노텍 2022(표준 지배 줄 976.9B = 계속영업 몫 · 비지배 줄 값 없음 · 자본변동표 지배 열
+        // 979.8B = 당기순이익): 녹화본 흔적 없는 판 중 표준 지배 줄 ≠ 당기순이익 19판 · 자본변동표 지배 열 = 당기순이익 13판.
+        if (minority == null && minorities.stream().allMatch(n -> n.signum() == 0) && near(net, statement)
+                && !noncontrollingIn(income, cumulativeField) && !equityNoncontrolling(equityChanges, equityField)) {
+            BigDecimal periodNet = findBy(income, ID_NET_INCOME, "account_id", field);
+            if (periodNet == null) {
+                return null;
+            }
+            confirmed.add(periodNet.stripTrailingZeros());
+        }
         if (confirmed.isEmpty()) {
             return null;
         }
         BigDecimal first = confirmed.get(0);
         return confirmed.stream().allMatch(v -> near(v, first)) ? first : null;
+    }
+
+    /** 그 칸에 값이 0이 아닌 표준 비지배 손익 줄(귀속 · 포괄 · 계속 · 중단 몫)이 있는가. */
+    private static boolean noncontrollingIn(List<JsonNode> income, String field) {
+        return income.stream().anyMatch(row -> row.path("account_id").asString("").toLowerCase(java.util.Locale.ROOT).contains("noncontrolling")
+                && nonzero(row, field));
+    }
+
+    /** 자본변동표 비지배 열(구성요소 축)에 그 칸 값이 0이 아닌 줄이 있는가. */
+    private static boolean equityNoncontrolling(List<JsonNode> equityChanges, String equityField) {
+        return equityChanges.stream().anyMatch(row -> row.path("account_detail").asString("").contains("비지배") && nonzero(row, equityField));
     }
 
     /** 자본변동표 지배 열(구성 열이 아닌 합계 열 하나)의 당기순이익 — 값이 하나가 아니면 {@code null}. */
@@ -706,32 +741,32 @@ final class DartFullAccountMapper {
     }
 
     /**
-     * <b>비지배가 실재하는 증거</b>(국내 관문 켬 · 계획 K9) — 값이 0이 아닌 손익 비지배 귀속 줄 또는 재무상태표 비지배지분(당기말 · 전기말)이 0이 아님.
-     * 존재만 보던 {@link #hasAnyNoncontrollingIncome}은 당기순이익 비지배 줄을 0원이어도 증거로 셌다 — 171090은 7년 내내 재무상태표 비지배지분이
-     * 0인데 2026 1분기 0원 줄 하나가 그 뒤 · 앞 기간 전부의 게이트를 닫아 맞는 FY 지배 NI 7칸이 빈다(G1 녹화본 재생 · 457190 1칸). 비지배 몫이 0인데
-     * 비지배 자본이 있는 회사는 재무상태표 줄이 증거가 된다.
+     * <b>이 판 하나에 비지배의 흔적이 있는가</b>(국내 관문 켬 · 계획 K9 · K9b · K10) — 표준 비지배 계정(손익 · 포괄 · 재무상태표 · 현금흐름 어디든)이나
+     * 자본변동표 비지배 열(구성요소 축)의 당기 값이 0이 아니거나, 재무상태표 비지배지분 전기말이 0이 아니면 참이다. 게이트를 이 판 하나로 연다 —
+     * 「그 기간 뒤 비지배」로 물으면 뒤에 생긴 진짜 비지배가 앞 기간 전부를 닫고(033790 · 253590 · 319660 · K9b) 답이 호출이 받은 기간 집합에
+     * 따라 갈린다(FY만 부른 관문 FSR과 전 분기 정기 FSR · K10).
+     *
+     * <p>「비지배 줄을 생략하는 회사가 있다」는 옛 사유를 녹화본(11-01 · 연결 판 8,462)으로 쟀다: 게이트가 물리는 판(지배 · 비지배 손익 표준 줄
+     * 없음) 1,032 중 이 술어로 새로 열리는 169판에서 다른 판 재무상태표가 그 기간 비지배 ≠ 0을 실은 것 0 · 뒤 해 같은 보고서 전기 열이 비지배 ≠ 0을
+     * 실은 것 0/161 · 같은 해 FY 손익만 비지배를 실은 13판은 전부 그 해 중간에 비지배가 처음 생긴 회사였다(FY 자본변동표 비지배 기초 0 · 취득 ·
+     * 종속기업 증자). 값이 0인 줄은 증거가 아니다(171090 · K9). 표준계정코드 없는 줄의 이름은 증거로 안 쓴다 — 089970 2025 3분기는 「비지배지분」
+     * 이름 줄에 당기순이익과 같은 값을 실었다(지배 자본 = 총자본).
      */
-    static boolean hasNonzeroNoncontrolling(List<JsonNode> income, List<JsonNode> balance) {
-        for (JsonNode row : income) {
-            String id = row.path("account_id").asString("");
-            if (id.contains("NoncontrollingInterests") || ID_NET_INCOME_NONCONTROLLING.contains(id)) {
-                BigDecimal value = DartAccountMapper.parseAmount(row.path("thstrm_amount").asString(""));
-                if (value != null && value.signum() != 0) {
-                    return true;
-                }
-            }
-        }
-        for (JsonNode row : balance) {
-            if (ID_NONCONTROLLING_INTERESTS.contains(row.path("account_id").asString(""))) {
-                for (String column : new String[]{"thstrm_amount", "frmtrm_amount"}) {
-                    BigDecimal value = DartAccountMapper.parseAmount(row.path(column).asString(""));
-                    if (value != null && value.signum() != 0) {
-                        return true;
-                    }
-                }
+    static boolean hasNoncontrollingTrace(JsonNode list) {
+        for (JsonNode row : list) {
+            String sj = row.path("sj_div").asString("");
+            boolean marked = row.path("account_id").asString("").toLowerCase(java.util.Locale.ROOT).contains("noncontrolling")
+                    || SJ_EQUITY_CHANGES.equals(sj) && row.path("account_detail").asString("").contains("비지배");
+            if (marked && (nonzero(row, "thstrm_amount") || SJ_BALANCE.equals(sj) && nonzero(row, "frmtrm_amount"))) {
+                return true;
             }
         }
         return false;
+    }
+
+    private static boolean nonzero(JsonNode row, String field) {
+        BigDecimal value = DartAccountMapper.parseAmount(row.path(field).asString(""));
+        return value != null && value.signum() != 0;
     }
 
     static boolean hasNoncontrollingIncome(List<JsonNode> income) {

@@ -413,6 +413,30 @@ class KrCommonIncomeTest {
     }
 
     @Test
+    void ncAlsoAnchorsARowTheReportGateOpened() {
+        // 043260 FY2021 꼴 — 판 단독 게이트(ADR-0209)가 지배 NI = 순이익(100억)으로 연 행인데 인스턴스의 지배 귀속 사실이 앵커 허용(1원 · 상대 1e−9) 밖으로 갈린다(실제 7원 · 2.2e−9). 자본총계 = 지배
+        // 자본(기초 · 기말)이면 지배 NI가 비었던 행과 같이 NC-b가 연결 순이익을 앵커로 받는다.
+        RowIncome row = new RowIncome(BigDecimal.valueOf(10_000_000_000L), BigDecimal.valueOf(10_000_000_000L));
+        java.util.List<Fact> facts = new java.util.ArrayList<>(List.of(instant("Equity", LocalDate.of(2026, 3, 31), 500),
+                instant("EquityAttributableToOwnersOfParent", LocalDate.of(2026, 3, 31), 500), instant("Equity", END, 600),
+                instant("EquityAttributableToOwnersOfParent", END, 600)));
+        facts.addAll(List.of(fact(Source.IFRS, "ProfitLoss", Q2, List.of(), 10_000_000_000L),
+                fact(Source.IFRS, "ProfitLossAttributableToOwnersOfParent", Q2, List.of(), 9_999_999_950L), eps(1000), weighted(10_000_000)));
+
+        Judged off = KrCommonIncome.judge(Q2, row, facts, COMMON_ONLY, null, NO_ACTIONS);
+        Judged on = KrCommonIncome.judge(Q2, row, facts, COMMON_ONLY, null, NO_ACTIONS, KrCommonIncome.Rules.V4);
+        // 대조군 — 기말 자본총계가 지배 자본보다 크면(비지배 있음) 앵커가 안 선다.
+        facts.removeIf(f -> "Equity".equals(f.concept()) && END.equals(f.end()));
+        facts.add(instant("Equity", END, 650));
+        Judged minority = KrCommonIncome.judge(Q2, row, facts, COMMON_ONLY, null, NO_ACTIONS, KrCommonIncome.Rules.V4);
+
+        assertThat(off.branch()).as("꺼짐 — 지금 동작").isEqualTo("none:anchor");
+        assertThat(on.branch()).isEqualTo("kr-ni");
+        assertThat(on.common()).isEqualByComparingTo("10000000000");
+        assertThat(minority.branch()).isEqualTo("none:anchor");
+    }
+
+    @Test
     void uAcceptsTheIntervalOnlyWhenTheRegisterRangeIsNarrow() {
         // FY · E 100원 · 지배 NI 10.6억 — 앞 해 명부 1,000만 한 점 증인은 깨진다(6천만 > 0.5S + 5%). NI ÷ (E ± 0.5) = [1,054.7만, 1,065.3만]이
         // 명부 구간 [1,000만(앞 해), 1,045만(그 해)] 위 0.93% 안 · 구간 폭 4.5%(≤ 5%) — 국내 관문 켬 U가 배분 0으로 받는다.

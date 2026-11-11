@@ -929,6 +929,14 @@ public final class KrCommonIncome {
                 return alternative;
             }
         }
+        if (rules.has(Rule.NC) && openedRow(period, row, facts)) {
+            // 판 단독 게이트(ADR-0209)가 지배 NI = 연결 순이익으로 연 행 — 인스턴스도 비지배 0을 확인할 때만(NC-b) 연결 순이익이 앵커다. 지배 귀속
+            // 사실이 몇 원 갈려 1차 앵커가 실패해도(043260 FY2021 지배 귀속 841 · 순이익 848 · 응답 비지배 열 전부 0) 지배 NI가 비었던 때와 같은 판정이다.
+            Anchor opened = noNoncontrolling(period, row, facts);
+            if (opened != null) {
+                return opened;
+            }
+        }
         Anchor besides = rules.has(Rule.AN3) ? ownersBesideNoncontrolling(period, row, facts) : null;
         if (besides != null) {
             return besides;
@@ -1008,6 +1016,13 @@ public final class KrCommonIncome {
             return null;
         }
         return new Anchor(owners, consolidated, 'C');
+    }
+
+    /** 행 지배 NI가 행 NI와 같고 연결 순이익도 같다 — 판 단독 게이트가 연 행(ADR-0209). */
+    private static boolean openedRow(Period period, RowIncome row, List<Fact> facts) {
+        return row.netIncomeControlling() != null && row.netIncome() != null && same(row.netIncomeControlling(), row.netIncome())
+                && axisless(facts, PROFIT, period, Set.of(Basis.CONSOLIDATED, Basis.NONE)).stream().anyMatch(v -> same(v, row.netIncome()))
+                && facts.stream().anyMatch(f -> f.basis() == Basis.CONSOLIDATED);
     }
 
     /** 행 지배 NI가 비었는데 연결 순이익이 행 NI와 같다 — 연결로 지은 행인데 지배 몫이 없다(no-controlling). */
