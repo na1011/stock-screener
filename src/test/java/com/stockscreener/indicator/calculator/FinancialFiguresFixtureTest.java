@@ -76,6 +76,8 @@ class FinancialFiguresFixtureTest {
                 args.add(new com.stockscreener.indicator.CommonIncomeRead(BigDecimal.valueOf(seq), "T", "decl"));
             } else if (type == FinancialFigures.class) {
                 args.add(FinancialFiguresFixture.annual(LocalDate.of(2020, 12, 31)).revenue(BigDecimal.valueOf(seq)).build());
+            } else if (type == java.util.Map.class && "flowsClosedOn".equals(component.getName())) {
+                args.add(java.util.Map.of("net_income", new java.util.TreeSet<>(java.util.Set.of(LocalDate.of(2026, 1, 1).plusDays(seq)))));
             } else if (type == java.util.Map.class) {
                 args.add(java.util.Map.of("revenue", com.stockscreener.indicator.FlowSupersession.at(LocalDate.of(2026, 1, 1).plusDays(seq))));
             } else {

@@ -1011,6 +1011,10 @@ public class IndicatorDataReader {
             stored = stored.withCommonVisibleFrom(rs.getObject("common_visible_from", LocalDate.class),
                     rs.getObject("payout_visible_from", LocalDate.class));
         }
+        if (krVisibility) {
+            // 국내 관문 켬 — 손익 네 칸을 칸마다 판정한다(계획 K12 D1-c · FinancialFigures.asSeenOn).
+            stored = stored.withFlowsClosed(closures(rs.getString("flow_superseded")));
+        }
         return stored.withVisibleFrom(visibleFrom(rs, opening, closes));
     }
 
@@ -1145,7 +1149,29 @@ public class IndicatorDataReader {
         }
         java.util.Map<String, FlowSupersession> out = new java.util.HashMap<>();
         tools.jackson.databind.JsonNode node = new tools.jackson.databind.ObjectMapper().readTree(json);
-        node.properties().forEach(e -> out.put(e.getKey(), flowSupersession(e.getValue())));
+        node.properties().forEach(e -> {
+            // 닫힘 열쇠(국내 관문 켬 · 계획 K12 D1-a)는 대체가 아니다 — closures가 읽는다.
+            if (!e.getKey().startsWith(com.stockscreener.pipeline.collector.FinancialWriter.CLOSED_KEY)) {
+                out.put(e.getKey(), flowSupersession(e.getValue()));
+            }
+        });
+        return out;
+    }
+
+    /** 닫힘 열쇠({@code "~closed:<칸>": [공시일, …]}) — 칸 → 뒤 보고서가 저장 값과 같은 값을 실은 날들. 없으면 빈 지도. */
+    public static java.util.Map<String, java.util.NavigableSet<LocalDate>> closures(String json) {
+        java.util.Map<String, java.util.NavigableSet<LocalDate>> out = new java.util.HashMap<>();
+        if (json == null || json.isBlank()) {
+            return out;
+        }
+        String prefix = com.stockscreener.pipeline.collector.FinancialWriter.CLOSED_KEY;
+        new tools.jackson.databind.ObjectMapper().readTree(json).properties().forEach(e -> {
+            if (e.getKey().startsWith(prefix)) {
+                java.util.TreeSet<LocalDate> days = new java.util.TreeSet<>();
+                e.getValue().forEach(d -> days.add(LocalDate.parse(d.asString())));
+                out.put(e.getKey().substring(prefix.length()), days);
+            }
+        });
         return out;
     }
 

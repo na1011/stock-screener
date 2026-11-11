@@ -33,7 +33,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 녹화본 시점으로 덮인다.
  *
  * <pre>
- * FSR_DB=stock_screener_gate_fsr_test DART_REPLAY_DIR=$PWD/.dartcache FSR_KR_GATE=true|false [FSR_SKIP_REFILL=true] [FSR_REREAD=true] \
+ * FSR_DB=stock_screener_gate_fsr_test DART_REPLAY_DIR=$PWD/.dartcache FSR_KR_GATE=true|false [FSR_SKIP_REFILL=true] [FSR_REREAD=true] [FSR_FR_FLOWS=true] \
  *     ./gradlew test --tests "*FsrReplayDerivationTest*" --rerun
  * </pre>
  */
@@ -79,6 +79,22 @@ class FsrReplayDerivationTest {
                 skipped++;
                 System.out.println("[fsr-replay] 건너뜀 " + s.ticker() + ": " + e.getMessage());
             }
+        }
+        // FSR_FR_FLOWS=true — 주요계정 녹화본으로 그 어댑터의 손익 기저 판정(매출 · 영업이익 · 순이익)만 다시 싣는다(행 값은 안 쓴다 · 0콜).
+        // 관문 켬의 순이익 닫힘(계획 K12 D1-a)은 이 어댑터가 낸다.
+        if (Boolean.parseBoolean(System.getenv().getOrDefault("FSR_FR_FLOWS", "false"))) {
+            DartFinancialAdapter summary = new DartFinancialAdapter(http, properties, limiter, quota, corpCodes);
+            summary.krGate(gate);
+            int flows = 0;
+            for (SecurityRef s : stocks) {
+                try {
+                    writer.applyFlowBases(s.stockId(), summary.fetchReports(s, from).flowBases());
+                    flows++;
+                } catch (com.stockscreener.pipeline.datasource.DataSourceException | RuntimeException e) {
+                    System.out.println("[fsr-replay] 주요계정 건너뜀 " + s.ticker() + ": " + e.getMessage());
+                }
+            }
+            System.out.printf("[fsr-replay] 주요계정 기저 판정 %d종목%n", flows);
         }
         KrXbrlStore store = new KrXbrlStore(jdbc);
         store.krGate(gate);

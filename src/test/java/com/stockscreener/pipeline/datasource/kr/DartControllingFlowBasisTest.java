@@ -45,6 +45,43 @@ class DartControllingFlowBasisTest {
         assertThat(on.superseded()).doesNotContainKey("net_income_controlling");
     }
 
+    @Test
+    @DisplayName("국내 관문 켬(계획 K12 D1-a · D1-b): 다음 해 판과 닫힌 지배 NI는 닫힘으로 싣고 · 연결 중단만 실은 열의 지배 중단은 0이 아니라 모름 · 꺼짐은 지금처럼")
+    void closuresAndControllingDiscontinuedAbsenceWhenGated() {
+        Map<String, RawFinancialReport> reports = Map.of("FY", report());
+        // 그 해 판: 연결 중단 30 · 지배 중단 25. 다음 해 판의 전기 열: 연결 중단 30 · 지배 중단 줄 없음 · 순이익 · 지배 NI는 같다.
+        Map<StatementPeriod, DartFullStatementAdapter.Pending> year = Map.of(StatementPeriod.FY, new DartFullStatementAdapter.Pending(2021,
+                StatementPeriod.FY, withDiscontinued("20220308000667", "thstrm_amount", true), true));
+        Map<StatementPeriod, DartFullStatementAdapter.Pending> next = Map.of(StatementPeriod.FY, new DartFullStatementAdapter.Pending(2022,
+                StatementPeriod.FY, withDiscontinued("20230307000111", "frmtrm_amount", false), true));
+
+        FlowBasis off = DartFullStatementAdapter.flowBases(2021, year, next, Map.of(), reports, false).get(0);
+        FlowBasis on = DartFullStatementAdapter.flowBases(2021, year, next, Map.of(), reports, true).get(0);
+
+        assertThat(off.closed()).as("꺼짐은 닫힘을 안 낸다").isEmpty();
+        assertThat(off.restated().get("discontinued_income_controlling")).as("꺼짐 — 지금 동작(줄 없음 = 0으로 다시 실음)")
+                .extracting(FlowBasis.Restatement::value).containsExactly(BigDecimal.ZERO);
+        assertThat(on.closed()).containsOnlyKeys("net_income_controlling", "discontinued_income");
+        assertThat(on.closed().get("net_income_controlling")).containsExactly(LocalDate.of(2023, 3, 7));
+        assertThat(on.superseded()).doesNotContainKey("discontinued_income_controlling");
+        assertThat(on.restated()).doesNotContainKey("discontinued_income_controlling");
+    }
+
+    /** 순이익 100억 · 지배 90억 · 비지배 10억 · 연결 중단 30억 · 지배 중단 25억(줄을 실을 때만). */
+    private static JsonNode withDiscontinued(String rceptNo, String field, boolean controllingLine) {
+        String row = "{\"rcept_no\":\"%s\",\"currency\":\"KRW\",\"sj_div\":\"CIS\",\"account_id\":\"%s\",\"account_nm\":\"%s\",\"%s\":\"%s\"}";
+        List<String> rows = new java.util.ArrayList<>(List.of(
+                row.formatted(rceptNo, "ifrs-full_ProfitLoss", "당기순이익", field, "10000000000"),
+                row.formatted(rceptNo, "ifrs-full_ProfitLossAttributableToOwnersOfParent", "지배기업 소유주", field, "9000000000"),
+                row.formatted(rceptNo, "ifrs-full_ProfitLossAttributableToNoncontrollingInterests", "비지배지분", field, "1000000000"),
+                row.formatted(rceptNo, "ifrs-full_ProfitLossFromDiscontinuedOperations", "중단영업이익", field, "3000000000")));
+        if (controllingLine) {
+            rows.add(row.formatted(rceptNo, "ifrs-full_IncomeFromDiscontinuedOperationsAttributableToOwnersOfParent", "지배 중단", field,
+                    "2500000000"));
+        }
+        return MAPPER.readTree("{\"list\":[" + String.join(",", rows) + "]}").get("list");
+    }
+
     /** 사업보고서 응답 — 그 칸에 표준 지배 줄 {@code owners} · 순이익 9,154억 · 비지배 222억(산수가 안 닫히면 표준 줄이 틀렸다) · 비표준 지배 줄과 자본변동표 지배 열 8,924억. */
     private static JsonNode annual(String rceptNo, String field, String owners) {
         String minority = "892445316914".equals(owners) ? "22987135781" : "22249439344";

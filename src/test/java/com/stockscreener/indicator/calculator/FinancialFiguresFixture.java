@@ -20,6 +20,7 @@ final class FinancialFiguresFixture {
     private java.util.Map<String, com.stockscreener.indicator.FlowSupersession> flowsSupersededOn;
     private FinancialFigures annualOfYear;
     private LocalDate visibleFrom;
+    private java.util.Map<String, java.util.NavigableSet<LocalDate>> flowsClosedOn;
 
     private int fiscalYear;
     private FinancialFigures.FiscalPeriod fiscalPeriod = FinancialFigures.FiscalPeriod.Q4;
@@ -139,6 +140,7 @@ final class FinancialFiguresFixture {
         fixture.flowsSupersededOn = source.flowsSupersededOn();
         fixture.annualOfYear = source.annualOfYear();
         fixture.visibleFrom = source.visibleFrom();
+        fixture.flowsClosedOn = source.flowsClosedOn();
         return fixture;
     }
 
@@ -390,7 +392,7 @@ final class FinancialFiguresFixture {
                 grossProfit, operatingExpenses, costsAndExpenses,
                 incomeTaxExpense, profitBeforeTax, shareBasisMultiple, shareBasisStatus, shareClassState,
                 weightedShares, weightedSharesJudged, discontinuedIncome, discontinuedIncomeControlling, discontinuedRule, common,
-                flowsSupersededOn, annualOfYear, visibleFrom);
+                flowsSupersededOn, annualOfYear, visibleFrom, flowsClosedOn);
     }
 
     /** 보이기 시작하는 날(관문 켬 · ADR-0204) — 비면 공시일이다. */

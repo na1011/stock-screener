@@ -11,9 +11,12 @@ import java.util.Set;
  *
  * @param judged     판정한 DB 컬럼명
  * @param superseded 그중 대체된 칸 → 대체일(그날 이후 봉은 그 칸을 모른다)
+ * @param closed     뒤 보고서의 같은 기간 열이 저장 값과 닫힌 칸 → 그 보고서 공시일들(국내 관문 켬 · FY만 · 계획 K12 D1-a) — 그날부터
+ *                   저장 값이 새 기저의 값이기도 하다. 비교쌍이 없던 칸(뒤 보고서에 줄이 없다)은 안 싣는다
  */
 public record FlowBasis(int fiscalYear, String fiscalPeriod, LocalDate publishedAt, Set<String> judged,
-                        Map<String, LocalDate> superseded, Map<String, java.util.List<Restatement>> restated) {
+                        Map<String, LocalDate> superseded, Map<String, java.util.List<Restatement>> restated,
+                        Map<String, java.util.List<LocalDate>> closed) {
 
     /**
      * 원장이 그 기간 칸을 새 기저로 다시 실은 값 — 그 보고서 공시일부터 그 값이다(FY만 · 다음 해 · 두 해 뒤 사업보고서의 전기 · 전전기 FY 열 ·
@@ -26,10 +29,16 @@ public record FlowBasis(int fiscalYear, String fiscalPeriod, LocalDate published
         judged = Set.copyOf(judged);
         superseded = Map.copyOf(superseded);
         restated = restated == null ? Map.of() : Map.copyOf(restated);
+        closed = closed == null ? Map.of() : Map.copyOf(closed);
+    }
+
+    public FlowBasis(int fiscalYear, String fiscalPeriod, LocalDate publishedAt, Set<String> judged,
+                     Map<String, LocalDate> superseded, Map<String, java.util.List<Restatement>> restated) {
+        this(fiscalYear, fiscalPeriod, publishedAt, judged, superseded, restated, Map.of());
     }
 
     public FlowBasis(int fiscalYear, String fiscalPeriod, LocalDate publishedAt, Set<String> judged,
                      Map<String, LocalDate> superseded) {
-        this(fiscalYear, fiscalPeriod, publishedAt, judged, superseded, Map.of());
+        this(fiscalYear, fiscalPeriod, publishedAt, judged, superseded, Map.of(), Map.of());
     }
 }

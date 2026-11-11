@@ -711,6 +711,15 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
                     abs(annualAmount(nfy, e.getValue(), "frmtrm_amount", cash), magnitude),
                     abs(annualAmount(n2fy, e.getValue(), "bfefrmtrm_amount", cash), magnitude)));
         }
+        if (krGate) {
+            // 계획 K12 D1-b: 뒤 보고서가 연결 중단영업을 0 아닌 값으로 실으며 지배 중단 줄을 안 실었으면 그 열의 지배 중단은 0이 아니라 모름이다
+            // (부재 = 0은 연결 중단도 0일 때만 선다) — 0으로 읽으면 「0으로 다시 실었다」 · 「0과 닫혔다」가 된다.
+            DartFlowBasis.Values dic = values.get("discontinued_income_controlling");
+            values.put("discontinued_income_controlling", new DartFlowBasis.Values(dic.q1(), dic.q2(), dic.h1(), dic.q3(), dic.nine(),
+                    dic.fy(), dic.priorQ1(), dic.priorQ2(), dic.priorH1(), dic.priorQ3(), dic.priorNine(),
+                    controllingDiscontinuedUnknown(nfy, "frmtrm_amount") ? null : dic.priorFy(),
+                    controllingDiscontinuedUnknown(n2fy, "bfefrmtrm_amount") ? null : dic.twoYearsPriorFy()));
+        }
         DartFlowBasis.Dates dates = new DartFlowBasis.Dates(published(reports.get("Q1")), published(reports.get("Q2")),
                 published(reports.get("Q3")), published(reports.get("FY")), filed(nq1, year + 1), filed(nh1, year + 1),
                 filed(nq3, year + 1), filed(nfy, year + 1), filed(n2fy, year + 2));
@@ -744,7 +753,30 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
         if (!ownControlling) {
             restated.remove("net_income_controlling");
         }
-        return DartFlowBasis.bases(year, reports, judged, owned, restated);
+        Map<String, List<java.time.LocalDate>> closed = new java.util.HashMap<>();
+        if (krGate) {
+            closed.putAll(DartFlowBasis.closedFiscalYear(values, dates));
+            List<java.time.LocalDate> income = closed.remove("net_income");
+            // 지배 몫 표준 줄이 없는 해는 대체와 같이 이 소스의 순이익 닫힘을 따른다.
+            if (!ownControlling) {
+                closed.remove("net_income_controlling");
+                if (income != null) {
+                    closed.put("net_income_controlling", income);
+                }
+            }
+        }
+        return DartFlowBasis.bases(year, reports, judged, owned, restated, closed);
+    }
+
+    /** 그 열에 지배 중단 줄이 없는데 연결 중단은 0이 아닌가(계획 K12 D1-b) — 그러면 그 열의 지배 중단은 모른다. */
+    private static boolean controllingDiscontinuedUnknown(Pending p, String field) {
+        if (p == null) {
+            return false;
+        }
+        List<JsonNode> income = incomeOf(p.list());
+        BigDecimal consolidated = DartFullAccountMapper.findBy(income, DartFullAccountMapper.ID_DISCONTINUED, "account_id", field);
+        return consolidated != null && consolidated.signum() != 0
+                && DartFullAccountMapper.findBy(income, DartFullAccountMapper.ID_DISCONTINUED_CONTROLLING, "account_id", field) == null;
     }
 
     private static BigDecimal amount(Pending p, java.util.Set<String> ids, String field, boolean zeroWhenAbsent) {

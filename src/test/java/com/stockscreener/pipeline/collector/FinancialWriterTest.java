@@ -109,6 +109,24 @@ class FinancialWriterTest {
         assertThat(superseded()).as("대체가 다 사라지면 NULL").isNull();
     }
 
+    @Test
+    @DisplayName("닫힘(국내 관문 켬 · 계획 K12 D1-a)은 「~closed:<칸>」 열쇠에 싣고 그 칸의 판정과 함께 다시 짓는다 — 다음 판정이 안 내면 지운다")
+    void closuresRideTheJudgedColumns() {
+        writer.write(stockId, List.of(report(2025, "FY", "2026-03-15", "1000")));
+        LocalDate day = LocalDate.parse("2026-03-15");
+        writer.applyFlowBases(stockId, List.of(new com.stockscreener.pipeline.datasource.FlowBasis(2025, "FY", day,
+                java.util.Set.of("net_income"), Map.of(), Map.of(),
+                Map.of("net_income", List.of(LocalDate.parse("2027-03-16"), LocalDate.parse("2028-03-14"))))));
+        writer.applyFlowBases(stockId, List.of(new com.stockscreener.pipeline.datasource.FlowBasis(2025, "FY", day,
+                java.util.Set.of("discontinued_income"), Map.of("discontinued_income", LocalDate.parse("2027-03-16")))));
+        assertThat(superseded()).isEqualTo(
+                "{\"~closed:net_income\": [\"2027-03-16\", \"2028-03-14\"], \"discontinued_income\": \"2027-03-16\"}");
+
+        writer.applyFlowBases(stockId, List.of(new com.stockscreener.pipeline.datasource.FlowBasis(2025, "FY", day,
+                java.util.Set.of("net_income"), Map.of())));
+        assertThat(superseded()).isEqualTo("{\"discontinued_income\": \"2027-03-16\"}");
+    }
+
     private String superseded() {
         return jdbcTemplate.queryForObject("SELECT flow_superseded::text FROM financial_statement WHERE stock_id = ?", String.class,
                 stockId);

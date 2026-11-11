@@ -91,6 +91,21 @@ class DartFlowBasisTest {
     }
 
     @Test
+    @DisplayName("FY 닫힘(계획 K12 D1-a) — 전기 · 전전기 FY 열이 저장 FY와 닫히면 그 공시일 · 열이 없으면 안 싣는다 · 손익 네 칸만")
+    void closedFiscalYearCarriesTheConfirmingFilings() {
+        LocalDate twoLater = LocalDate.of(2027, 3, 16);
+        DartFlowBasis.Dates dates = new DartFlowBasis.Dates(Q1, H1, Q3, FY, NQ1, NH1, NQ3, NFY, twoLater);
+        DartFlowBasis.Values closesThenMoves = new DartFlowBasis.Values(null, null, null, null, null, b(500L), null, null, null, null,
+                null, b(503L), b(470L));
+        DartFlowBasis.Values unpaired = new DartFlowBasis.Values(null, null, null, null, null, b(500L), null, null, null, null,
+                null, null, null);
+        var out = DartFlowBasis.closedFiscalYear(Map.of("net_income", closesThenMoves, "net_income_controlling", unpaired,
+                "revenue", closesThenMoves), dates);
+        assertThat(out).containsOnlyKeys("net_income");
+        assertThat(out.get("net_income")).containsExactly(NFY);
+    }
+
+    @Test
     @DisplayName("저장 값이 0이면 0이 아닌 전기 열이 곧 어긋남이다(중단영업은 대개 0에서 생긴다)")
     void zeroStoredValueIsApartFromAnyNonZero() {
         assertThat(DartFlowBasis.apart(BigDecimal.valueOf(5), BigDecimal.ZERO, null)).isTrue();

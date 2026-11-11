@@ -77,6 +77,14 @@ public class DartFinancialAdapter implements FinancialDataSource {
         this.apiKey = source.getApiKey();
     }
 
+    /** 국내 관문({@code stockscreener.gate.kr-provisional}) — 켜면 FY 순이익의 닫힘을 싣는다(계획 K12 D1-a). 시험은 생성자만 부른다. */
+    private boolean krGate;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public void krGate(@org.springframework.beans.factory.annotation.Value("${stockscreener.gate.kr-provisional}") boolean on) {
+        this.krGate = on;
+    }
+
     @Override
     public Set<String> supportedMarketCodes() {
         return Set.of("KOSPI", "KOSDAQ");
@@ -134,7 +142,7 @@ public class DartFinancialAdapter implements FinancialDataSource {
         List<com.stockscreener.pipeline.datasource.FlowBasis> bases = new ArrayList<>();
         for (int year = fromFiscalYear; year <= currentYear; year++) {
             bases.addAll(flowBases(year, rowsByYear.get(year), rowsByYear.getOrDefault(year + 1, Map.of()),
-                    rowsByYear.getOrDefault(year + 2, Map.of()), reportsByYear.get(year)));
+                    rowsByYear.getOrDefault(year + 2, Map.of()), reportsByYear.get(year), krGate));
         }
         // 부재 축(absences)은 DART가 안 본다 — 빈 목록은 「모른다」이지 「없다」가 아니다.
         // 같은 판정을 낼 재료는 있다(DartFullAccountMapper.find가 후보 account_id가 손익 행에
@@ -339,7 +347,8 @@ public class DartFinancialAdapter implements FinancialDataSource {
     private static List<com.stockscreener.pipeline.datasource.FlowBasis> flowBases(int year, Map<String, PeriodRows> rows,
                                                                                    Map<String, PeriodRows> next,
                                                                                    Map<String, PeriodRows> twoLater,
-                                                                                   Map<String, RawFinancialReport> reports) {
+                                                                                   Map<String, RawFinancialReport> reports,
+                                                                                   boolean krGate) {
         if (rows == null || reports == null || reports.isEmpty()) {
             return List.of();
         }
@@ -378,7 +387,7 @@ public class DartFinancialAdapter implements FinancialDataSource {
                 published(reports.get("Q3")), published(reports.get("FY")), filed(nq1, year + 1), filed(nh1, year + 1),
                 filed(nq3, year + 1), filed(nfy, year + 1), filed(n2fy, year + 2));
         return DartFlowBasis.bases(year, reports, FLOW_COLUMNS.keySet(), DartFlowBasis.judge(values, dates),
-                DartFlowBasis.restatedFiscalYear(values, dates));
+                DartFlowBasis.restatedFiscalYear(values, dates), krGate ? DartFlowBasis.closedFiscalYear(values, dates) : Map.of());
     }
 
     private static BigDecimal firstOf(BigDecimal a, BigDecimal b) {

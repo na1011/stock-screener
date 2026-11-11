@@ -153,6 +153,58 @@ class CommonEquityBasisTest {
     }
 
     @Test
+    @DisplayName("닫힘을 읽은 행(국내 관문 켬 · 계획 K12 D1-c)은 칸마다 — 다음 해 판이 같게 실은 칸은 안다 · 지배 NI를 모르면 넷 다 모른다")
+    void closedColumnsStayKnownWhenAnotherIsRestated() {
+        LocalDate next = LocalDate.of(2026, 3, 17);
+        LocalDate twoLater = LocalDate.of(2027, 3, 16);
+        // 다음 해 판이 사업 하나를 중단영업으로 옮겨 연결 중단 0 → 30으로 다시 실었고 순이익 · 지배 NI는 같게 실었다 · 지배 중단 줄은 없다(D1-b).
+        FinancialFigures fy = FinancialFiguresFixture.annual(END).netIncome(new BigDecimal("50")).netIncomeControlling(new BigDecimal("45"))
+                .totalEquity(new BigDecimal("1000")).totalEquityControlling(new BigDecimal("900"))
+                .discontinued(BigDecimal.ZERO, BigDecimal.ZERO)
+                .flowSupersession("discontinued_income", new com.stockscreener.indicator.FlowSupersession(next,
+                        new java.util.TreeMap<>(java.util.Map.of(next, new BigDecimal("30"))))).build();
+        java.util.Map<String, java.util.NavigableSet<LocalDate>> closed = java.util.Map.of(
+                "net_income", new java.util.TreeSet<>(java.util.Set.of(next)),
+                "net_income_controlling", new java.util.TreeSet<>(java.util.Set.of(next)));
+
+        FinancialFigures seen = fy.withFlowsClosed(closed).asSeenOn(LocalDate.of(2026, 6, 1));
+        assertThat(seen.netIncome()).isEqualByComparingTo("50");
+        assertThat(seen.netIncomeControlling()).isEqualByComparingTo("45");
+        assertThat(seen.discontinuedIncome()).isEqualByComparingTo("30");
+        assertThat(seen.discontinuedIncomeControlling()).as("견주지 못한 칸은 모른다").isNull();
+        assertThat(FinancialMath.controllingContinuingIncomeOf(seen)).as("지배 계속영업은 모른다 — 연결로 안 떨어진다").isNull();
+        assertThat(FinancialMath.roeBasis(seen).income()).as("연간 ROE는 연결 짝(계속영업 ↔ 총자본)").isEqualByComparingTo("20");
+        assertThat(FinancialMath.roeBasis(seen).equity()).isEqualByComparingTo("1000");
+
+        assertThat(fy.asSeenOn(LocalDate.of(2026, 6, 1)).netIncome()).as("닫힘을 안 읽은 행은 넷 다 모른다").isNull();
+        FinancialFigures noControlling = fy.withFlowsClosed(java.util.Map.of("net_income", new java.util.TreeSet<>(java.util.Set.of(next))))
+                .asSeenOn(LocalDate.of(2026, 6, 1));
+        assertThat(noControlling.netIncome()).as("지배 NI를 모르면 순이익도 안 낸다(비지배 없는 회사로 읽힌다)").isNull();
+        assertThat(noControlling.discontinuedIncome()).isNull();
+
+        // 두 해 뒤 판이 다시 기저를 바꿨는데 닫힘은 다음 해 판 것뿐 — 그 기저에서는 모른다.
+        FinancialFigures later = FinancialFiguresFixture.annual(END).netIncome(new BigDecimal("50")).netIncomeControlling(new BigDecimal("45"))
+                .discontinued(BigDecimal.ZERO, BigDecimal.ZERO)
+                .flowSupersession("discontinued_income", new com.stockscreener.indicator.FlowSupersession(twoLater,
+                        new java.util.TreeMap<>(java.util.Map.of(twoLater, new BigDecimal("30"))))).build().withFlowsClosed(closed);
+        assertThat(later.asSeenOn(LocalDate.of(2027, 6, 1)).netIncomeControlling()).isNull();
+
+        // 보통주 몫(국내 켬) — 순이익만 다시 실리고 지배 NI · 중단 두 칸이 같게 실렸으면 그 몫은 그대로 선다 · 지배 NI 닫힘이 없으면 모른다.
+        FinancialFigures common = FinancialFiguresFixture.annual(END).netIncome(new BigDecimal("50")).netIncomeControlling(new BigDecimal("45"))
+                .discontinued(BigDecimal.ZERO, BigDecimal.ZERO).common(new BigDecimal("40"), "T", "r1")
+                .flowSupersession("net_income", new com.stockscreener.indicator.FlowSupersession(next,
+                        new java.util.TreeMap<>(java.util.Map.of(next, new BigDecimal("52"))))).build();
+        java.util.function.Function<String, java.util.NavigableSet<LocalDate>> at = c -> new java.util.TreeSet<>(java.util.Set.of(next));
+        FinancialFigures confirmed = common.withFlowsClosed(java.util.Map.of("net_income_controlling", at.apply(""),
+                "discontinued_income", at.apply(""), "discontinued_income_controlling", at.apply(""))).asSeenOn(LocalDate.of(2026, 6, 1));
+        assertThat(confirmed.netIncome()).isEqualByComparingTo("52");
+        assertThat(FinancialMath.controllingContinuingIncomeOf(confirmed)).isEqualByComparingTo("40");
+        FinancialFigures unconfirmed = common.withFlowsClosed(java.util.Map.of("discontinued_income", at.apply(""),
+                "discontinued_income_controlling", at.apply(""))).asSeenOn(LocalDate.of(2026, 6, 1));
+        assertThat(FinancialMath.controllingContinuingIncomeOf(unconfirmed)).isNull();
+    }
+
+    @Test
     @DisplayName("못 정함은 미표시다 — 지배 자본으로 메우지 않는다")
     void undecidedIsNotShown() {
         FinancialFigures f = bank().commonEquity(null, null, "open").build();

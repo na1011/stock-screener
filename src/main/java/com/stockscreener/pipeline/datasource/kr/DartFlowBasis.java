@@ -30,6 +30,9 @@ final class DartFlowBasis {
     static final BigDecimal TOLERANCE = new BigDecimal("0.01");
     static final List<String> LABELS = List.of("Q1", "Q2", "Q3", "Q4", "FY");
     private static final List<String> QUARTERS = List.of("Q1", "Q2", "Q3", "Q4");
+    /** 함께 낡는 손익 칸 — 닫힘을 읽는 쪽은 이 넷뿐이다({@code FinancialFigures.asSeenOn}). */
+    static final Set<String> INCOME_GROUP = Set.of("net_income", "net_income_controlling", "discontinued_income",
+            "discontinued_income_controlling");
 
     private DartFlowBasis() {
     }
@@ -127,18 +130,59 @@ final class DartFlowBasis {
         return out;
     }
 
-    /** 그 해 보고서마다 판정 결과를 싣는다 — 판정한 칸 · 대체된 칸 · FY의 새 값. */
+    /**
+     * FY 칸의 닫힘(국내 관문 켬 · 계획 K12 D1-a) — 다음 해 · 두 해 뒤 사업보고서의 전기 · 전전기 FY 열이 저장 FY와 닫히면 그 보고서 공시일부터 저장
+     * 값이 새 기저의 값이기도 하다. 손익 네 칸 중 한 칸만 다시 실린 해에 나머지가 「안 견줌」인지 「견줬고 같음」인지를 이것이 가른다 — 없으면 함께
+     * 낡는 칸을 넷 다 모른다({@code FinancialFigures.asSeenOn}). 열이 없으면(재료가 빠지면) 안 싣는다.
+     */
+    static Map<String, List<LocalDate>> closedFiscalYear(Map<String, Values> values, Dates d) {
+        Map<String, List<LocalDate>> out = new HashMap<>();
+        for (Map.Entry<String, Values> e : values.entrySet()) {
+            if (!INCOME_GROUP.contains(e.getKey())) {
+                continue;
+            }
+            Values v = e.getValue();
+            List<LocalDate> list = new ArrayList<>();
+            LocalDate next = latest(d.fy(), d.nextFy());
+            if (next != null && closes(v.priorFy(), v.fy())) {
+                list.add(next);
+            }
+            LocalDate twoLater = latest(d.fy(), d.twoYearsLaterFy());
+            if (twoLater != null && closes(v.twoYearsPriorFy(), v.fy())) {
+                list.add(twoLater);
+            }
+            if (!list.isEmpty()) {
+                list.sort(null);
+                out.put(e.getKey(), list);
+            }
+        }
+        return out;
+    }
+
+    private static boolean closes(BigDecimal later, BigDecimal stored) {
+        return later != null && stored != null && !apart(later, stored, null);
+    }
+
+    /** 그 해 보고서마다 판정 결과를 싣는다 — 판정한 칸 · 대체된 칸 · FY의 새 값 · FY의 닫힘. */
     static List<FlowBasis> bases(int year, Map<String, RawFinancialReport> reports, Set<String> judged,
-                                 Map<String, Map<String, LocalDate>> verdict, Map<String, List<FlowBasis.Restatement>> restated) {
+                                 Map<String, Map<String, LocalDate>> verdict, Map<String, List<FlowBasis.Restatement>> restated,
+                                 Map<String, List<LocalDate>> closed) {
         List<FlowBasis> out = new ArrayList<>();
         for (String label : LABELS) {
             RawFinancialReport r = reports.get(label);
             if (r != null) {
-                Map<String, List<FlowBasis.Restatement>> mine = "FY".equals(label) ? restated : Map.of();
-                out.add(new FlowBasis(year, label, r.publishedAt(), judged, verdict.getOrDefault(label, Map.of()), mine));
+                // 대체된 칸도 닫힘을 싣는다 — 다음 해 판과 닫히고 두 해 뒤 판에서 갈린 칸은 그 사이 봉에서 저장 값이 새 기저의 값이다.
+                boolean fy = "FY".equals(label);
+                out.add(new FlowBasis(year, label, r.publishedAt(), judged, verdict.getOrDefault(label, Map.of()),
+                        fy ? restated : Map.of(), fy ? closed : Map.of()));
             }
         }
         return out;
+    }
+
+    static List<FlowBasis> bases(int year, Map<String, RawFinancialReport> reports, Set<String> judged,
+                                 Map<String, Map<String, LocalDate>> verdict, Map<String, List<FlowBasis.Restatement>> restated) {
+        return bases(year, reports, judged, verdict, restated, Map.of());
     }
 
     static List<FlowBasis> bases(int year, Map<String, RawFinancialReport> reports, Set<String> judged,

@@ -169,11 +169,44 @@ public record FinancialFigures(
          * ({@code ReportingBasis.visibleFrom}). {@code null}이면 {@link #publishedAt}이다(이 규칙으로 안 읽은 행). 보이기 소비자는
          * {@link #visibleOn()}을, 앵커 소비자(주식수 · 기업행위 배수)는 저장 공시일 {@link #publishedAt}을 읽는다.
          */
-        LocalDate visibleFrom
+        LocalDate visibleFrom,
+
+        /**
+         * <b>손익 칸의 닫힘</b>(국내 관문 켬 · 계획 K12 D1-a) — DB 컬럼명 → 뒤 보고서가 이 기간 그 칸을 저장 값과 같은 값으로 다시 실은 날들(FY만).
+         * {@code null}이면 이 규칙으로 안 읽은 행이다 — 함께 낡는 손익 칸을 넷 다 모른다({@link #asSeenOn}).
+         */
+        java.util.Map<String, java.util.NavigableSet<LocalDate>> flowsClosedOn
 ) {
 
     public FinancialFigures {
         flowsSupersededOn = flowsSupersededOn == null ? java.util.Map.of() : java.util.Map.copyOf(flowsSupersededOn);
+        flowsClosedOn = flowsClosedOn == null ? null : java.util.Map.copyOf(flowsClosedOn);
+    }
+
+    /** {@link #flowsClosedOn}을 안 싣는 호출 — 이 규칙으로 안 읽은 행. */
+    public FinancialFigures(int fiscalYear, FiscalPeriod fiscalPeriod, LocalDate periodStart, LocalDate periodEnd,
+                            LocalDate publishedAt, String currencyCode, BigDecimal revenue, BigDecimal operatingIncome,
+                            BigDecimal netIncome, BigDecimal totalAssets, BigDecimal totalEquity, BigDecimal totalEquityControlling,
+                            BigDecimal totalLiabilities, BigDecimal currentAssets, BigDecimal currentLiabilities,
+                            BigDecimal retainedEarnings, BigDecimal operatingCashFlow, BigDecimal sharesOutstanding, BigDecimal eps,
+                            BigDecimal bps, BigDecimal costOfSales, BigDecimal cashAndEquivalents, BigDecimal capex,
+                            BigDecimal inventories, BigDecimal netIncomeControlling, BigDecimal interestAndDividendIncome,
+                            BigDecimal noninterestIncome, BigDecimal interestExpense, BigDecimal noninterestExpense,
+                            BigDecimal benefitsLossesAndExpenses, BigDecimal grossProfit, BigDecimal operatingExpenses,
+                            BigDecimal costsAndExpenses, BigDecimal incomeTaxExpense, BigDecimal profitBeforeTax,
+                            BigDecimal shareBasisMultiple, String shareBasisStatus, ShareClassLine.State shareClassState,
+                            BigDecimal weightedShares, boolean weightedSharesJudged, BigDecimal discontinuedIncome,
+                            BigDecimal discontinuedIncomeControlling, BigDecimal discontinuedRule, CommonIncomeRead common,
+                            java.util.Map<String, FlowSupersession> flowsSupersededOn, FinancialFigures annualOfYear,
+                            LocalDate visibleFrom) {
+        this(fiscalYear, fiscalPeriod, periodStart, periodEnd, publishedAt, currencyCode, revenue, operatingIncome, netIncome,
+                totalAssets, totalEquity, totalEquityControlling, totalLiabilities, currentAssets, currentLiabilities,
+                retainedEarnings, operatingCashFlow, sharesOutstanding, eps, bps, costOfSales, cashAndEquivalents, capex,
+                inventories, netIncomeControlling, interestAndDividendIncome, noninterestIncome, interestExpense,
+                noninterestExpense, benefitsLossesAndExpenses, grossProfit, operatingExpenses, costsAndExpenses,
+                incomeTaxExpense, profitBeforeTax, shareBasisMultiple, shareBasisStatus, shareClassState, weightedShares,
+                weightedSharesJudged, discontinuedIncome, discontinuedIncomeControlling, discontinuedRule, common, flowsSupersededOn,
+                annualOfYear, visibleFrom, null);
     }
 
     /** {@link #visibleFrom}을 안 싣는 호출 — 보이는 날은 공시일이다. */
@@ -212,11 +245,20 @@ public record FinancialFigures(
         CommonIncomeRead shiftedCommon = common == null || common.incomeVisibleFrom() == null && common.payoutVisibleFrom() == null ? common
                 : common.withVisibleFrom(common.incomeVisibleFrom() == null ? null : visible.apply(common.incomeVisibleFrom()),
                 common.payoutVisibleFrom() == null ? null : visible.apply(common.payoutVisibleFrom()));
-        if (flowsSupersededOn.isEmpty() && shiftedCommon == common) {
+        if (flowsSupersededOn.isEmpty() && (flowsClosedOn == null || flowsClosedOn.isEmpty()) && shiftedCommon == common) {
             return this;
         }
         java.util.Map<String, FlowSupersession> moved = new java.util.HashMap<>();
         flowsSupersededOn.forEach((column, f) -> moved.put(column, f.shifted(visible)));
+        // 닫힘도 뒤 보고서의 저장 공시일이다 — 대체일과 같은 규칙으로 옮긴다.
+        java.util.Map<String, java.util.NavigableSet<LocalDate>> movedClosed = flowsClosedOn == null ? null : new java.util.HashMap<>();
+        if (flowsClosedOn != null) {
+            flowsClosedOn.forEach((column, days) -> {
+                java.util.TreeSet<LocalDate> out = new java.util.TreeSet<>();
+                days.forEach(d -> out.add(visible.apply(d)));
+                movedClosed.put(column, out);
+            });
+        }
         return new FinancialFigures(fiscalYear, fiscalPeriod, periodStart, periodEnd, publishedAt, currencyCode, revenue,
                 operatingIncome, netIncome, totalAssets, totalEquity, totalEquityControlling, totalLiabilities, currentAssets,
                 currentLiabilities, retainedEarnings, operatingCashFlow, sharesOutstanding, eps, bps, costOfSales,
@@ -224,7 +266,7 @@ public record FinancialFigures(
                 interestExpense, noninterestExpense, benefitsLossesAndExpenses, grossProfit, operatingExpenses, costsAndExpenses,
                 incomeTaxExpense, profitBeforeTax, shareBasisMultiple, shareBasisStatus, shareClassState, weightedShares,
                 weightedSharesJudged, discontinuedIncome, discontinuedIncomeControlling, discontinuedRule, shiftedCommon, moved,
-                annualOfYear, visibleFrom);
+                annualOfYear, visibleFrom, movedClosed);
     }
 
     /** 보통주 몫 · 배당성향 분모가 늦게 보이기 시작하는 날들(국내 관문 켬) — 재무 경계에 더한다. 없으면 빈 목록. */
@@ -250,7 +292,7 @@ public record FinancialFigures(
                 interestExpense, noninterestExpense, benefitsLossesAndExpenses, grossProfit, operatingExpenses, costsAndExpenses,
                 incomeTaxExpense, profitBeforeTax, shareBasisMultiple, shareBasisStatus, shareClassState, weightedShares,
                 weightedSharesJudged, discontinuedIncome, discontinuedIncomeControlling, discontinuedRule, read, flowsSupersededOn,
-                annualOfYear, visibleFrom);
+                annualOfYear, visibleFrom, flowsClosedOn);
     }
 
     /** 보이는 날을 단 사본. */
@@ -262,7 +304,7 @@ public record FinancialFigures(
                 interestExpense, noninterestExpense, benefitsLossesAndExpenses, grossProfit, operatingExpenses, costsAndExpenses,
                 incomeTaxExpense, profitBeforeTax, shareBasisMultiple, shareBasisStatus, shareClassState, weightedShares,
                 weightedSharesJudged, discontinuedIncome, discontinuedIncomeControlling, discontinuedRule, common, flowsSupersededOn,
-                annualOfYear, day);
+                annualOfYear, day, flowsClosedOn);
     }
 
     /** {@link #annualOfYear}를 안 싣는 호출. */
@@ -299,7 +341,7 @@ public record FinancialFigures(
                 interestExpense, noninterestExpense, benefitsLossesAndExpenses, grossProfit, operatingExpenses, costsAndExpenses,
                 incomeTaxExpense, profitBeforeTax, shareBasisMultiple, shareBasisStatus, shareClassState, weightedShares,
                 weightedSharesJudged, discontinuedIncome, discontinuedIncomeControlling, discontinuedRule, common, flowsSupersededOn,
-                annual, visibleFrom);
+                annual, visibleFrom, flowsClosedOn);
     }
 
     /** {@link #flowsSupersededOn}을 안 싣는 호출 — 이 규칙으로 안 읽은 행. */
@@ -357,10 +399,8 @@ public record FinancialFigures(
         // 지배 계열을 연결 계속영업으로 떨어뜨리거나(F2b MUST NOT) 계속영업이 옛 중단 몫을 뺀다. 넷 중 하나가 낡으면 넷 다 새 값이 있을 때만 받고
         // 아니면 넷 다 모른다. 보통주 몫 엔진의 손익 몫도 같은 기간 손익이라 그때 함께 모른다(자본 재료는 잔액이라 그대로).
         boolean income = INCOME_GROUP.stream().anyMatch(c -> flowsSupersededOn.containsKey(c) && flowsSupersededOn.get(c).staleOn(day));
-        boolean incomeKnown = !income || INCOME_GROUP.stream().allMatch(c -> !flowsSupersededOn.containsKey(c)
-                ? stored.apply(c) == null : seen.apply(c) != null);
-        java.util.function.Function<String, BigDecimal> value = column -> INCOME_GROUP.contains(column)
-                ? (income && !incomeKnown ? null : seen.apply(column)) : seen.apply(column);
+        java.util.Set<String> unknown = income ? unknownIncome(day, stored, seen) : java.util.Set.of();
+        java.util.function.Function<String, BigDecimal> value = column -> unknown.contains(column) ? null : seen.apply(column);
         return new FinancialFigures(fiscalYear, fiscalPeriod, periodStart, periodEnd, publishedAt, currencyCode,
                 value.apply("revenue"), value.apply("operating_income"), value.apply("net_income"), totalAssets, totalEquity,
                 totalEquityControlling, totalLiabilities, currentAssets, currentLiabilities, retainedEarnings,
@@ -370,7 +410,71 @@ public record FinancialFigures(
                 costsAndExpenses, value.apply("income_tax_expense"), value.apply("profit_before_tax"), shareBasisMultiple,
                 shareBasisStatus, shareClassState, weightedShares, weightedSharesJudged, value.apply("discontinued_income"),
                 value.apply("discontinued_income_controlling"), discontinuedRule,
-                income && seenCommon != null ? seenCommon.withoutIncome() : seenCommon, flowsSupersededOn, annualOfYear, visibleFrom);
+                income && seenCommon != null && !commonSurvives(day, unknown, stored, seenCommon) ? seenCommon.withoutIncome() : seenCommon,
+                flowsSupersededOn, annualOfYear, visibleFrom, flowsClosedOn);
+    }
+
+    /**
+     * 기저가 바뀐 봉에서 모르는 손익 칸들. 닫힘을 안 읽은 행({@link #flowsClosedOn} {@code null})은 넷 중 하나라도 새 값이 없으면 넷 다다.
+     *
+     * <p>읽은 행(국내 관문 켬 · 계획 K12 D1-c)은 칸마다 — 그날 낡은 칸은 새 값이 있어야, 안 낡은 칸은 저장 값이 비었거나 그날 본 가장 늦은 기저
+     * 바뀜 보고서가 그 칸을 저장 값과 같게 실었어야(닫힘) 안다. 견주지 못한 칸은 모른다. <b>지배 NI를 모르면 넷 다 모른다</b> — 지배 NI만 비고
+     * 순이익이 남으면 「비지배 없는 회사」로 읽혀 지배 계열이 연결 계속영업으로 떨어진다(F2b MUST NOT).
+     */
+    private java.util.Set<String> unknownIncome(LocalDate day, java.util.function.Function<String, BigDecimal> stored,
+                                                java.util.function.Function<String, BigDecimal> seen) {
+        if (flowsClosedOn == null) {
+            boolean known = INCOME_GROUP.stream().allMatch(c -> !flowsSupersededOn.containsKey(c)
+                    ? stored.apply(c) == null : seen.apply(c) != null);
+            return known ? java.util.Set.of() : INCOME_GROUP;
+        }
+        LocalDate basis = INCOME_GROUP.stream().map(flowsSupersededOn::get).filter(f -> f != null && f.staleOn(day))
+                .map(FlowSupersession::since).max(LocalDate::compareTo).orElseThrow();
+        java.util.Set<String> unknown = new java.util.HashSet<>();
+        for (String c : INCOME_GROUP) {
+            FlowSupersession f = flowsSupersededOn.get(c);
+            boolean known;
+            if (f != null && f.staleOn(day)) {
+                known = seen.apply(c) != null;
+            } else {
+                java.util.NavigableSet<LocalDate> closed = flowsClosedOn.get(c);
+                LocalDate confirmed = closed == null ? null : closed.floor(day);
+                known = stored.apply(c) == null || confirmed != null && !confirmed.isBefore(basis);
+            }
+            if (!known) {
+                unknown.add(c);
+            }
+        }
+        return unknown.contains("net_income_controlling") ? INCOME_GROUP : unknown;
+    }
+
+    /**
+     * 기저가 바뀐 봉에서 보통주 몫이 그대로 서는가(국내 관문 켬 · 계획 K12 D1-c) — 판정이 기댄 지배 NI(없으면 순이익)를 뒤 보고서가 같게 실었고(닫힘)
+     * 계속영업 기저 몫이면 중단영업 두 칸도 안 바뀌었을 때만. 보통주 몫은 그 손익에서 비보통 몫을 뺀 것이라 손익이 같으면 같다. 닫힘을 안 읽은 행은
+     * 지금처럼 모른다.
+     */
+    private boolean commonSurvives(LocalDate day, java.util.Set<String> unknown, java.util.function.Function<String, BigDecimal> stored,
+                                   CommonIncomeRead read) {
+        if (flowsClosedOn == null) {
+            return false;
+        }
+        String base = stored.apply("net_income_controlling") != null ? "net_income_controlling" : "net_income";
+        java.util.function.Predicate<String> same = c -> !unknown.contains(c)
+                && !(flowsSupersededOn.containsKey(c) && flowsSupersededOn.get(c).staleOn(day));
+        return stored.apply(base) != null && same.test(base)
+                && (!read.continuing() || same.test("discontinued_income") && same.test("discontinued_income_controlling"));
+    }
+
+    /** 닫힘을 단 사본(국내 관문 켬 · {@code IndicatorDataReader}) — 비어도 「읽었다」다. */
+    public FinancialFigures withFlowsClosed(java.util.Map<String, java.util.NavigableSet<LocalDate>> closed) {
+        return new FinancialFigures(fiscalYear, fiscalPeriod, periodStart, periodEnd, publishedAt, currencyCode, revenue,
+                operatingIncome, netIncome, totalAssets, totalEquity, totalEquityControlling, totalLiabilities, currentAssets,
+                currentLiabilities, retainedEarnings, operatingCashFlow, sharesOutstanding, eps, bps, costOfSales,
+                cashAndEquivalents, capex, inventories, netIncomeControlling, interestAndDividendIncome, noninterestIncome,
+                interestExpense, noninterestExpense, benefitsLossesAndExpenses, grossProfit, operatingExpenses, costsAndExpenses,
+                incomeTaxExpense, profitBeforeTax, shareBasisMultiple, shareBasisStatus, shareClassState, weightedShares,
+                weightedSharesJudged, discontinuedIncome, discontinuedIncomeControlling, discontinuedRule, common, flowsSupersededOn,
+                annualOfYear, visibleFrom, closed == null ? java.util.Map.of() : closed);
     }
 
     /** 함께 낡는 손익 칸(DB 컬럼명) — {@link #asSeenOn}. */
