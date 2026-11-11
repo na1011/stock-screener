@@ -275,6 +275,23 @@ class KrCommonIncomeTest {
     }
 
     @Test
+    void r1cClosesWithTheContinuingEpsWhenTheLedgerGivesNoTotalEpsAndNoWeighted() {
+        // 우선주가 있어 지분상품 있음 · 총 E 없음 · 계속영업 E 1,000원 · W 없음 — 1,000 × 명부 보통주 1,000만 = 100억 = 지배 NI면 계속영업 몫 = 지배 NI
+        // (중단 0 · 배분 0)가 닫힘으로 확인된다(국내 관문 켬 R1C · 삼성중공업 2024 1분기 꼴).
+        Fact continuing = fact(Source.IFRS, "BasicEarningsLossPerShareFromContinuingOperations", Q2, List.of(ORDINARY), 1000);
+        Judged off = judge(rowNi(10_000_000_000L), WITH_PREFERRED, owners(10_000_000_000L), continuing);
+        Judged on = judgeV4(rowNi(10_000_000_000L), WITH_PREFERRED, owners(10_000_000_000L), continuing);
+        // 대조군 — 계속영업 E가 중단 몫만큼 작으면(950원 · 5억 차 > 0.5S) 닫히지 않는다.
+        Judged apart = judgeV4(rowNi(10_000_000_000L), WITH_PREFERRED, owners(10_000_000_000L),
+                fact(Source.IFRS, "BasicEarningsLossPerShareFromContinuingOperations", Q2, List.of(ORDINARY), 950));
+
+        assertThat(off.branch()).as("꺼짐 — 지금 동작").isEqualTo("none:no-eps");
+        assertThat(on.branch()).isEqualTo("kr-ni");
+        assertThat(on.common()).isEqualByComparingTo("10000000000");
+        assertThat(apart.branch()).isEqualTo("none:no-eps");
+    }
+
+    @Test
     void signDropsTheTotalEpsWhoseSignContradictsTheControllingIncome() {
         // 지배 NI 100억 · E 후보 −1,000 · +1,000(같은 크기 부호 상충 · 두산 2025 FY 꼴) — NI와 부호가 같은 +1,000만 남아 닫힌다(국내 관문 켬 SIGN).
         Judged off = judge(rowNi(10_000_000_000L), COMMON_ONLY, owners(10_000_000_000L), eps(1000), eps(-1000), weighted(10_000_000));

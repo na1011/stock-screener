@@ -199,7 +199,13 @@ public final class KrCommonIncome {
          * 값을 함께 실은 판 — 하이트진로 · 대덕전자), 그 값과 E × W가 닫히는 E가 한 값이면 보통주 몫 = 그 원장 값(갈래 {@code direct}). 같은 산수를 E · W가
          * 하나인 지분상품 행 477에 태워 전부 E × W와 같다.
          */
-        C17
+        C17,
+        /**
+         * 계속영업 E 영 여유 증인 — 지분상품 있음 · 총 E 없음 · 계속영업 E 하나 · W 없음이면 R1과 같은 닫힘(|지배 NI − 계속영업 E × S| ≤ 0.5S)을
+         * 계속영업 E로 묻는다. 닫히면 계속영업 보통주 몫 = 지배 NI(중단 0 · 배분 0)가 원장 산수로 확인된 것이다 — 이름을 믿는 것이 아니라 닫힘이 증거다
+         * (답을 아는 판 · 행 중단 0에서 두 EPS가 다른 것 10/566 · 큰 차이는 닫힘이 걸러 낸다). 계획 「빠진 것으로 받은 것」 no-eps 119행(삼성중공업 2024 1분기~).
+         */
+        R1C
     }
 
     /** {@link Rule#CMP}의 재료 — 그 행 판보다 뒤에 접수된 판 하나(접수번호 · 접수일 · 재료 · 재료가 없으면 {@code null}). */
@@ -652,6 +658,14 @@ public final class KrCommonIncome {
                     Payout payout = hybrid ? new Payout(null, "none:no-eps") : payout(false, income, null, m, period, prior, same, multiple);
                     return decided("exw", continuing.iterator().next().multiply(weighted), 'C', anchor.statement(), HALF.multiply(weighted),
                             payout.base(), payout.branch(), false);
+                }
+                if (rules.has(Rule.R1C) && w.isEmpty() && continuing.size() == 1) {
+                    BigDecimal shares = adjusted(reference, period, multiple);
+                    if (shares != null && shares.signum() != 0
+                            && income.subtract(continuing.iterator().next().multiply(shares)).abs().compareTo(HALF.multiply(shares)) <= 0) {
+                        Payout payout = payout(hybrid, income, income, m, period, prior, same, multiple);
+                        return decided("kr-ni", income, 'T', anchor.statement(), HALF.multiply(shares), payout.base(), payout.branch(), false);
+                    }
                 }
                 return Judged.none("no-eps", anchor.statement());
             }
