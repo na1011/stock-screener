@@ -471,7 +471,8 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
         }
 
         // 게이트(연결 총액 = 지배)는 마지막 갈래다 — 원장이 지배 몫을 다른 줄로 확인해 주면 그것이 먼저다.
-        BigDecimal controllingIncome = DartFullAccountMapper.controllingIncome(income, false);
+        BigDecimal arithmetic = DartFullAccountMapper.controllingIncome(income, false);
+        BigDecimal controllingIncome = arithmetic;
         if (controllingIncome == null) {
             // F2b: 지배주주 순이익 줄 없이 계속 · 중단 지배 몫만 준 보고서(솔브레인홀딩스 FY2025 계속 42.1B + 중단 445.2B).
             controllingIncome = DartFullAccountMapper.controllingIncomeFromParts(income);
@@ -489,6 +490,12 @@ public class DartFullStatementAdapter implements FullStatementDataSource {
                 DartFullAccountMapper.sections(list, DartFullAccountMapper.SJ_EQUITY_CHANGES), "thstrm_amount", cumulativeField(period)) : null;
         if (confirmed != null) {
             controllingIncome = confirmed;
+        }
+        if (krGate && consolidated && confirmed == null && arithmetic != null && controllingIncome != null
+                && arithmetic.compareTo(controllingIncome) == 0 && DartFullAccountMapper.splitContradicted(income,
+                DartFullAccountMapper.sections(list, DartFullAccountMapper.SJ_EQUITY_CHANGES), cumulativeField(period))) {
+            // 계획 K8: 지배 줄 없이 산수로 지은 몫을 같은 판 자본변동표가 다른 나눔으로 반박한다 — 모른다(043260 2023 · 2024 FY).
+            controllingIncome = null;
         }
 
         RawFinancialReport report = new RawFinancialReport(

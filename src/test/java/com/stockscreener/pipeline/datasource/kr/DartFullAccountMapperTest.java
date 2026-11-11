@@ -288,6 +288,28 @@ class DartFullAccountMapperTest {
     }
 
     @Test
+    @DisplayName("지배 줄 없이 산수로 짓는 몫을 자본변동표가 다른 나눔으로 반박하면 모른다(K8 · 043260 2024 FY) · 나눔이 같으면 아니다(대조군)")
+    void splitTheEquityStatementContradictsIsUnknown() {
+        List<JsonNode> income = incomeRows("""
+                {"account_id":"ifrs-full_ProfitLoss","account_nm":"당기순이익(손실)","sj_div":"CIS","thstrm_amount":"8076765671"}
+                {"account_id":"ifrs-full_ProfitLossAttributableToNoncontrollingInterests","account_nm":"비지배지분에 귀속되는 당기순이익(손실)","sj_div":"CIS","thstrm_amount":"410654100"}
+                """);
+        List<JsonNode> other = incomeRows("""
+                {"account_id":"ifrs-full_ProfitLoss","sj_div":"SCE","account_detail":"연결재무제표 [member]","thstrm_amount":"8076765671"}
+                {"account_id":"ifrs-full_ProfitLoss","sj_div":"SCE","account_detail":"자본 [구성요소]|비지배지분 [구성요소]","thstrm_amount":"114834511"}
+                {"account_id":"ifrs-full_ProfitLoss","sj_div":"SCE","account_detail":"자본 [구성요소]|지배기업의 소유주에게 귀속되는 지분 [구성요소]","thstrm_amount":"7961931160"}
+                {"account_id":"ifrs-full_ProfitLoss","sj_div":"SCE","account_detail":"자본 [구성요소]|지배기업의 소유주에게 귀속되는 지분 [구성요소]|이익잉여금 [구성요소]","thstrm_amount":"7961931160"}
+                """);
+        List<JsonNode> same = incomeRows("""
+                {"account_id":"ifrs-full_ProfitLoss","sj_div":"SCE","account_detail":"자본 [구성요소]|비지배지분 [구성요소]","thstrm_amount":"410654100"}
+                {"account_id":"ifrs-full_ProfitLoss","sj_div":"SCE","account_detail":"자본 [구성요소]|지배기업의 소유주에게 귀속되는 지분 [구성요소]","thstrm_amount":"7666111571"}
+                """);
+
+        assertThat(DartFullAccountMapper.splitContradicted(income, other, "thstrm_amount")).isTrue();
+        assertThat(DartFullAccountMapper.splitContradicted(income, same, "thstrm_amount")).isFalse();
+    }
+
+    @Test
     @DisplayName("표준코드 없는 줄만 있어도 같은 규칙 — 위메이드 2020 1분기(표준 지배 줄 6,455원)")
     void readsNonstandardRowsOnBothStatements() {
         List<JsonNode> income = incomeRows("""

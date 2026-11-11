@@ -688,6 +688,48 @@ final class DartFullAccountMapper {
         return values.size() == 1 ? values.iterator().next() : null;
     }
 
+    /** 자본변동표 비지배 열(구성 열 하나)의 당기순이익 — 값이 하나가 아니면 {@code null}. */
+    private static BigDecimal equityMinorityProfit(List<JsonNode> equityChanges, String equityField) {
+        java.util.Set<BigDecimal> values = new java.util.LinkedHashSet<>();
+        for (JsonNode row : equityChanges) {
+            if (!"ifrs-full_ProfitLoss".equals(row.path("account_id").asString("")) && !nonstandardProfitRow(row)) {
+                continue;
+            }
+            String[] segments = row.path("account_detail").asString("").split("\\|");
+            if (segments.length > 2 || java.util.Arrays.stream(segments).noneMatch(segment -> segment.contains("비지배"))) {
+                continue;
+            }
+            BigDecimal v = DartAccountMapper.parseAmount(row.path(equityField).asString(""));
+            if (v != null) {
+                values.add(v.stripTrailingZeros());
+            }
+        }
+        return values.size() == 1 ? values.iterator().next() : null;
+    }
+
+    /**
+     * <b>「당기순이익 − 비지배」로 지은 지배 몫을 자본변동표가 반박하는가</b>(국내 관문 켬 · 계획 K8). 표준 지배 줄이 없고, 자본변동표 지배 · 비지배 열의
+     * 당기순이익이 합해 당기순이익으로 닫히는데 나눔이 손익 비지배 줄과 다르면 참이다 — 같은 판 두 표가 지배 몫을 각자 말하고 셋째 증인이 없으니 그
+     * 몫은 모른다(K19의 「한쪽만 믿지 않는다」와 같은 축 · 원장 둘이 같은 줄을 확인할 때만 고른다).
+     *
+     * <p>실측(녹화본 연결 8,462판 · 2026-11-11): 표준 지배 줄 없이 이 꼴인 판은 043260 2023 · 2024 FY 둘이다(손익 비지배 줄 410.7M은 비지배
+     * 총포괄이익과 같고 자본변동표 비지배 열 114.8M · 지배 7,961.9M 대 산수 7,666.1M). 2023은 주당이익 364원 × 명부 주식수가 자본변동표를 지지하고
+     * 2024는 명부 구간이 두 값을 다 품는다.
+     */
+    static boolean splitContradicted(List<JsonNode> income, List<JsonNode> equityChanges, String cumulativeField) {
+        if (findBy(income, ID_NET_INCOME_CONTROLLING, "account_id", cumulativeField) != null) {
+            return false;
+        }
+        BigDecimal net = findBy(income, ID_NET_INCOME, "account_id", cumulativeField);
+        BigDecimal minority = findBy(income, ID_NET_INCOME_NONCONTROLLING, "account_id", cumulativeField);
+        BigDecimal owners = equityControllingProfit(equityChanges, "thstrm_amount");
+        BigDecimal minorityColumn = equityMinorityProfit(equityChanges, "thstrm_amount");
+        if (net == null || minority == null || owners == null || minorityColumn == null) {
+            return false;
+        }
+        return near(owners.add(minorityColumn), net) && !near(net.subtract(minority), owners);
+    }
+
     /**
      * 표준계정코드 없이 실린 자본변동표 순이익 줄 — 이름(공백 뺀)이 순이익 · 순손익 · 순손실이고 포괄 · 평가 줄이 아니다(녹화본 연결 판의 지배 열에서 센
      * 이름: 당기순이익 160 · 당기순이익(손실) 127 · 분기순이익 106 · 반기순이익 51 · 연결당기순이익 36 · 「딩기순이익(손실)」 오타 13 …). 이름만으로 받는
