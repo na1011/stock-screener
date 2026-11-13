@@ -292,6 +292,84 @@ class KrCommonIncomeTest {
     }
 
     @Test
+    void ordxTurnsAContradictingOrdinaryAxisEpsIntoAConflict() {
+        // 000240 꼴 — 반기 누계에 축 없는 E 1,975가 있고 같은 판 보통주 축(회사 구성원)에 3,185 · 지배 NI ÷ W ≈ 3,185. 꺼짐은 1,975 × W를 누계 몫으로 내고
+        // 켬은 상충이라 누계 몫을 모른다(국내 관문 켬 ORDX).
+        Member hankook = new Member("ClassesOfOrdinarySharesAxis", "HankookCompanyMemberOfOrdinarySharesMember", Source.ENTITY);
+        List<Fact> facts = List.of(
+                fact(Source.IFRS, "ProfitLossAttributableToOwnersOfParent", Q2, List.of(), 10_000_000_000L),
+                fact(Source.IFRS, "ProfitLossAttributableToOwnersOfParent", H1, List.of(), 31_850_000_000L),
+                fact(Source.IFRS, "BasicEarningsLossPerShare", H1, List.of(), 1975),
+                fact(Source.IFRS, "BasicEarningsLossPerShare", H1, List.of(hankook), 3185),
+                fact(Source.IFRS, "WeightedAverageShares", H1, List.of(), 10_000_000));
+        BigDecimal off = KrCommonIncome.cumulative(H1, Q2, rowNi(10_000_000_000L), facts);
+        BigDecimal on = KrCommonIncome.cumulative(H1, Q2, rowNi(10_000_000_000L), facts, KrCommonIncome.Rules.V4, null);
+        // 대조군 — 보통주 축 값이 같으면 상충이 아니다.
+        BigDecimal agreeing = KrCommonIncome.cumulative(H1, Q2, rowNi(10_000_000_000L), List.of(facts.get(0), facts.get(1),
+                fact(Source.IFRS, "BasicEarningsLossPerShare", H1, List.of(), 3185), facts.get(3), facts.get(4)),
+                KrCommonIncome.Rules.V4, null);
+
+        assertThat(off).as("꺼짐 — 지금 동작").isEqualByComparingTo("19750000000");
+        assertThat(on).isNull();
+        assertThat(agreeing).isEqualByComparingTo("31850000000");
+    }
+
+    @Test
+    void entClosesWithTheLabelledCommonEpsWhenTheLedgerGivesNoStandardEps() {
+        // 우선주가 있고 보통주 기본 EPS를 회사 확장 개념(이름표 「보통주기본주당이익」)으로만 실은 판 — 1,000 × 명부 보통주 1,000만 = 지배 NI면 배분 0이
+        // 닫힘으로 확인된다(국내 관문 켬 ENT · R1).
+        Fact labelled = entity("udf_IS_1OfEarningsPerShareAbstract", "보통주기본주당이익", 1000);
+        Judged off = judge(rowNi(10_000_000_000L), WITH_PREFERRED, owners(10_000_000_000L), labelled);
+        Judged on = judgeV4(rowNi(10_000_000_000L), WITH_PREFERRED, owners(10_000_000_000L), labelled);
+        // 대조군 — 이름표가 우선주면 보통주 E가 아니다.
+        Judged preferredOnly = judgeV4(rowNi(10_000_000_000L), WITH_PREFERRED, owners(10_000_000_000L),
+                entity("udf_IS_2OfEarningsPerShareAbstract", "우선주기본주당이익", 1000));
+
+        assertThat(off.branch()).as("꺼짐 — 지금 동작").isEqualTo("none:no-eps");
+        assertThat(on.branch()).isEqualTo("kr-ni");
+        assertThat(on.common()).isEqualByComparingTo("10000000000");
+        assertThat(preferredOnly.branch()).isEqualTo("none:no-eps");
+    }
+
+    @Test
+    void entNeverMultipliesTheLabelledEpsByTheWeightedAverage() {
+        // 이름표로 고른 E는 닫힘으로만 받는다 — 표준 W가 있어도 E × W(exw)로 값을 내지 않고, 안 닫히면 no-w로 남아 R1P · 누계 갈래만 탄다.
+        Judged on = judgeV4(rowNi(10_500_000_000L), WITH_PREFERRED, owners(10_500_000_000L),
+                entity("udf_IS_1OfEarningsPerShareAbstract", "보통주기본주당이익", 1000), weighted(10_000_000));
+
+        assertThat(on.branch()).isEqualTo("none:no-w");
+        assertThat(on.common()).isNull();
+    }
+
+    @Test
+    void entTakesTheLabelledPreferredEpsInR1Plus() {
+        // 보통주 E 1,000 · 우선주 E 1,050(둘 다 회사 확장) · 지배 NI 110.5억 — NI − 1,050 × 명부 우선 100만 = 100억이 E × 명부 보통주와 닫힌다(R1+).
+        Fact common = entity("udf_IS_1OfEarningsPerShareAbstract", "보통주의 기본주당순이익", 1000);
+        Fact preferred = entity("udf_IS_2OfEarningsPerShareAbstract", "우선주의 기본주당순이익", 1050);
+        Judged on = judgeV4(rowNi(11_050_000_000L), WITH_PREFERRED, owners(11_050_000_000L), common, preferred);
+        // 대조군 — 우선 종류가 둘(구형 · 신형)이면 R1P는 종류 하나만 닫으므로 안 받는다.
+        Judged twoClasses = judgeV4(rowNi(11_050_000_000L), WITH_PREFERRED, owners(11_050_000_000L), common, preferred,
+                entity("udf_IS_3OfEarningsPerShareAbstract", "신형우선주기본주당순이익", 1050));
+
+        assertThat(on.branch()).isEqualTo("none:no-w");
+        assertThat(on.fallback().branch()).isEqualTo("r1+");
+        assertThat(on.fallback().common()).isEqualByComparingTo("10000000000");
+        assertThat(twoClasses.fallback()).isNull();
+    }
+
+    @Test
+    void entTakesTheClasslessBasicEpsOnlyWhenNoLineNamesAClass() {
+        // 종류 없는 「기본주당이익(손실)」뿐이면 그것이 보통주 기본 EPS다(IAS 33) · 같은 기간에 우선주 이름표가 있으면 종류 없는 줄은 안 받는다.
+        Fact classless = entity("udf_IS_BasicEarningsLossPerShare", "기본주당이익(손실)", 1000);
+        Judged alone = judgeV4(rowNi(10_000_000_000L), WITH_PREFERRED, owners(10_000_000_000L), classless);
+        Judged withPreferred = judgeV4(rowNi(10_000_000_000L), WITH_PREFERRED, owners(10_000_000_000L), classless,
+                entity("udf_IS_2OfEarningsPerShareAbstract", "우선주기본주당이익", 1050));
+
+        assertThat(alone.branch()).isEqualTo("kr-ni");
+        assertThat(withPreferred.branch()).isEqualTo("none:no-eps");
+    }
+
+    @Test
     void signDropsTheTotalEpsWhoseSignContradictsTheControllingIncome() {
         // 지배 NI 100억 · E 후보 −1,000 · +1,000(같은 크기 부호 상충 · 두산 2025 FY 꼴) — NI와 부호가 같은 +1,000만 남아 닫힌다(국내 관문 켬 SIGN).
         Judged off = judge(rowNi(10_000_000_000L), COMMON_ONLY, owners(10_000_000_000L), eps(1000), eps(-1000), weighted(10_000_000));
@@ -723,6 +801,29 @@ class KrCommonIncomeTest {
     }
 
     @Test
+    void aHalfYearRowKeepsItsDeclaredPayoutWhenTheCumulativeBranchCannotDecide() {
+        // 우선주가 있는 반기 판 — 3개월 E는 있지만 W가 없고 누계 W도 없어 누계 갈래가 못 선다(no-w). 배당성향 분모는 분자와 따로(PAY · 신종자본 없음 →
+        // 지배 NI)라 그 분모는 남는다(국내 관문 켬 · ADR-0210). 꺼짐은 지금 동작 — 분모 없음.
+        Period q1 = quarter(2025, 1);
+        Period q2 = quarter(2025, 2);
+        Row first = new Row(1, 2025, "Q1", q1.start(), q1.end(), LocalDate.of(2025, 5, 15), BigDecimal.valueOf(10_000_000_000L), null,
+                List.of(fact(Source.IFRS, "ProfitLossAttributableToOwnersOfParent", q1, List.of(), 10_000_000_000L),
+                        fact(Source.IFRS, "BasicEarningsLossPerShare", q1, List.of(ORDINARY), 950)));
+        Row half = new Row(2, 2025, "Q2", q2.start(), q2.end(), LocalDate.of(2025, 8, 14), BigDecimal.valueOf(10_000_000_000L), null,
+                List.of(fact(Source.IFRS, "ProfitLossAttributableToOwnersOfParent", q2, List.of(), 10_000_000_000L),
+                        fact(Source.IFRS, "BasicEarningsLossPerShare", q2, List.of(ORDINARY), 950)));
+
+        Resolved off = byId(KrCommonIncomeRows.resolve(List.of(first, half), Map.of(2024, WITH_PREFERRED), NO_ACTIONS)).get(2L);
+        Resolved on = byId(KrCommonIncomeRows.resolve(List.of(first, half), Map.of(2024, WITH_PREFERRED), NO_ACTIONS,
+                KrCommonEquity.Issuer.of(List.of()), KrCommonIncome.Rules.V4)).get(2L);
+
+        assertThat(off.payoutBase()).as("꺼짐 — 지금 동작").isNull();
+        assertThat(on.branch()).isEqualTo("none:no-w");
+        assertThat(on.common()).isNull();
+        assertThat(on.payoutBase()).isEqualByComparingTo("10000000000");
+    }
+
+    @Test
     void pitUsesTheSameYearRegisterOnlyWithoutAPriorOneAndShowsItFromTheAnnualReport() {
         // 1분기 행 · W 없음 · 지분상품 없음 — 증인은 명부(E 1,000 × 1,000만 = 지배 NI 100억). 앞 해 명부가 없고 그 해 명부만 있다(국내 관문 켬 PIT).
         Period q1 = quarter(2025, 1);
@@ -923,6 +1024,11 @@ class KrCommonIncomeTest {
 
     private static Fact fact(Source source, String concept, Period p, List<Member> members, long value) {
         return new Fact(source, concept, p.start(), p.end(), Basis.CONSOLIDATED, members, BigDecimal.valueOf(value));
+    }
+
+    /** 회사 확장 주당이익 사실(그 판의 이름표를 단 것 · 판독기 판 3). */
+    private static Fact entity(String concept, String label, long value) {
+        return new Fact(Source.ENTITY, concept, Q2.start(), Q2.end(), Basis.CONSOLIDATED, List.of(), BigDecimal.valueOf(value), label);
     }
 
     private static Period quarter(int year, int q) {

@@ -31,11 +31,12 @@ public class KrEarlierVintages {
 
     /**
      * 재료 행(별칭 {@code x})의 차원 없는 사실 — 비교의 단위. 정렬해 집합으로 견준다. 희석 EPS(국내 관문 켬의 판독기 판에만 있다)는 뺀다 — 재무 행
-     * 값이 아니라 보통주 몫 상충 해소의 증거라, 정정이 그 줄만 고친 판(작은 DB 4쌍 · 180640 2023 3Q 등)에서 넣기 판정을 바꾸면 안 된다.
+     * 값이 아니라 보통주 몫 상충 해소의 증거라, 정정이 그 줄만 고친 판(작은 DB 4쌍 · 180640 2023 3Q 등)에서 넣기 판정을 바꾸면 안 된다. 회사 확장
+     * 사실(판독기 판 3 · {@code s = 'E'})도 같은 사유로 뺀다 — 보통주 몫 판정의 증거이고, 판마다 이름표 문구가 달라도 넣기 판정이 움직이면 안 된다.
      */
     private static final String FACE = """
             (SELECT jsonb_agg(e ORDER BY e::text) FROM jsonb_array_elements(%s.facts) e
-             WHERE coalesce(jsonb_array_length(e->'m'), 0) = 0 AND e->>'c' <> 'DilutedEarningsLossPerShare')""";
+             WHERE coalesce(jsonb_array_length(e->'m'), 0) = 0 AND e->>'c' <> 'DilutedEarningsLossPerShare' AND e->>'s' <> 'E')""";
 
     /**
      * 그 종목의 라벨마다 첫 판(공시일 가장 이른 행)과, 그 판이 기대는 재료 판과 사실이 같은 더 이른 판 중 가장 이른 접수일. 이미 그 날의

@@ -93,6 +93,11 @@ class KrXbrlCollectorTest {
         when(client.shareTotals(eq("00000001"), anyInt())).thenReturn(register());
     }
 
+    @org.junit.jupiter.api.AfterEach
+    void resetGate() {
+        store.krGate(false);
+    }
+
     @Test
     @DisplayName("재무 판마다 같은 날 접수번호를 짝지어 받는다 — 원본 없음은 NO_FILE · 명부는 행의 해와 앞 해 · Q4는 판이 없다")
     void bindsFetchesAndRecords() throws Exception {
@@ -198,6 +203,72 @@ class KrXbrlCollectorTest {
         assertThat(c.labels()).isOne();
         assertThat(Files.exists(cache.resolve("00000001").resolve(HALF + ".lab-ko.xml.gz"))).isTrue();
         assertThat(collector.collect(target, TODAY, new AtomicInteger(10)).labels()).as("멱등").isZero();
+    }
+
+    @Test
+    @DisplayName("국내 관문 켬: 회사 확장 주당 사실이 있는 판은 이름표를 받아 판 3으로 읽는다 · 상한이 다하면 그 판을 안 읽고 남긴다 · 꺼짐은 안 받는다")
+    void fetchesLabelsForEntityPerShareFactsWhenGated() throws Exception {
+        String instance = """
+                <?xml version="1.0" encoding="UTF-8"?>
+                <xbrli:xbrl xmlns:xbrli="http://www.xbrl.org/2003/instance"
+                    xmlns:ifrs-full="https://xbrl.ifrs.org/taxonomy/2023-03-23/ifrs-full"
+                    xmlns:entity00000001="http://dart.fss.or.kr/taxonomy/2025-06-30/entity00000001">
+                  <xbrli:context id="Q2"><xbrli:entity><xbrli:identifier scheme="x">00000001</xbrli:identifier></xbrli:entity>
+                    <xbrli:period><xbrli:startDate>2025-04-01</xbrli:startDate><xbrli:endDate>2025-06-30</xbrli:endDate></xbrli:period>
+                  </xbrli:context>
+                  <ifrs-full:ProfitLossAttributableToOwnersOfParent contextRef="Q2" decimals="0" unitRef="KRW">1000</ifrs-full:ProfitLossAttributableToOwnersOfParent>
+                  <entity00000001:udf_IS_1OfEarningsPerShareAbstract contextRef="Q2" decimals="0" unitRef="KRWEPS">10</entity00000001:udf_IS_1OfEarningsPerShareAbstract>
+                </xbrli:xbrl>
+                """;
+        String labels = """
+                <link:linkbase xmlns:link="http://www.xbrl.org/2003/linkbase" xmlns:xlink="http://www.w3.org/1999/xlink">
+                  <link:labelLink xlink:type="extended" xlink:role="http://www.xbrl.org/2003/role/link">
+                    <link:loc xlink:type="locator" xlink:href="entity00000001.xsd#entity00000001_udf_IS_1OfEarningsPerShareAbstract" xlink:label="c1"/>
+                    <link:label xlink:type="resource" xlink:label="l1" xlink:role="http://www.xbrl.org/2003/role/label" xml:lang="ko">보통주 기본주당이익</link:label>
+                    <link:labelArc xlink:type="arc" xlink:from="c1" xlink:to="l1"/>
+                  </link:labelLink>
+                </link:linkbase>
+                """;
+        when(client.original(HALF)).thenReturn(Optional.of(new DartXbrlClient.Original(instance.getBytes(StandardCharsets.UTF_8), null)));
+        when(client.original(ANNUAL)).thenReturn(Optional.empty());
+        when(client.reportTable(anyString(), eq("00000001"), anyInt(), anyString())).thenReturn(List.of());
+        // 꺼짐 — 상한 2는 두 판 받기에 다 쓴다(이름표 미리 받기는 다음 실행 몫) · 회사 확장 사실은 안 남긴다.
+        collector.collect(target, TODAY, new AtomicInteger(2));
+        assertThat(store.okFacts(target.stockId()).get(HALF)).noneMatch(f -> f.source() == DartXbrlFactReader.Source.ENTITY);
+
+        store.krGate(true);   // 공유 빈 — @AfterEach가 되돌린다
+        collector.krGate(true);
+        collector.collect(target, TODAY, new AtomicInteger(0));
+        assertThat(jdbc.queryForObject("SELECT reader_version FROM kr_report_xbrl WHERE rcept_no = ?", Integer.class, HALF))
+                .as("상한 0 — 이름표를 못 받아 판 3으로 안 읽었다").isEqualTo(DartXbrlFactReader.READER_VERSION);
+
+        when(client.original(HALF)).thenReturn(Optional.of(new DartXbrlClient.Original(instance.getBytes(StandardCharsets.UTF_8),
+                labels.getBytes(StandardCharsets.UTF_8))));
+        collector.collect(target, TODAY, new AtomicInteger(10));
+
+        assertThat(store.okFacts(target.stockId()).get(HALF)).filteredOn(f -> f.source() == DartXbrlFactReader.Source.ENTITY)
+                .singleElement().satisfies(f -> assertThat(f.label()).isEqualTo("보통주 기본주당이익"));
+        assertThat(Files.exists(cache.resolve("00000001").resolve(HALF + ".lab-ko.xml.gz"))).isTrue();
+        verify(client, times(2)).original(HALF);
+    }
+
+    @Test
+    @DisplayName("이름표 미리 받기 — 회사 확장 수 사실이 있는 판은 꺼짐에서도 이름표를 받아 둔다(값을 안 바꾸는 재료 · 관문 날 재판독을 0콜로)")
+    void prefetchesLabelsForEntityFactsEvenWhenNotGated() throws Exception {
+        String instance = INSTANCE.replace("xmlns:ifrs-full=", "xmlns:entity00000001=\"http://dart.fss.or.kr/taxonomy/2025-06-30/entity00000001\" xmlns:ifrs-full=")
+                .replace("</xbrli:xbrl>", "<entity00000001:udf_IS_1_IncomeStatementAbstract contextRef=\"Q2\" decimals=\"0\" unitRef=\"SHARES\">10"
+                        + "</entity00000001:udf_IS_1_IncomeStatementAbstract></xbrli:xbrl>");
+        when(client.original(HALF)).thenReturn(
+                Optional.of(new DartXbrlClient.Original(instance.getBytes(StandardCharsets.UTF_8), null)),
+                Optional.of(new DartXbrlClient.Original(instance.getBytes(StandardCharsets.UTF_8), "<labels/>".getBytes(StandardCharsets.UTF_8))));
+        when(client.original(ANNUAL)).thenReturn(Optional.empty());
+
+        KrXbrlCollector.Collected c = collector.collect(target, TODAY, new AtomicInteger(10));
+
+        assertThat(c.labels()).isOne();
+        assertThat(Files.exists(cache.resolve("00000001").resolve(HALF + ".lab-ko.xml.gz"))).isTrue();
+        assertThat(collector.collect(target, TODAY, new AtomicInteger(10)).labels()).as("멱등").isZero();
+        // 회사 확장 사실이 없는 판(ANNUAL은 원본 없음 · 기존 시험의 INSTANCE)은 안 받는다 — 기존 「최신 판은 안 받는다」 시험이 그 대조군이다.
     }
 
     @Test

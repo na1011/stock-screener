@@ -37,7 +37,8 @@ ADR-0098 기록). 재료는 정기 공시 판마다의 **DART 재무제표 원�
 - MUST NOT: 명부의 구분 라벨로 보통주를 가르지 않는다 — 회사마다 자유 문구다(`dart-xbrl.md`). 「합계 · 비고를 뺀 발행수 > 0 종류 행이
   둘 이상」이면 보통주 밖 주식이 있다 · 보통주 수는 가장 큰 종류 행이다(상법 제344조의3 — 의결권 없는 · 제한 주식은 발행 총수의 1/4 이하).
 - MUST NOT: 회사 고유 확장 개념(`entity…:`)을 값의 재료로 쓰지 않는다. 회사 구성원은 표준 축(`ClassesOfShareCapitalAxis`)의 우선주 종류에만
-  받는다 — 표준 축 · 표준 개념의 종류별 합은 모든 종목에 같은 규칙이다.
+  받는다 — 표준 축 · 표준 개념의 종류별 합은 모든 종목에 같은 규칙이다. 예외(국내 관문 켬 · ADR-0210): 표준 E가 없는 판의 회사 확장 주당이익은
+  그 판 이름표로 가르고 닫힘(또는 뒤 판 표준 E)으로만 받으며, 표준 보통주 축의 회사 구성원 E는 축 없는 E와의 상충을 드러내는 데만 쓴다.
 - MUST NOT: 원본 문서(`document.xml`) 주석표를 파싱하지 않는다 · 분기 주식총수로 가중평균을 근사하지 않는다 · 단위 오태깅을 배율로
   고치지 않는다(사용자 기준 — 정합성 훼손).
 
@@ -81,7 +82,7 @@ ADR-0098 기록). 재료는 정기 공시 판마다의 **DART 재무제표 원�
 - 판독기: `./gradlew test --tests '*DartXbrlFactReader*'` — 두 형식(2019 분류체계 기본 이름공간 · `xbrli:` 접두) 픽스처.
 - 0콜 스윕: `DartCommonIncomeSweepTest`(`KR_XBRL_DIR` · `KR_ROWS` · `KR_REGISTER` · `KR_CA`) — 받아 둔 2026 H1 346의 갈래 수가 탐색의
   파이썬 기준 구현(`kr5/plan9h.py`)과 같다.
-- 회사 확장 개념을 값 재료로 안 쓴다: `rg -n '"entity' src/main/java/com/stockscreener/pipeline/datasource/kr/xbrl` 가 비어야 한다.
+- 회사 확장 개념이 재료에 드는 자리는 ADR-0210의 둘뿐이다: `rg -n '== Source.ENTITY' src/main/java/com/stockscreener/pipeline/datasource/kr/xbrl/KrCommonIncome.java` 중 회사 확장을 받는 쪽(거르는 `||` 조건 밖)이 `withOrdinaryAxis` · `Material.entityLabel` 둘뿐이어야 한다.
 
 ## 결과
 

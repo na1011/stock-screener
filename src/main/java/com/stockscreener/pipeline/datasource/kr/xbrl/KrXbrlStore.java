@@ -307,6 +307,9 @@ public class KrXbrlStore {
                 members.addArray().add(m.axis()).add(m.member()).add(code(m.source()));
             }
             o.put("v", f.value().toPlainString());
+            if (f.label() != null) {
+                o.put("l", f.label());
+            }
         }
         return array.toString();
     }
@@ -325,7 +328,8 @@ public class KrXbrlStore {
                         case "C" -> Basis.CONSOLIDATED;
                         case "S" -> Basis.SEPARATE;
                         default -> Basis.NONE;
-                    }, List.copyOf(members), new BigDecimal(o.path("v").asString())));
+                    }, List.copyOf(members), new BigDecimal(o.path("v").asString()),
+                    o.path("l").isMissingNode() ? null : o.path("l").asString()));
         }
         return out;
     }

@@ -22,6 +22,7 @@ import java.nio.file.StandardCopyOption;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
@@ -171,7 +172,22 @@ public class KrXbrlCollector implements DartEarlierInstances {
                 firstFailure = firstFailure == null ? filing.rceptNo() + " 캐시 " + e.getMessage() : firstFailure;
                 continue;
             }
-            String unreadable = readAndRecord(target.stockId(), target.ticker(), filing.rceptNo(), instance);
+            Map<String, String> labels;
+            try {
+                labels = labelsFor(dart, corpCode, filing.rceptNo(), instance, fetchBudget);
+            } catch (DataSourceException e) {
+                if (e.kind() == DataSourceException.Kind.RATE_LIMITED || e.fatal()) {
+                    throw e;
+                }
+                // 재료 표에 FAILED로 안 남긴다 — 그 판의 지금 재료(옛 판독기 판)를 지우지 않고 다음 실행이 다시 본다(판독기 판이 그대로라 needs).
+                failed++;
+                firstFailure = firstFailure == null ? filing.rceptNo() + " 이름표 " + e.getMessage() : firstFailure;
+                continue;
+            }
+            if (labels == null) {
+                continue;   // 이름표가 필요한데 새로 받기 상한이 다했다 — 판 3으로 안 읽고 다음 실행이 다시 본다
+            }
+            String unreadable = readAndRecord(target.stockId(), target.ticker(), filing.rceptNo(), instance, labels);
             if (unreadable != null) {
                 failed++;
                 firstFailure = firstFailure == null ? filing.rceptNo() + " " + unreadable : firstFailure;
@@ -197,6 +213,33 @@ public class KrXbrlCollector implements DartEarlierInstances {
                 }
             } else {
                 log.warn("원본 ZIP에 한국어 이름표가 없다. stockId={} 접수번호={}", target.stockId(), filing.rceptNo());
+            }
+        }
+        // 회사 확장 수 사실이 있는 판의 이름표(ADR-0210) — 국내 관문 켬의 판독기 판 3이 회사 확장 주당이익의 뜻을 읽는 재료다. 값을 안 바꾸므로
+        // 꺼짐에서도 미리 받는다(관문 날 재판독을 0콜로 둔다 · 새로 받기 상한 안 · 받은 판은 다시 안 본다).
+        for (Filing filing : new java.util.LinkedHashSet<>(queue)) {
+            Path cached = cachePath(corpCode, filing.rceptNo());
+            if (Files.exists(labelPath(corpCode, filing.rceptNo())) || !Files.exists(cached) || fetchBudget.get() <= 0) {
+                continue;
+            }
+            try {
+                if (!DartXbrlFactReader.hasEntityFacts(new ByteArrayInputStream(readCache(cached)), filing.rceptNo())) {
+                    continue;
+                }
+            } catch (IOException e) {
+                throw new DataSourceException(DataSourceException.Kind.TRANSIENT, "dart", "인스턴스 캐시를 못 읽었다: " + cached, e);
+            }
+            fetchBudget.decrementAndGet();
+            Optional<DartXbrlClient.Original> got = dart.original(filing.rceptNo());
+            if (got.isPresent() && got.get().labelsKo() != null) {
+                try {
+                    writeCache(labelPath(corpCode, filing.rceptNo()), got.get().labelsKo());
+                    labels++;
+                } catch (IOException e) {
+                    throw new DataSourceException(DataSourceException.Kind.TRANSIENT, "dart", "이름표 캐시를 못 썼다: " + filing.rceptNo(), e);
+                }
+            } else {
+                log.warn("원본 ZIP에 한국어 이름표가 없다 — 회사 확장 주당이익을 못 읽는다. stockId={} 접수번호={}", target.stockId(), filing.rceptNo());
             }
         }
         int registers = 0;
@@ -298,10 +341,41 @@ public class KrXbrlCollector implements DartEarlierInstances {
         return found;
     }
 
+    /**
+     * 국내 관문 켬 — 그 판의 회사 확장 개념 이름표(판독기 판 3이 회사 확장 주당이익 사실의 뜻을 읽는 재료). 인스턴스에 회사 확장 주당 수 사실이
+     * 없으면 빈 맵 · 캐시에 있으면 그것 · 없으면 원본 ZIP을 한 번 더 받아 캐시한다(새로 받기 상한 안 · 다했으면 {@code null} — 그 판을 이번에 안
+     * 읽는다). ZIP에 이름표가 없으면 경고하고 빈 맵이다. 꺼짐은 언제나 빈 맵이다(외부 0콜).
+     */
+    private Map<String, String> labelsFor(DartXbrlClient dart, String corpCode, String rceptNo, byte[] instance,
+                                          AtomicInteger fetchBudget) throws DataSourceException {
+        if (!store.krGate() || !DartXbrlFactReader.hasEntityFacts(new ByteArrayInputStream(instance), rceptNo)) {
+            return Map.of();
+        }
+        Path labelCache = labelPath(corpCode, rceptNo);
+        try {
+            if (Files.exists(labelCache)) {
+                return DartXbrlLabels.entityLabels(readCache(labelCache), rceptNo);
+            }
+            if (dart == null || fetchBudget.get() <= 0) {
+                return null;
+            }
+            fetchBudget.decrementAndGet();
+            Optional<DartXbrlClient.Original> got = dart.original(rceptNo);
+            if (got.isEmpty() || got.get().labelsKo() == null) {
+                log.warn("원본 ZIP에 한국어 이름표가 없다 — 회사 확장 주당이익을 못 읽는다. 접수번호={}", rceptNo);
+                return Map.of();
+            }
+            writeCache(labelCache, got.get().labelsKo());
+            return DartXbrlLabels.entityLabels(got.get().labelsKo(), rceptNo);
+        } catch (IOException e) {
+            throw new DataSourceException(DataSourceException.Kind.TRANSIENT, "dart", "이름표 캐시를 못 읽거나 못 썼다: " + labelCache, e);
+        }
+    }
+
     /** 판 하나를 판독해 재료 표에 적는다. 판독 실패면 그 사유(표에는 UNREADABLE로 남긴다) · 성공이면 {@code null}. */
-    private String readAndRecord(long stockId, String ticker, String rceptNo, byte[] instance) {
+    private String readAndRecord(long stockId, String ticker, String rceptNo, byte[] instance, Map<String, String> labels) {
         try (InputStream in = new ByteArrayInputStream(instance)) {
-            DartXbrlFactReader.Result read = DartXbrlFactReader.read(in, ticker + " " + rceptNo, store.krGate());
+            DartXbrlFactReader.Result read = DartXbrlFactReader.read(in, ticker + " " + rceptNo, store.krGate(), labels);
             store.recordOk(stockId, rceptNo, read.facts(), read.unreadableValues());
             return null;
         } catch (DataSourceException e) {
@@ -341,7 +415,19 @@ public class KrXbrlCollector implements DartEarlierInstances {
             } catch (IOException e) {
                 throw new IllegalStateException("인스턴스 캐시를 못 읽었다: " + cached, e);
             }
-            if (readAndRecord(stockId, ticker, f.rceptNo(), instance) == null) {
+            Map<String, String> labels;
+            try {
+                labels = labelsFor(null, corpCode, f.rceptNo(), instance, new AtomicInteger());
+            } catch (DataSourceException e) {
+                throw new IllegalStateException("이름표 캐시를 못 읽었다: " + f.rceptNo(), e);
+            }
+            if (labels == null) {
+                // 0콜 재판독 — 이름표가 필요한데 캐시에 없다. 판 3으로 안 읽고 남긴다(재료 받기가 이름표를 받는다).
+                missing++;
+                log.warn("회사 확장 주당 사실의 이름표가 캐시에 없어 그 판을 다시 읽지 않는다. stockId={} 접수번호={}", stockId, f.rceptNo());
+                continue;
+            }
+            if (readAndRecord(stockId, ticker, f.rceptNo(), instance, labels) == null) {
                 reread++;
             } else {
                 unreadable++;

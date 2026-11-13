@@ -247,13 +247,15 @@ public final class KrCommonIncomeRows {
 
     private static Resolved cumulative(Row row, Judged j, List<Row> ordered, Map<Long, Resolved> out,
                                        KrCommonIncome.Rules rules, KrCommonIncome.NcContext nc) {
+        // 분모가 분자와 따로 정해졌으면(PAY · 보통주 몫에 안 기댐) 누계 갈래가 값을 못 내도 그 분모는 그 판 판정 그대로다.
+        BigDecimal payout = j.payoutFollowsCommon() ? null : j.payoutBase();
         Row first = vintage(ordered, row.fiscalYear(), "Q1", row.published());
         if (first == null) {
-            return new Resolved(row, "none:cum", null, 'T', j.statement(), null);
+            return new Resolved(row, "none:cum", null, 'T', j.statement(), payout);
         }
         BigDecimal cum = KrCommonIncome.cumulative(new Period(first.start(), row.end()), row.period(), row.income(), row.facts(), rules, nc);
         if (cum == null) {
-            return new Resolved(row, j.branch(), null, 'T', j.statement(), null);
+            return new Resolved(row, j.branch(), null, 'T', j.statement(), payout);
         }
         BigDecimal earlier = BigDecimal.ZERO;
         List<String> before = "Q2".equals(row.fiscalPeriod()) ? List.of("Q1") : List.of("Q1", "Q2");
@@ -261,11 +263,11 @@ public final class KrCommonIncomeRows {
             Row prev = vintage(ordered, row.fiscalYear(), period, row.published());
             Resolved r = prev == null ? null : out.get(prev.id());
             if (r == null || r.common() == null || r.basis() != 'T' || r.statement() != j.statement()) {
-                return new Resolved(row, "none:cum", null, 'T', j.statement(), null);
+                return new Resolved(row, "none:cum", null, 'T', j.statement(), payout);
             }
             earlier = earlier.add(r.common());
         }
-        return new Resolved(row, "cum", cum.subtract(earlier), 'T', j.statement(), null);
+        return new Resolved(row, "cum", cum.subtract(earlier), 'T', j.statement(), payout);
     }
 
     private static Resolved fourth(Row q4, List<Row> ordered, Map<Long, Resolved> out, KrCommonIncome.Rules rules) {

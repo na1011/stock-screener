@@ -104,6 +104,25 @@ class DartXbrlFactReaderTest {
     }
 
     @Test
+    void keepsALabelledEntityPerShareFactOnlyBehindTheKrGate() throws DataSourceException {
+        // 판 3(국내 관문 켬): 회사 확장 주당 사실은 그 판 이름표가 주당이익 문법으로 갈릴 때만 이름표를 달아 남긴다 · 꺼짐 · 이름표 없음은 안 남긴다.
+        java.util.Map<String, String> labels = java.util.Map.of("udf_BasicEarningsLossPerShare", "보통주기본주당이익");
+        DartXbrlFactReader.Result on = DartXbrlFactReader.read(new ByteArrayInputStream(CURRENT.getBytes(StandardCharsets.UTF_8)), "test", true, labels);
+        DartXbrlFactReader.Result off = DartXbrlFactReader.read(new ByteArrayInputStream(CURRENT.getBytes(StandardCharsets.UTF_8)), "test", false, labels);
+        DartXbrlFactReader.Result unlabelled = DartXbrlFactReader.read(new ByteArrayInputStream(CURRENT.getBytes(StandardCharsets.UTF_8)), "test", true);
+
+        assertThat(on.facts()).filteredOn(f -> f.source() == Source.ENTITY).singleElement()
+                .satisfies(f -> {
+                    assertThat(f.label()).isEqualTo("보통주기본주당이익");
+                    assertThat(f.value()).isEqualByComparingTo("1");
+                });
+        assertThat(off.facts()).noneMatch(f -> f.source() == Source.ENTITY);
+        assertThat(unlabelled.facts()).noneMatch(f -> f.source() == Source.ENTITY);
+        assertThat(DartXbrlFactReader.hasEntityFacts(new ByteArrayInputStream(CURRENT.getBytes(StandardCharsets.UTF_8)), "test")).isTrue();
+        assertThat(DartXbrlFactReader.hasEntityFacts(new ByteArrayInputStream(LEGACY.getBytes(StandardCharsets.UTF_8)), "test")).isFalse();
+    }
+
+    @Test
     void readsTheCurrentFormatAndKeepsOnlyMaterialStandardConcepts() throws DataSourceException {
         DartXbrlFactReader.Result result = read(CURRENT);
 

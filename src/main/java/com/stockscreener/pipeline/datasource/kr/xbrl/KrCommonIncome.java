@@ -205,7 +205,23 @@ public final class KrCommonIncome {
          * 계속영업 E로 묻는다. 닫히면 계속영업 보통주 몫 = 지배 NI(중단 0 · 배분 0)가 원장 산수로 확인된 것이다 — 이름을 믿는 것이 아니라 닫힘이 증거다
          * (답을 아는 판 · 행 중단 0에서 두 EPS가 다른 것 10/566 · 큰 차이는 닫힘이 걸러 낸다). 계획 「빠진 것으로 받은 것」 no-eps 119행(삼성중공업 2024 1분기~).
          */
-        R1C
+        R1C,
+        /**
+         * 회사 확장 주당이익(ADR-0210) — 지분상품 있음 · 그 기간 표준 E 없음이면 이름표({@link KrEpsLabel})가 보통주 기본 합계로 가르는 회사 확장
+         * 값(하나)을 E로 쓴다(종류 붙은 주당이익 이름표가 그 기간에 하나도 없으면 종류 없는 기본 합계). 이름표로 고른 값이라 <b>닫힘으로만</b> 받는다 —
+         * W를 비워 R1(배분 0) · R1P(우선 몫)만 태우고, R1P의 우선 EPS 후보에 표준 우선 EPS가 없으면 이름표가 종류 하나로 가르는 우선 기본 합계를 더한다.
+         * 비교열 W(CMP)는 뒤 판 표준 E가 같은 값일 때만 서므로 그 표준 E가 증인이다(닫힘 대신). 표준 재료(E2 · R1C 포함)가 {@code none:no-eps}로 못 정한
+         * 행에만 건다.
+         */
+        ENT,
+        /**
+         * 같은 판 보통주 EPS 상충(ADR-0210) — <b>누계 몫</b>(q4-cum · cum의 재료 · {@link #cumulative})에서 표준 보통주 축({@code ClassesOfOrdinarySharesAxis})에
+         * 회사 구성원으로 실린 기본 EPS가 축 없는 E와 다르면 그 누계 몫은 모름이다. 누계 갈래는 E × W를 닫힘 없이 믿는 유일한 자리다 — 000240 2025 9개월:
+         * 축 없는 연결 E 1,975(2024~2025 전 판이 같은 값) · 보통주 축 3,185 · 지배 NI ÷ W 3,183 → 1,975 × W로 지은 Q4 160.0B(지배 NI 45.5B). 3개월 판정에는
+         * 걸지 않는다 — 거기서는 계속영업 E 덮어쓰기가 이미 맞는 값을 내고(000240 2024 FY · 2025 Q1), 상충으로 돌리면 같은 판 「보통주 귀속 손익」(역시
+         * 1,975 × W)을 고르거나 맞는 값을 지운다(작은 DB 드라이런 2026-11-13).
+         */
+        ORDX
     }
 
     /** {@link Rule#CMP}의 재료 — 그 행 판보다 뒤에 접수된 판 하나(접수번호 · 접수일 · 재료 · 재료가 없으면 {@code null}). */
@@ -410,18 +426,23 @@ public final class KrCommonIncome {
             w = m.axisWeights(period);
         }
         Register reference = prior != null ? prior : same;
-        LocalDate comparative = null;
-        if (rules.has(Rule.CMP) && w.isEmpty() && e.size() == 1) {
-            LaterFiling found = comparativeWeight(later, anchor.statement(), e, period);
-            BigDecimal cw = found == null ? null : single(new ArrayList<>(
-                    new Material(found.facts(), comparativeBases(found.facts(), anchor.statement())).values(WEIGHTED, period, COMMON_MEMBERS)));
-            if (cw != null && !"w-unit".equals(weightedCheck(cw, reference, period, multiple, rules))) {
-                w = Set.of(cw);
-                comparative = found.receipt();
+        Comparative cmp = comparative(rules, later, anchor, e, w, period, reference, multiple);
+        Judged judged = judgeWith(period, anchor, m, hybrid, instruments, income, e, cmp.w(), reference, prior, same, multiple, rules, window)
+                .withLaterReceipt(cmp.receipt());
+        if (rules.has(Rule.ENT) && "none:no-eps".equals(judged.branch())) {
+            // 표준 재료(E2 · R1C 포함)가 못 정한 행만 — 이름표로 고른 E는 W와 곱하지 않고 닫힘(R1 · R1P)으로만 받는다. 비교열 W(CMP)는 뒤 판 표준 E가
+            // 같은 값일 때만 서므로 그 표준 E가 증인이다.
+            Set<BigDecimal> labelled = m.entityCommonEps(period);
+            if (rules.has(Rule.SIGN)) {
+                labelled = signed(labelled, income);
+            }
+            if (labelled.size() == 1) {
+                e = labelled;
+                cmp = comparative(rules, later, anchor, e, Set.of(), period, reference, multiple);
+                judged = judgeWith(period, anchor, m, hybrid, instruments, income, e, cmp.w(), reference, prior, same, multiple, rules, window)
+                        .withLaterReceipt(cmp.receipt());
             }
         }
-        Judged judged = judgeWith(period, anchor, m, hybrid, instruments, income, e, w, reference, prior, same, multiple, rules, window)
-                .withLaterReceipt(comparative);
         if (rules.has(Rule.PAY)) {
             // 분모는 분자 판정과 따로다 — 앵커가 섰으면 지배 NI가 있고, 빼야 할 것은 지배기업 신종자본증권 몫뿐이다.
             Set<BigDecimal> flows = ownHybridFlows(m.facts(), m.bases(), period.start(), period.end());
@@ -432,7 +453,7 @@ public final class KrCommonIncome {
         if (rules.has(Rule.R1P) && "none:no-w".equals(judged.branch()) && e.size() == 1) {
             BigDecimal shares = adjusted(reference, period, multiple);
             BigDecimal common = shares == null || shares.signum() == 0 ? null
-                    : allocated(m, nc, period, income, e.iterator().next(), shares, reference, hybrid, multiple);
+                    : allocated(m, nc, period, income, e.iterator().next(), shares, reference, hybrid, multiple, rules.has(Rule.ENT));
             if (common != null) {
                 Payout payout = payout(hybrid, income, common, m, period, prior, same, multiple);
                 Judged fallback = decided("r1+", common, 'T', anchor.statement(), HALF.multiply(shares), payout.base(), payout.branch(), false);
@@ -514,7 +535,7 @@ public final class KrCommonIncome {
 
     /** {@link Rule#R1P}의 보통주 몫 — 닫히는 후보가 값으로 하나가 아니면 {@code null}. */
     private static BigDecimal allocated(Material m, NcContext nc, Period period, BigDecimal income, BigDecimal eps, BigDecimal shares,
-                                        Register reference, boolean hybrid, Multiple multiple) {
+                                        Register reference, boolean hybrid, Multiple multiple, boolean entity) {
         Set<BigDecimal> flows = ownHybridFlows(m.facts(), m.bases(), period.start(), period.end());
         BigDecimal h = flows.size() == 1 ? flows.iterator().next() : flows.isEmpty() ? ytdHybridFlow(m, nc, period) : null;
         Set<BigDecimal> prefEps = new LinkedHashSet<>();
@@ -523,6 +544,9 @@ public final class KrCommonIncome {
                     && period.start().equals(f.start()) && period.end().equals(f.end())) {
                 prefEps.add(normalized(f.value()));
             }
+        }
+        if (entity && prefEps.isEmpty()) {
+            prefEps.addAll(m.entityPreferredEps(period));
         }
         BigDecimal p = null;
         if (prefEps.size() == 1 && reference != null && reference.classCount() == 2 && reference.totalOutstanding() != null
@@ -595,6 +619,41 @@ public final class KrCommonIncome {
             return Set.of(Basis.CONSOLIDATED, Basis.NONE);
         }
         return facts.stream().anyMatch(f -> f.basis() == Basis.CONSOLIDATED) ? Set.of(Basis.SEPARATE) : Set.of(Basis.SEPARATE, Basis.NONE);
+    }
+
+    /** {@link Rule#ORDX} — 축 없는 E가 있으면 같은 기간 보통주 축 회사 구성원 기본 EPS를 더한다(다르면 상충이 된다 · E가 없으면 그대로). */
+    private static Set<BigDecimal> withOrdinaryAxis(Set<BigDecimal> e, Material m, Period period) {
+        if (e.isEmpty()) {
+            return e;
+        }
+        Set<BigDecimal> out = new LinkedHashSet<>(e);
+        for (Fact f : m.facts()) {
+            if (f.source() == Source.IFRS && EPS.equals(f.concept()) && f.members().size() == 1
+                    && ORDINARY_AXIS.equals(f.members().get(0).axis()) && f.members().get(0).source() == Source.ENTITY
+                    && period.start().equals(f.start()) && period.end().equals(f.end())) {
+                out.add(normalized(f.value()));
+            }
+        }
+        return out;
+    }
+
+    private static final String ORDINARY_AXIS = "ClassesOfOrdinarySharesAxis";
+
+    /** {@link Rule#CMP}의 결과 — 쓸 W(없으면 받은 그대로)와 그 W를 실은 뒤 판의 접수일(없으면 {@code null}). */
+    private record Comparative(Set<BigDecimal> w, LocalDate receipt) {
+    }
+
+    private static Comparative comparative(Rules rules, List<LaterFiling> later, Anchor anchor, Set<BigDecimal> e, Set<BigDecimal> w,
+                                           Period period, Register reference, Multiple multiple) {
+        if (rules.has(Rule.CMP) && w.isEmpty() && e.size() == 1) {
+            LaterFiling found = comparativeWeight(later, anchor.statement(), e, period);
+            BigDecimal cw = found == null ? null : single(new ArrayList<>(
+                    new Material(found.facts(), comparativeBases(found.facts(), anchor.statement())).values(WEIGHTED, period, COMMON_MEMBERS)));
+            if (cw != null && !"w-unit".equals(weightedCheck(cw, reference, period, multiple, rules))) {
+                return new Comparative(Set.of(cw), found.receipt());
+            }
+        }
+        return new Comparative(w, null);
     }
 
     private static Judged judgeWith(Period period, Anchor anchor, Material m, boolean hybrid, boolean instruments, BigDecimal income,
@@ -723,6 +782,9 @@ public final class KrCommonIncome {
         }
         Material m = new Material(facts, anchor.bases());
         Set<BigDecimal> e = m.values(EPS, cumulative, COMMON_MEMBERS);
+        if (rules.has(Rule.ORDX)) {
+            e = withOrdinaryAxis(e, m, cumulative);
+        }
         Set<BigDecimal> w = m.values(WEIGHTED, cumulative, COMMON_MEMBERS);
         if (w.isEmpty() && rules.has(Rule.RB)) {
             w = m.axisWeights(cumulative);
@@ -1349,6 +1411,48 @@ public final class KrCommonIncome {
         /** 표준 우선 개념의 0 아닌 값 — 보통주 밖 주식의 증거(기간 무관). */
         boolean preferenceConcepts() {
             return KrCommonIncome.preferenceConcepts(facts);
+        }
+
+        /**
+         * {@link Rule#ENT} — 그 기간 · 구성원 없는 회사 확장 사실 중 이름표가 보통주 기본 합계인 값들. 없고 그 기간에 종류 붙은 주당이익 이름표가 하나도
+         * 없으면 종류 없는 기본 합계(IAS 33의 기본 EPS는 보통주 몫이고 표준 개념도 종류가 없다).
+         */
+        Set<BigDecimal> entityCommonEps(Period period) {
+            Set<BigDecimal> common = new LinkedHashSet<>();
+            Set<BigDecimal> classless = new LinkedHashSet<>();
+            boolean classed = false;
+            for (Fact f : facts) {
+                KrEpsLabel label = entityLabel(f, period);
+                if (label == null) {
+                    continue;
+                }
+                classed |= label.shareClass() != KrEpsLabel.ShareClass.NONE;
+                if (label.basicTotal() && label.shareClass() == KrEpsLabel.ShareClass.COMMON) {
+                    common.add(normalized(f.value()));
+                } else if (label.basicTotal() && label.shareClass() == KrEpsLabel.ShareClass.NONE) {
+                    classless.add(normalized(f.value()));
+                }
+            }
+            return !common.isEmpty() || classed ? common : classless;
+        }
+
+        /** {@link Rule#ENT} — 그 기간 · 구성원 없는 회사 확장 우선 기본 합계 값들. 이름표의 우선 종류가 둘 이상이면 빈 집합(R1P는 종류 하나만 닫는다). */
+        Set<BigDecimal> entityPreferredEps(Period period) {
+            Set<BigDecimal> out = new LinkedHashSet<>();
+            Set<String> classes = new java.util.HashSet<>();
+            for (Fact f : facts) {
+                KrEpsLabel label = entityLabel(f, period);
+                if (label != null && label.basicTotal() && label.shareClass() == KrEpsLabel.ShareClass.PREFERRED) {
+                    out.add(normalized(f.value()));
+                    classes.add(label.preferredClass());
+                }
+            }
+            return classes.size() == 1 ? out : Set.of();
+        }
+
+        private static KrEpsLabel entityLabel(Fact f, Period period) {
+            return f.source() == Source.ENTITY && f.label() != null && f.members().isEmpty() && period.start().equals(f.start())
+                    && period.end().equals(f.end()) ? KrEpsLabel.of(f.label()) : null;
         }
     }
 

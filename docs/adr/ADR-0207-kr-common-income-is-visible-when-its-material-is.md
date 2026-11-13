@@ -25,7 +25,7 @@ applies_to:
 - `payout_visible_from` — 배당성향 분모가 보통주 몫에 기댈 때만 같은 날. 분모가 지배 NI 그대로면 NULL.
 - 읽는 쪽: 지표는 접수일을 보이는 날로 옮겨(`krVisibleDays` · ADR-0204) 봉마다 손익 몫만 비운다(`FinancialFigures.asSeenOn` · 자본 재료는 안 가린다)
   · 그날을 재무 경계에 넣는다 · 종목 상세는 오늘 기준 · 거버넌스 유도는 FY 행 공시일에 보이던 몫만 분자로 쓴다.
-- 관문 켬 판독기 판 2 — 상충 해소의 증거(희석 EPS)를 켬일 때만 재료에 남긴다(`DartXbrlFactReader.version`). 꺼짐은 판 1 그대로다.
+- 관문 켬 판독기 판 2 — 상충 해소의 증거(희석 EPS)를 켬일 때만 재료에 남긴다(`DartXbrlFactReader.version`). 꺼짐은 판 1 그대로다. 켬은 뒤에 판 3이 됐다(회사 확장 주당이익 · ADR-0210).
 
 ## 규칙
 

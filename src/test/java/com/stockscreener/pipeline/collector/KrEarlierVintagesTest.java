@@ -204,6 +204,18 @@ class KrEarlierVintagesTest {
     }
 
     @Test
+    @DisplayName("회사 확장 주당 사실(판독기 판 3)은 판 비교에 안 든다 — 이름표 문구만 다른 정정도 원본 날짜로 넣는다")
+    void entityFactsDoNotDecideTheComparison() {
+        annual(LocalDate.of(2026, 6, 19));
+        filing("20260313001191", LocalDate.of(2026, 3, 13), withEntity("""
+                ,{"s":"E","c":"udf_IS_1OfEarningsPerShareAbstract","b":"2025-01-01","e":"2025-12-31","k":"C","m":[],"v":"100","l":"보통주기본주당이익"}"""));
+        filing("20260619000667", LocalDate.of(2026, 6, 19), withEntity("""
+                ,{"s":"E","c":"udf_IS_1OfEarningsPerShareAbstract","b":"2025-01-01","e":"2025-12-31","k":"C","m":[],"v":"100","l":"보통주 기본주당이익"}"""));
+
+        assertThat(earlier.insert(stockId).inserted()).isEqualTo(2);
+    }
+
+    @Test
     @DisplayName("재료가 없으면 판정하지 않는다 — 원본 재료를 아직 못 받은 보고서는 그대로다")
     void needsBothMaterials() {
         annual(LocalDate.of(2026, 6, 19));
@@ -214,6 +226,11 @@ class KrEarlierVintagesTest {
         filing("20260619000667", LocalDate.of(2026, 6, 19), SAME);
 
         assertThat(earlier.insert(stockId).inserted()).isZero();
+    }
+
+    /** {@link #SAME} 끝에 사실 하나를 붙인다. */
+    private static String withEntity(String fact) {
+        return SAME.substring(0, SAME.lastIndexOf(']')) + fact.strip() + "]";
     }
 
     private void annual(LocalDate publishedAt) {

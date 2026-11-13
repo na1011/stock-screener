@@ -39,7 +39,7 @@ public final class DartXbrlFactReader {
      * 국내 관문 켬({@code stockscreener.gate.kr-provisional})의 판독기 판 — {@link #KR_GATE_MATERIAL}까지 남긴다. 꺼짐은 {@link #READER_VERSION}
      * 그대로라 재료 표가 한 톨도 안 바뀐다. 켬으로 도는 첫 재료 받기가 캐시에서 다시 읽는다(외부 0콜).
      */
-    public static final int READER_VERSION_KR_GATE = 2;
+    public static final int READER_VERSION_KR_GATE = 3;
 
     static final String SOURCE = "dart";
 
@@ -106,10 +106,16 @@ public final class DartXbrlFactReader {
     }
 
     /**
-     * 재료 사실 하나. {@code start}가 {@code null}이면 시점(기말) 사실이고 {@code end}가 그 시점이다.
+     * 재료 사실 하나. {@code start}가 {@code null}이면 시점(기말) 사실이고 {@code end}가 그 시점이다. {@code label}은 회사 확장 주당이익 사실의
+     * 한국어 이름표(국내 관문 켬의 판독기 판 3 · {@link KrEpsLabel})이고 그 밖은 {@code null}이다.
      */
     public record Fact(Source source, String concept, LocalDate start, LocalDate end, Basis basis, List<Member> members,
-                       BigDecimal value) {
+                       BigDecimal value, String label) {
+
+        /** 표준 이름공간 사실 — 이름표를 안 단다(회사 확장 사실만 이름표로 뜻을 읽는다). */
+        public Fact(Source source, String concept, LocalDate start, LocalDate end, Basis basis, List<Member> members, BigDecimal value) {
+            this(source, concept, start, end, basis, members, value, null);
+        }
 
         public boolean instant() {
             return start == null;
@@ -143,10 +149,47 @@ public final class DartXbrlFactReader {
 
     /** @param krGate 국내 관문 켬 — {@link #KR_GATE_MATERIAL}까지 남긴다(판 {@link #READER_VERSION_KR_GATE}) */
     public static Result read(InputStream xml, String context, boolean krGate) throws DataSourceException {
+        return read(xml, context, krGate, Map.of());
+    }
+
+    /**
+     * @param entityLabels 그 판의 회사 확장 개념 이름표({@link DartXbrlLabels#entityLabels}) — 국내 관문 켬에서 이름표가 주당이익 문법
+     *                     ({@link KrEpsLabel})으로 갈리는 회사 확장 수 사실을 이름표와 함께 남긴다. 꺼짐은 안 본다.
+     */
+    public static Result read(InputStream xml, String context, boolean krGate, Map<String, String> entityLabels)
+            throws DataSourceException {
         Parsed parsed = parse(xml, context, krGate
                 ? (source, local) -> material(source, local) || source == Source.IFRS && KR_GATE_MATERIAL.contains(local)
+                        || source == Source.ENTITY && perShareLabel(local, entityLabels) != null
                 : DartXbrlFactReader::material);
-        return new Result(parsed.facts().stream().map(StatementFact::fact).toList(), parsed.unreadable());
+        List<Fact> facts = new ArrayList<>();
+        for (StatementFact s : parsed.facts()) {
+            Fact f = s.fact();
+            facts.add(f.source() == Source.ENTITY
+                    ? new Fact(f.source(), f.concept(), f.start(), f.end(), f.basis(), f.members(), f.value(),
+                            KrEpsLabel.stored(f.concept(), entityLabels))
+                    : f);
+        }
+        return new Result(List.copyOf(facts), parsed.unreadable());
+    }
+
+    /**
+     * 그 인스턴스에 회사 확장 수 사실이 있는가 — 재료 받기가 그 판의 이름표를 받을지 정한다. 개념 이름으로 거르지 않는다: 주당이익 개념이 이름에
+     * {@code PerShare}를 안 다는 판이 있고(캐시 이름표 판 중 이름표가 주당이익인 357판의 85 · {@code udf_IS_<번호>_IncomeStatementAbstract} 등)
+     * 단위도 {@code SHARES} · {@code KRW} · 주당 원으로 갈린다(2026-11-13 실측) — 뜻은 이름표에만 있다.
+     */
+    public static boolean hasEntityFacts(InputStream xml, String context) throws DataSourceException {
+        return !parse(xml, context, (source, local) -> source == Source.ENTITY).facts().isEmpty();
+    }
+
+    /** 이름표가 주당이익 문법으로 갈리면 그 저장 이름표(조상 포함), 아니면 {@code null}. */
+    private static String perShareLabel(String local, Map<String, String> entityLabels) {
+        String own = entityLabels.get(local);
+        if (own == null || !own.contains("주당")) {
+            return null;
+        }
+        String stored = KrEpsLabel.stored(local, entityLabels);
+        return KrEpsLabel.of(stored) == null ? null : stored;
     }
 
     /** 그 관문 상태의 판독기 판 — 재료 표 행의 {@code reader_version}이 이 값이어야 그 상태의 재료다. */
